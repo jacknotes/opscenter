@@ -1,0 +1,47 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+/bin/
+/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+web/node_modules/
+web/dist/
+web/.env.local
+web/.env.*.local
+
+# Config
+config.yaml
+*.log
+
+# Shell
+shell/*.log
+
+# Database
+*.sql
+*.sqlite
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Claude
+.claude/

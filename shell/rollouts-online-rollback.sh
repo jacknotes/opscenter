@@ -1,0 +1,175 @@
+#!/bin/bash
+# description: argocd deploy and rollback tool.
+# date: 202411281532
+# author: jackli
+
+AUTH_PASSWORD='homsom.com'
+# rollback() and full_sync() use
+ARGO_ROLLOUT_PROJECT_NAME=(`kubectl argo rollouts list rollout -A | awk -F ' ' '{if($4=="Paused" && $5=="3/5") print $1,$2}'`)
+let group_number=${#ARGO_ROLLOUT_PROJECT_NAME[*]}/2
+# online() use
+ARGO_ROLLOUT_PROJECT_NAME_FOR_ONLINE=(`kubectl argo rollouts list rollout -A | awk -F ' ' '{if($4=="Paused" && $5=="1/5") print $1,$2}'`)
+let group_number_for_online=${#ARGO_ROLLOUT_PROJECT_NAME_FOR_ONLINE[*]}/2
+
+auth(){
+	read -s -t 30 -n 16 -p 'please input password:' CMD_PASSWORD
+	if [ "${CMD_PASSWORD}" != "${AUTH_PASSWORD}" ];then
+		echo -e '\n[ERROR]: password error!'
+		exit 10
+	else
+		echo -e '\n'
+	fi
+}
+
+list(){
+	# list paused application
+	echo '[INFO]: full application list'
+	kubectl argo rollouts list rollout -A | awk 'NR==1{print $0} {if($4=="Paused") print $0}'
+}
+
+
+## full
+full_online(){
+	echo '[INFO]: full application online'
+	auth
+	if [ $? == 0 ];then
+		for i in `seq 1 ${group_number_for_online}`;do
+			let sub_group1=${i}*2-2
+			let sub_group2=${i}*2-1
+			# promote application
+			kubectl argo rollouts promote ${ARGO_ROLLOUT_PROJECT_NAME_FOR_ONLINE[${sub_group2}]} -n ${ARGO_ROLLOUT_PROJECT_NAME_FOR_ONLINE[${sub_group1}]}
+		done
+	fi
+}
+
+full_sync(){
+	echo '[INFO]: full application sync'
+	auth
+	if [ $? == 0 ];then
+		DATETIME=`date +'%Y%m%d%H%M%S'`
+		for i in `seq 1 ${group_number}`;do
+			let sub_group1=${i}*2-2
+			let sub_group2=${i}*2-1
+ 			# label application full online time
+			#kubectl label application -n argocd ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group2}]%-rollout} date- &> /dev/null && kubectl label application -n argocd ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group2}]%-rollout} date=${DATETIME} &> /dev/null
+			# promote full application
+			kubectl argo rollouts promote --full ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group2}]} -n ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group1}]}
+		done
+	fi
+}
+
+full_rollback(){
+	echo '[INFO]: full application rollback'
+	auth
+	if [ $? == 0 ];then
+		for i in `seq 1 ${group_number}`;do
+			let sub_group1=${i}*2-2
+			let sub_group2=${i}*2-1
+			# rollback application
+			kubectl argo rollouts undo ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group2}]} -n ${ARGO_ROLLOUT_PROJECT_NAME[${sub_group1}]}
+		done
+	fi
+}
+
+
+## single
+single_online(){
+	echo '[INFO]: single application online'
+	auth
+	kubectl argo rollouts promote $1 -n $2
+}
+
+single_sync(){
+	echo '[INFO]: single application sync'
+	auth
+	kubectl argo rollouts promote --full $1 -n $2
+}
+
+single_rollback(){
+	echo '[INFO]: single application rollback'
+	auth
+	kubectl argo rollouts undo $1 -n $2
+}
+
+
+## batch
+batch_check(){
+	if [[ -z "$1" || ! -f "$1" ]];then
+		echo "$1 not is a file!" 
+		exit 1
+	fi
+	
+	if ! head -n 1 "$1" | grep -q '#NAMESPACE NAME';then
+		echo "$1 file format incorrect!" 
+		echo "$1 file first row format: '#NAMESPACE NAME'" 
+	        exit 1
+	fi
+}
+
+batch_online(){
+	echo '[INFO]: batch application online'
+	auth
+
+	# check $1 
+	batch_check $1
+
+	# exec batch online
+	for i in `cat $1 | grep -v '#'`;do
+		kubectl argo rollouts promote -n $i
+	done
+}
+
+batch_sync(){
+	echo '[INFO]: batch application sync'
+	auth
+
+	# check $1 
+	batch_check $1
+
+	# exec batch online
+	for i in `cat $1 | grep -v '#'`;do
+		kubectl argo rollouts promote --full -n $i
+	done
+}
+
+batch_rollback(){
+	echo '[INFO]: batch application rollback'
+	auth
+
+	# check $1 
+	batch_check $1
+
+	# exec batch online
+	for i in `cat $1 | grep -v '#'`;do
+		kubectl argo rollouts undo -n $i
+	done
+}
+
+
+case "$1" in
+	list)
+		$1;;
+	full_online)
+		$1;;
+	full_sync)
+		$1;;
+	full_rollback)
+		$1;;
+	single_online)
+		$1 $2 $3;;
+	single_sync)
+		$1 $2 $3;;
+	single_rollback)
+		$1 $2 $3;;
+	batch_online)
+		$1 $2;;
+	batch_sync)
+		$1 $2;;
+	batch_rollback)
+		$1 $2;;
+	*)    
+      		echo "Usage: $0 { list | full_online | full_sync | full_rollback | 
+			{ [ single_online | single_sync | single_rollback ] PROJECT_NAME NAMESPACE } | 
+			{ [ batch_online | batch_sync | batch_rollback ] FILE_PATH } }"
+        	exit 2 
+esac
