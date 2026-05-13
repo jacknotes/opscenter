@@ -315,20 +315,33 @@ func (h *NginxHandler) Reload(c *gin.Context) {
 	}
 
 	// Test config first
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd + " -t")
+	testCmd := nginxCmd + " -t"
+	testOutput, err := h.sshManager.Execute(&server, testCmd)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误: %s", testOutput)})
 		return
 	}
 
 	// Reload
-	output, err := h.sshManager.Execute(&server, "systemctl reload nginx")
+	reloadCmd := "systemctl reload nginx"
+	_, err = h.sshManager.Execute(&server, reloadCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload失败: %v", err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "reload成功", "output": output})
+	logEntry := model.OperationLog{
+		Username: c.GetString("username"),
+		Module:   "nginx",
+		Action:   "reload",
+		Target:   server.Name,
+		Detail:   fmt.Sprintf("%s && %s", testCmd, reloadCmd),
+		Status:   "success",
+		Output:   fmt.Sprintf("%s\nnginx reload 成功", testOutput),
+	}
+	h.db.Create(&logEntry)
+
+	c.JSON(http.StatusOK, gin.H{"message": "reload成功"})
 }
 
 func (h *NginxHandler) RollbackPreview(c *gin.Context) {
@@ -403,35 +416,40 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 
 	// Copy backup to config
 	copyCmd := fmt.Sprintf("cp %s/%s %s/%s", server.BackupPath, backupFile, server.ConfigPath, configFile)
-	output, err := h.sshManager.Execute(&server, copyCmd)
+	_, err := h.sshManager.Execute(&server, copyCmd)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("回滚失败: %v", err), "output": output})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("回滚失败: %v", err)})
 		return
 	}
 
 	// Test and reload
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd + " -t")
+	testCmd := nginxCmd + " -t"
+	testOutput, err := h.sshManager.Execute(&server, testCmd)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误: %s", testOutput)})
 		return
 	}
 
-	h.sshManager.Execute(&server, "systemctl reload nginx")
+	reloadCmd := "systemctl reload nginx"
+	h.sshManager.Execute(&server, reloadCmd)
+
+	detail := fmt.Sprintf("%s\n%s && %s", copyCmd, testCmd, reloadCmd)
+	logOutput := fmt.Sprintf("%s\n回滚成功: %s -> %s", testOutput, backupFile, configFile)
 
 	logEntry := model.OperationLog{
 		Username:  c.GetString("username"),
 		Module:    "nginx",
 		Action:    "rollback",
 		Target:    fmt.Sprintf("%s -> %s", configFile, backupFile),
-		Detail:    copyCmd,
+		Detail:    detail,
 		PreviewID: req.PreviewID,
 		Status:    "success",
-		Output:    output,
+		Output:    logOutput,
 	}
 	h.db.Create(&logEntry)
 	h.previewMgr.Delete(req.PreviewID)
 
-	c.JSON(http.StatusOK, gin.H{"message": "回滚成功", "output": output})
+	c.JSON(http.StatusOK, gin.H{"message": "回滚成功"})
 }
 
 func (h *NginxHandler) Backups(c *gin.Context) {
@@ -512,12 +530,12 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	backendIPs := splitIPs(backendIP)
 
 	// Execute changes - 每个 upstream 用一条 sed 命令处理所有 IP
-	var lastOutput string
+	var commands []string
 	var lastErr error
 	for _, upstreamName := range upstreamNames {
 		cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, upstreamName, backendIPs, action)
-		output, err := h.sshManager.Execute(&server, cmd)
-		lastOutput = output
+		commands = append(commands, cmd)
+		_, err := h.sshManager.Execute(&server, cmd)
 		if err != nil {
 			lastErr = err
 			break
@@ -525,7 +543,7 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	}
 
 	if lastErr != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", lastErr), "output": lastOutput})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", lastErr)})
 		return
 	}
 
@@ -538,20 +556,27 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 
 	h.sshManager.Execute(&server, "systemctl reload nginx")
 
+	// sed -i 无输出，生成有意义的操作摘要
+	actionDesc := "上线"
+	if action == "offline" {
+		actionDesc = "下线"
+	}
+	logOutput := fmt.Sprintf("成功将 %s 在 %v 中%s", backendIP, upstreamNames, actionDesc)
+
 	logEntry := model.OperationLog{
 		Username:  c.GetString("username"),
 		Module:    "nginx",
 		Action:    action,
 		Target:    fmt.Sprintf("%s %v %s", configFile, upstreamNames, backendIP),
-		Detail:    fmt.Sprintf("%v", upstreamNames),
+		Detail:    strings.Join(commands, "\n"),
 		PreviewID: previewID,
 		Status:    "success",
-		Output:    lastOutput,
+		Output:    logOutput,
 	}
 	h.db.Create(&logEntry)
 	h.previewMgr.Delete(previewID)
 
-	c.JSON(http.StatusOK, gin.H{"message": action + "成功", "output": lastOutput})
+	c.JSON(http.StatusOK, gin.H{"message": action + "成功", "output": logOutput})
 }
 
 // splitIPs 分割逗号分隔的 IP 列表
