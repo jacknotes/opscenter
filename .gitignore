@@ -10,6 +10,10 @@
 /bin/
 /dist/
 
+# Binary
+/server
+/opscenter
+
 # IDE
 .idea/
 .vscode/
@@ -33,6 +37,11 @@ config.yaml
 
 # Shell
 shell/*.log
+shell/rollouts-online-rollback.sh
+shell/specific-project-scale.sh
+
+# Planning
+PLAN.md
 
 # Database
 *.sql
