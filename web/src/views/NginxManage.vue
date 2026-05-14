@@ -2,20 +2,16 @@
   <div class="nginx-page">
     <el-card class="main-card">
       <template #header>
-        <div class="header-row">
-          <div class="header-field">
-            <span class="field-label">服务器</span>
-            <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
-              <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
-            </el-select>
-          </div>
-          <div class="header-field">
-            <span class="field-label">文件</span>
-            <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="loadUpstreams">
-              <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
-            </el-select>
-          </div>
-          <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable style="width: 250px;" size="large">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="white-space: nowrap;">服务器</span>
+          <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
+            <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+          <span style="white-space: nowrap;">文件</span>
+          <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="loadUpstreams">
+            <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
+          </el-select>
+          <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable style="width: 250px;">
             <template #prefix><span style="opacity: 0.5;">&#128269;</span></template>
           </el-input>
         </div>
@@ -42,7 +38,7 @@
       </div>
 
       <!-- Toolbar -->
-      <div class="toolbar">
+      <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
         <el-button type="info" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
         <el-button :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="primary" @click="handleRefresh">刷新</el-button>
@@ -606,7 +602,6 @@ async function executePreview() {
 :deep(.el-card__header) {
   border-bottom: none;
   padding-bottom: 0;
-  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
 }
 
 /* ===== Header Row ===== */
