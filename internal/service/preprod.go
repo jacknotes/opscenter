@@ -43,7 +43,7 @@ func buildColumnRanges(headerLine string, fields []string) []columnRange {
 
 	ranges := make([]columnRange, n)
 	for i := 0; i < n; i++ {
-		end := len(headerLine)
+		end := 1 << 30
 		if i+1 < n {
 			end = starts[i+1]
 		}
@@ -90,6 +90,8 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 				currentCategory = "rollout"
 			} else if strings.Contains(trimmed, "Deployment") {
 				currentCategory = "deployment"
+			} else if strings.Contains(trimmed, "StatefulSet") {
+				currentCategory = "statefulset"
 			} else if strings.Contains(trimmed, "Require") {
 				currentCategory = "require"
 			}
