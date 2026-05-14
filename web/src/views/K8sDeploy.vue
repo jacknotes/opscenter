@@ -2,17 +2,27 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
-          <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 200px" @change="loadData">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="white-space: nowrap;">服务器</span>
+          <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 250px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <el-button type="primary" @click="handleFull('online')">全量上线</el-button>
-          <el-button type="warning" @click="handleFull('sync')">全量同步</el-button>
-          <el-button type="danger" @click="handleFull('rollback')">全量回滚</el-button>
+          <el-input v-model="search" placeholder="搜索命名空间/名称/策略/步骤" clearable style="width: 250px;" />
         </div>
       </template>
 
-      <el-table :data="rollouts" stripe border @selection-change="handleSelectionChange">
+      <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+        <el-button type="success" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="info" @click="handleRefresh">刷新</el-button>
+        <el-button type="primary" :disabled="selectedIds.size === 0" @click="handleBatch('online')">批量上线</el-button>
+        <el-button type="warning" :disabled="selectedIds.size === 0" @click="handleBatch('sync')">批量同步</el-button>
+        <el-button type="danger" :disabled="selectedIds.size === 0" @click="handleBatch('rollback')">批量回滚</el-button>
+        <el-button type="primary" @click="handleFull('online')">全量上线</el-button>
+        <el-button type="warning" @click="handleFull('sync')">全量同步</el-button>
+        <el-button type="danger" @click="handleFull('rollback')">全量回滚</el-button>
+      </div>
+
+      <el-table ref="tableRef" :data="paginatedRollouts" :row-key="row => row.namespace + '/' + row.name" stripe border @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="namespace" label="命名空间" width="150" />
         <el-table-column prop="name" label="名称" min-width="250" />
@@ -24,27 +34,24 @@
         </el-table-column>
         <el-table-column prop="step" label="步骤" width="80" />
         <el-table-column prop="ready" label="就绪" width="80" />
-        <el-table-column label="操作" width="250">
-          <template #default="{ row }">
-            <el-button-group size="small">
-              <el-button type="success" @click="handleSingle(row, 'online')">上线</el-button>
-              <el-button type="warning" @click="handleSingle(row, 'sync')">同步</el-button>
-              <el-button type="danger" @click="handleSingle(row, 'rollback')">回滚</el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
       </el-table>
 
-      <div style="margin-top: 15px;">
-        <el-button type="primary" :disabled="selected.length === 0" @click="handleBatch('online')">批量上线</el-button>
-        <el-button type="warning" :disabled="selected.length === 0" @click="handleBatch('sync')">批量同步</el-button>
-        <el-button type="danger" :disabled="selected.length === 0" @click="handleBatch('rollback')">批量回滚</el-button>
+      <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[20, 50, 100]"
+          :total="filteredRollouts.length"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
       </div>
     </el-card>
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="600px">
-      <div v-if="previewData">
+    <el-dialog v-model="previewVisible" title="变更预览" width="600px" top="5vh">
+      <div v-if="previewData" style="max-height: 65vh; overflow-y: auto;">
         <p><strong>操作：</strong>{{ previewData.description }}</p>
         <p><strong>命令：</strong></p>
         <ul>
@@ -52,7 +59,7 @@
         </ul>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
+        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all;">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>
@@ -63,13 +70,13 @@
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px;">
       <template #header>执行结果</template>
-      <pre style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; max-height: 400px; overflow-y: auto;">{{ output }}</pre>
+      <pre style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; max-height: 50vh; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">{{ output }}</pre>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   getServers, getK8sRollouts,
   k8sOnlinePreview, k8sOnlineExecute,
@@ -85,12 +92,86 @@ const servers = ref([])
 const serverId = ref(null)
 const rollouts = ref([])
 const selected = ref([])
+const selectedIds = ref(new Set())
 const previewVisible = ref(false)
 const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
 const currentAction = ref('')
+const search = ref('')
+const tableRef = ref(null)
+const currentPage = ref(1)
+const pageSize = ref(20)
+
+const filteredRollouts = computed(() => {
+  let list = rollouts.value.filter(r => r.status === 'Paused')
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    list = list.filter(r =>
+      r.namespace.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q) ||
+      r.strategy.toLowerCase().includes(q) ||
+      r.step.toLowerCase().includes(q)
+    )
+  }
+  return list
+})
+
+const paginatedRollouts = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredRollouts.value.slice(start, start + pageSize.value)
+})
+
+const allSelected = computed(() =>
+  filteredRollouts.value.length > 0 && filteredRollouts.value.every(r => selectedIds.value.has(r.namespace + '/' + r.name))
+)
+
+function handleSizeChange(size) {
+  pageSize.value = size
+  currentPage.value = 1
+  restoreSelection()
+}
+
+function handleCurrentChange() {
+  restoreSelection()
+}
+
+// 换页后根据 selectedIds 恢复当前页的勾选状态
+function restoreSelection() {
+  setTimeout(() => {
+    paginatedRollouts.value.forEach(row => {
+      if (selectedIds.value.has(row.namespace + '/' + row.name)) {
+        tableRef.value.toggleRowSelection(row, true)
+      }
+    })
+  }, 0)
+}
+
+watch(search, () => {
+  currentPage.value = 1
+  selectedIds.value.clear()
+})
+
+function handleToggleSelect() {
+  if (allSelected.value) {
+    selectedIds.value.clear()
+    tableRef.value.clearSelection()
+  } else {
+    filteredRollouts.value.forEach(row => {
+      selectedIds.value.add(row.namespace + '/' + row.name)
+    })
+    // 只勾选当前页的行
+    paginatedRollouts.value.forEach(row => {
+      tableRef.value.toggleRowSelection(row, true)
+    })
+  }
+}
+
+async function handleRefresh() {
+  await loadData()
+  ElMessage.success('刷新成功')
+}
 
 onMounted(async () => {
   try {
@@ -108,6 +189,8 @@ async function loadData() {
   if (!serverId.value) return
   try {
     rollouts.value = await getK8sRollouts(serverId.value)
+    selectedIds.value.clear()
+    tableRef.value?.clearSelection()
   } catch (e) {
     ElMessage.error('加载数据失败')
   }
@@ -115,27 +198,10 @@ async function loadData() {
 
 function handleSelectionChange(val) {
   selected.value = val
-}
-
-async function handleSingle(row, action) {
-  const previewFn = {
-    online: k8sOnlinePreview,
-    sync: k8sSyncPreview,
-    rollback: k8sRollbackPreview
-  }[action]
-
-  try {
-    const res = await previewFn({
-      server_id: serverId.value,
-      projects: [{ name: row.name, namespace: row.namespace }]
-    })
-    previewData.value = res
-    previewId.value = res.preview_id
-    currentAction.value = action
-    previewVisible.value = true
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
-  }
+  // 同步当前页选中状态到 selectedIds
+  const pageKeys = paginatedRollouts.value.map(r => r.namespace + '/' + r.name)
+  pageKeys.forEach(key => selectedIds.value.delete(key))
+  val.forEach(r => selectedIds.value.add(r.namespace + '/' + r.name))
 }
 
 async function handleBatch(action) {
@@ -145,10 +211,12 @@ async function handleBatch(action) {
     rollback: k8sRollbackPreview
   }[action]
 
+  const allSelectedItems = filteredRollouts.value.filter(r => selectedIds.value.has(r.namespace + '/' + r.name))
+
   try {
     const res = await previewFn({
       server_id: serverId.value,
-      projects: selected.value.map(r => ({ name: r.name, namespace: r.namespace }))
+      projects: allSelectedItems.map(r => ({ name: r.name, namespace: r.namespace }))
     })
     previewData.value = res
     previewId.value = res.preview_id
