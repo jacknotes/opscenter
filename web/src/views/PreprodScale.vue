@@ -7,23 +7,24 @@
           <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 280px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
+          <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 220px;" />
         </div>
       </template>
 
       <!-- 批量操作按钮 -->
       <div style="margin-bottom: 15px; display: flex; gap: 10px;">
-        <el-button type="primary" @click="toggleSelectAll">{{ isAllSelected ? '取消选择' : '全选' }}</el-button>
-        <el-button type="success" @click="loadData">刷新</el-button>
-        <el-button type="danger" :disabled="selectedRows.length === 0 || !canBatchScaleDown" @click="handleBatchScaleDown">
-          批量缩容 ({{ selectedRows.filter(r => r.current > 0).length }})
+        <el-button type="primary" @click="toggleSelectAll">{{ allSelected ? '取消选择' : '全选' }}</el-button>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
+        <el-button type="danger" :disabled="selectedIds.size === 0 || !canBatchScaleDown" @click="handleBatchScaleDown">
+          批量缩容
         </el-button>
-        <el-button type="success" :disabled="selectedRows.length === 0 || !canBatchScaleUp" @click="handleBatchScaleUp">
-          批量扩容 ({{ selectedRows.filter(r => r.current === 0).length }})
+        <el-button type="success" :disabled="selectedIds.size === 0 || !canBatchScaleUp" @click="handleBatchScaleUp">
+          批量扩容
         </el-button>
       </div>
 
-      <el-table ref="tableRef" :data="resources" stripe border @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="45" :selectable="() => true" />
+      <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="category" label="类型" width="100">
           <template #default="{ row }">
             <el-tag :type="row.category === 'rollout' ? '' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
@@ -51,6 +52,18 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="filteredResources.length"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
 
     <!-- Preview Dialog -->
@@ -77,14 +90,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleDownExecute, preprodScaleUpPreview, preprodScaleUpExecute } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const servers = ref([])
 const serverId = ref(null)
 const resources = ref([])
-const selectedRows = ref([])
+const selectedIds = ref(new Set())
 const tableRef = ref(null)
 const previewVisible = ref(false)
 const previewData = ref(null)
@@ -92,10 +105,85 @@ const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
 const currentAction = ref('')
+const search = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const skipSelectionSync = ref(false)
 
-const canBatchScaleDown = computed(() => selectedRows.value.some(r => r.current > 0))
-const canBatchScaleUp = computed(() => selectedRows.value.some(r => r.current === 0))
-const isAllSelected = computed(() => resources.value.length > 0 && selectedRows.value.length === resources.value.length)
+const filteredResources = computed(() => {
+  if (!search.value) return resources.value
+  const q = search.value.toLowerCase()
+  return resources.value.filter(r =>
+    r.category.toLowerCase().includes(q) ||
+    r.name.toLowerCase().includes(q)
+  )
+})
+
+const paginatedResources = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredResources.value.slice(start, start + pageSize.value)
+})
+
+const allSelected = computed(() =>
+  filteredResources.value.length > 0 && filteredResources.value.every(r => selectedIds.value.has(r.name))
+)
+
+const canBatchScaleDown = computed(() => {
+  const selected = filteredResources.value.filter(r => selectedIds.value.has(r.name))
+  return selected.some(r => r.current > 0)
+})
+
+const canBatchScaleUp = computed(() => {
+  const selected = filteredResources.value.filter(r => selectedIds.value.has(r.name))
+  return selected.some(r => r.current === 0)
+})
+
+function handleSizeChange(size) {
+  pageSize.value = size
+  currentPage.value = 1
+  restoreSelection()
+}
+
+function handleCurrentChange() {
+  restoreSelection()
+}
+
+function restoreSelection() {
+  skipSelectionSync.value = true
+  setTimeout(() => {
+    paginatedResources.value.forEach(row => {
+      if (selectedIds.value.has(row.name)) {
+        tableRef.value.toggleRowSelection(row, true)
+      }
+    })
+    skipSelectionSync.value = false
+  }, 0)
+}
+
+watch(search, () => { currentPage.value = 1; restoreSelection() })
+
+function handleToggleSelect() {
+  if (allSelected.value) {
+    selectedIds.value.clear()
+    tableRef.value.clearSelection()
+  } else {
+    filteredResources.value.forEach(row => {
+      selectedIds.value.add(row.name)
+    })
+    paginatedResources.value.forEach(row => {
+      tableRef.value.toggleRowSelection(row, true)
+    })
+  }
+}
+
+function toggleSelectAll() {
+  handleToggleSelect()
+}
+
+async function handleRefresh() {
+  await loadData()
+  ElMessage.success('刷新成功')
+}
 
 onMounted(async () => {
   try {
@@ -113,27 +201,18 @@ async function loadData() {
   if (!serverId.value) return
   try {
     resources.value = await getPreprodStatus(serverId.value)
-    clearSelection()
+    selectedIds.value.clear()
+    tableRef.value?.clearSelection()
   } catch (e) {
     ElMessage.error('加载数据失败')
   }
 }
 
 function handleSelectionChange(rows) {
-  selectedRows.value = rows
-}
-
-function clearSelection() {
-  tableRef.value?.clearSelection()
-  selectedRows.value = []
-}
-
-function toggleSelectAll() {
-  if (isAllSelected.value) {
-    clearSelection()
-  } else {
-    resources.value.forEach(row => tableRef.value?.toggleRowSelection(row, true))
-  }
+  if (skipSelectionSync.value) return
+  const pageKeys = paginatedResources.value.map(r => r.name)
+  pageKeys.forEach(key => selectedIds.value.delete(key))
+  rows.forEach(r => selectedIds.value.add(r.name))
 }
 
 async function handleSingleScaleDown(row) {
@@ -155,7 +234,7 @@ async function handleSingleScaleUp(row) {
 }
 
 async function handleBatchScaleDown() {
-  const names = selectedRows.value.filter(r => r.current > 0).map(r => r.name)
+  const names = filteredResources.value.filter(r => selectedIds.value.has(r.name) && r.current > 0).map(r => r.name)
   if (names.length === 0) return
   try {
     await ElMessageBox.confirm(`确认缩容以下 ${names.length} 个资源至 0 副本？\n\n${names.join('\n')}`, '批量缩容', { type: 'warning' })
@@ -166,7 +245,7 @@ async function handleBatchScaleDown() {
 }
 
 async function handleBatchScaleUp() {
-  const names = selectedRows.value.filter(r => r.current === 0).map(r => r.name)
+  const names = filteredResources.value.filter(r => selectedIds.value.has(r.name) && r.current === 0).map(r => r.name)
   if (names.length === 0) return
   try {
     await ElMessageBox.confirm(`确认扩容以下 ${names.length} 个资源至目标副本数？\n\n${names.join('\n')}`, '批量扩容', { type: 'warning' })
