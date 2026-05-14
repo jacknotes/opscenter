@@ -39,14 +39,14 @@
 
       <!-- Toolbar -->
       <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-        <el-button type="info" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
+        <el-button type="danger" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
         <el-button :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="primary" @click="handleRefresh">刷新</el-button>
-        <el-button type="success" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
+        <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
         <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-        <el-button type="info" @click="openBackupDialog">备份列表</el-button>
+        <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
         <el-button type="info" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
-        <el-button type="info" @click="handleViewConfig">查看配置</el-button>
+        <el-button type="success" @click="handleViewConfig">查看配置</el-button>
         <el-button type="warning" @click="handleReload">重载nginx服务</el-button>
       </div>
 

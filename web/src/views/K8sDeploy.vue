@@ -40,7 +40,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100]"
+          :page-sizes="[10, 20, 50, 100]"
           :total="filteredRollouts.length"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -103,6 +103,7 @@ const search = ref('')
 const tableRef = ref(null)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const skipSelectionSync = ref(false)
 
 const filteredRollouts = computed(() => {
   let list = rollouts.value.filter(r => r.status === 'Paused')
@@ -137,21 +138,20 @@ function handleCurrentChange() {
   restoreSelection()
 }
 
-// 换页后根据 selectedIds 恢复当前页的勾选状态
+// 换页/搜索后根据 selectedIds 恢复当前页的勾选状态
 function restoreSelection() {
+  skipSelectionSync.value = true
   setTimeout(() => {
     paginatedRollouts.value.forEach(row => {
       if (selectedIds.value.has(row.namespace + '/' + row.name)) {
         tableRef.value.toggleRowSelection(row, true)
       }
     })
+    skipSelectionSync.value = false
   }, 0)
 }
 
-watch(search, () => {
-  currentPage.value = 1
-  selectedIds.value.clear()
-})
+watch(search, () => { currentPage.value = 1; restoreSelection() })
 
 function handleToggleSelect() {
   if (allSelected.value) {
@@ -198,6 +198,8 @@ async function loadData() {
 
 function handleSelectionChange(val) {
   selected.value = val
+  // 数据变化导致的选中清空，跳过同步，由 restoreSelection 恢复
+  if (skipSelectionSync.value) return
   // 同步当前页选中状态到 selectedIds
   const pageKeys = paginatedRollouts.value.map(r => r.namespace + '/' + r.name)
   pageKeys.forEach(key => selectedIds.value.delete(key))

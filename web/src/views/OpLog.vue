@@ -2,7 +2,7 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <el-select v-model="module" placeholder="按模块筛选" clearable style="width: 150px" @change="loadData">
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
