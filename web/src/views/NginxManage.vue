@@ -5,18 +5,19 @@
         <div class="header-row">
           <div class="header-field">
             <span class="field-label">服务器</span>
-            <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" size="large" @change="loadConfigs">
+            <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
               <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
             </el-select>
           </div>
           <div class="header-field">
-            <span class="field-label">配置文件</span>
-            <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" size="large" @change="loadUpstreams">
+            <span class="field-label">文件</span>
+            <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="loadUpstreams">
               <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
             </el-select>
           </div>
-          <el-button size="large" @click="handleViewConfig">查看配置</el-button>
-          <el-button size="large" type="warning" @click="handleReload">重载nginx服务</el-button>
+          <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable style="width: 250px;" size="large">
+            <template #prefix><span style="opacity: 0.5;">&#128269;</span></template>
+          </el-input>
         </div>
       </template>
 
@@ -34,21 +35,23 @@
           <span class="stat-value stat-danger">{{ totalDownCount }}</span>
           <span class="stat-label">离线</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-value stat-primary">{{ selectedServers.length }}</span>
+          <span class="stat-label">已选择后端</span>
+        </div>
       </div>
 
-      <!-- Search + Toolbar -->
+      <!-- Toolbar -->
       <div class="toolbar">
-        <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable class="search-input" size="large">
-          <template #prefix><span style="opacity: 0.5;">&#128269;</span></template>
-        </el-input>
-        <el-button size="large" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
-        <span class="selected-count">已选择 {{ selectedServers.length }} 个后端</span>
-        <el-button size="large" :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button size="large" type="success" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
-        <el-button size="large" type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-        <el-button size="large" type="info" @click="openBackupDialog">备份列表</el-button>
-        <el-button size="large" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
-        <el-button size="large" type="primary" @click="handleRefresh">刷新</el-button>
+        <el-button type="info" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
+        <el-button :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="primary" @click="handleRefresh">刷新</el-button>
+        <el-button type="success" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
+        <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
+        <el-button type="info" @click="openBackupDialog">备份列表</el-button>
+        <el-button type="info" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
+        <el-button type="info" @click="handleViewConfig">查看配置</el-button>
+        <el-button type="warning" @click="handleReload">重载nginx服务</el-button>
       </div>
 
       <!-- Upstream Groups -->
