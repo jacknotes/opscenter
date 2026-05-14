@@ -158,6 +158,55 @@ make build
 - 操作日志完整记录所有变更
 - 敏感配置文件（`config.yaml`、含密码的 Shell 脚本）已加入 `.gitignore`，不会提交到仓库
 
+### 密码加密存储
+
+数据库中的敏感字段（SSH 密码、私钥、脚本密码）采用 **AES-256-GCM** 认证加密，密钥通过 `config.yaml` 的 `crypto.key` 配置。
+
+**加密算法**
+
+- 算法：AES-GCM（Galois/Counter Mode）
+- 密钥长度：32 字节（AES-256）
+- Nonce：12 字节，每次加密随机生成
+- 认证标签：16 字节，用于防篡改
+
+**加密字段**
+
+以下三个字段在写入数据库前自动加密，读取后自动解密：
+
+| 字段 | 说明 |
+|------|------|
+| `password` | SSH 登录密码 |
+| `private_key` | SSH 私钥 |
+| `script_password` | 脚本执行密码 |
+
+**工作流程**
+
+```
+写入数据库：
+  明文密码 → 随机生成 12 字节 nonce → AES-256-GCM 加密 → 拼接(nonce + 密文 + 认证标签) → Base64 编码 → 存入数据库
+
+读取数据库：
+  Base64 解码 → 分离(nonce, 密文, 认证标签) → AES-256-GCM 解密 → 明文密码
+```
+
+**实现位置**
+
+- 加密钩子：`internal/model/server.go` → `BeforeSave()` — GORM 写入前自动触发
+- 解密钩子：`internal/model/server.go` → `AfterFind()` — GORM 读取后自动触发
+- 加解密工具：`internal/pkg/crypto/crypto.go`
+
+**密钥生成**
+
+```bash
+openssl rand -base64 32
+```
+
+**注意事项**
+
+- 相同密码每次加密结果不同（随机 nonce），无法通过密文反推原文
+- 密钥一旦配置并有数据入库后不可随意更换，否则已有加密数据将无法解密
+- 应用启动时会校验密钥长度，不符合要求（非 16/24/32 字节）将拒绝启动
+
 ## License
 
 MIT

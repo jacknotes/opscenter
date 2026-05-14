@@ -16,16 +16,17 @@
         <el-table-column prop="username" label="用户名" width="100" />
         <el-table-column prop="server_type" label="类型" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.server_type === 'lvs' ? '' : row.server_type === 'nginx' ? 'success' : 'warning'">{{ row.server_type }}</el-tag>
+            <el-tag :type="row.server_type === 'lvs' ? '' : row.server_type === 'nginx' ? 'success' : 'warning'">{{ row.server_type === 'kubernetes' ? 'Kubernetes' : row.server_type }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="env" label="环境" width="80" />
         <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="220">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button-group size="small">
               <el-button type="success" @click="handleTest(row)">测试连接</el-button>
               <el-button type="primary" @click="handleEdit(row)">编辑</el-button>
+              <el-button type="warning" @click="handleCopy(row)">复制</el-button>
               <el-button type="danger" @click="handleDelete(row)">删除</el-button>
             </el-button-group>
           </template>
@@ -34,7 +35,7 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑服务器' : '添加服务器'" width="600px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑服务器' : (isCopy ? '复制服务器' : '添加服务器')" width="600px">
       <el-form :model="form" label-width="120px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
@@ -55,34 +56,34 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.auth_type === 'password'" label="SSH密码">
-          <el-input v-model="form.password" type="password" show-password :placeholder="isEdit && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'" />
+          <el-input v-model="form.password" type="password" show-password :placeholder="(isEdit || isCopy) && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'" />
         </el-form-item>
         <el-form-item v-if="form.auth_type === 'key'" label="私钥">
-          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="isEdit && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'" />
+          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="(isEdit || isCopy) && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'" />
         </el-form-item>
         <el-form-item label="服务器类型" required>
           <el-select v-model="form.server_type">
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
-            <el-option label="K8s Master" value="k8s_master" />
+            <el-option label="Kubernetes" value="kubernetes" />
           </el-select>
         </el-form-item>
         <el-form-item label="环境">
           <el-input v-model="form.env" placeholder="env1 / env2 / both" />
         </el-form-item>
-        <el-form-item label="脚本路径">
+        <el-form-item label="脚本路径" v-if="form.server_type !== 'nginx'">
           <el-input v-model="form.script_path" placeholder="/shell/lvs.sh" />
         </el-form-item>
-        <el-form-item label="脚本密码">
-          <el-input v-model="form.script_password" type="password" show-password :placeholder="isEdit && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'" />
+        <el-form-item label="脚本密码" v-if="form.server_type !== 'nginx'">
+          <el-input v-model="form.script_password" type="password" show-password :placeholder="(isEdit || isCopy) && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'" />
         </el-form-item>
-        <el-form-item label="配置路径">
+        <el-form-item label="配置路径" v-if="form.server_type === 'nginx'">
           <el-input v-model="form.config_path" placeholder="Nginx配置目录" />
         </el-form-item>
-        <el-form-item label="配置文件模式">
+        <el-form-item label="配置文件模式" v-if="form.server_type === 'nginx'">
           <el-input v-model="form.config_pattern" placeholder="upstreamserver_*.conf" />
         </el-form-item>
-        <el-form-item label="备份路径">
+        <el-form-item label="备份路径" v-if="form.server_type === 'nginx'">
           <el-input v-model="form.backup_path" />
         </el-form-item>
         <el-form-item label="描述">
@@ -105,6 +106,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 const servers = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const isCopy = ref(false)
 const editId = ref(null)
 const submitting = ref(false)
 const form = ref(getDefaultForm())
@@ -143,13 +145,28 @@ async function loadData() {
 
 function handleAdd() {
   isEdit.value = false
+  isCopy.value = false
   editId.value = null
   form.value = getDefaultForm()
   dialogVisible.value = true
 }
 
+async function handleCopy(row) {
+  isEdit.value = false
+  isCopy.value = true
+  editId.value = null
+  try {
+    const data = await getServerForEdit(row.id)
+    form.value = { ...data, name: data.name + ' (副本)' }
+    dialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('获取服务器信息失败')
+  }
+}
+
 async function handleEdit(row) {
   isEdit.value = true
+  isCopy.value = false
   editId.value = row.id
   try {
     const data = await getServerForEdit(row.id)

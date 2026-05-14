@@ -97,7 +97,7 @@ const currentAction = ref('')
 
 onMounted(async () => {
   try {
-    servers.value = await getServers('k8s_master')
+    servers.value = await getServers('kubernetes')
     if (servers.value.length > 0) {
       serverId.value = servers.value[0].id
       await loadData()

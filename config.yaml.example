@@ -15,4 +15,4 @@ jwt:
   expire: 24h
 
 crypto:
-  key: your-32-char-aes-key-here!!!!
+  key: your-32-char-aes-key-here---!!!!

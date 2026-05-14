@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -50,6 +52,12 @@ func Load(path string) error {
 	if Global.JWT.Expire == 0 {
 		Global.JWT.Expire = 24 * time.Hour
 	}
+	if Global.Crypto.Key != "" {
+		keyLen := len(Global.Crypto.Key)
+		if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+			return fmt.Errorf("crypto.key 长度必须为 16、24 或 32 字节，当前为 %d 字节", keyLen)
+		}
+	}
 	return nil
 }
 
@@ -58,5 +66,5 @@ func (d DatabaseConfig) DSN() string {
 }
 
 func itoa(i int) string {
-	return string(rune('0'+i/1000%10)) + string(rune('0'+i/100%10)) + string(rune('0'+i/10%10)) + string(rune('0'+i%10))
+	return strconv.Itoa(i)
 }

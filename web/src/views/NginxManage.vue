@@ -16,7 +16,7 @@
             </el-select>
           </div>
           <el-button size="large" @click="handleViewConfig">查看配置</el-button>
-          <el-button size="large" type="warning" @click="handleReload">重载配置</el-button>
+          <el-button size="large" type="warning" @click="handleReload">重载nginx服务</el-button>
         </div>
       </template>
 
@@ -514,10 +514,10 @@ async function handleReload() {
   try {
     await ElMessageBox.confirm('确定要重载 Nginx 配置吗？', '确认')
     await nginxReload({ server_id: serverId.value })
-    ElMessage.success('重载配置成功')
+    ElMessage.success('重载nginx服务成功')
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '重载配置失败')
+      ElMessage.error(e.response?.data?.error || '重载nginx服务失败')
     }
   }
 }

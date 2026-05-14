@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/model"
+	"opscenter/internal/pkg/crypto"
 )
 
 type ServerHandler struct {
@@ -111,6 +114,7 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		"script_path", "script_password", "config_path",
 		"config_pattern", "backup_path", "description",
 	).Create(&server).Error; err != nil {
+		log.Printf("创建服务器失败: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
 		return
 	}
@@ -137,15 +141,22 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// 如果前端没有发送密码，则保留原有密码
+	// 如果前端没有发送密码，则保留原有密码（解密后交给 BeforeSave 重新加密）
+	key := config.Global.Crypto.Key
 	if input.Password == "" {
-		input.Password = existing.Password
+		if existing.Password != "" && key != "" {
+			input.Password, _ = crypto.Decrypt(existing.Password, key)
+		}
 	}
 	if input.PrivateKey == "" {
-		input.PrivateKey = existing.PrivateKey
+		if existing.PrivateKey != "" && key != "" {
+			input.PrivateKey, _ = crypto.Decrypt(existing.PrivateKey, key)
+		}
 	}
 	if input.ScriptPassword == "" {
-		input.ScriptPassword = existing.ScriptPassword
+		if existing.ScriptPassword != "" && key != "" {
+			input.ScriptPassword, _ = crypto.Decrypt(existing.ScriptPassword, key)
+		}
 	}
 
 	input.ID = uint(id)
@@ -157,6 +168,7 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		"script_path", "script_password", "config_path",
 		"config_pattern", "backup_path", "description",
 	).Save(&input).Error; err != nil {
+		log.Printf("更新服务器失败: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return
 	}

@@ -1,9 +1,13 @@
 package model
 
 import (
+	"log"
 	"time"
 
 	"gorm.io/gorm"
+
+	"opscenter/internal/config"
+	"opscenter/internal/pkg/crypto"
 )
 
 type Server struct {
@@ -75,4 +79,63 @@ func (s *Server) ToResponse() ServerResponse {
 
 func (Server) TableName() string {
 	return "servers"
+}
+
+func (s *Server) BeforeSave(tx *gorm.DB) error {
+	key := config.Global.Crypto.Key
+	if key == "" {
+		return nil
+	}
+	var err error
+	if s.Password != "" {
+		s.Password, err = crypto.Encrypt(s.Password, key)
+		if err != nil {
+			return err
+		}
+	}
+	if s.PrivateKey != "" {
+		s.PrivateKey, err = crypto.Encrypt(s.PrivateKey, key)
+		if err != nil {
+			return err
+		}
+	}
+	if s.ScriptPassword != "" {
+		s.ScriptPassword, err = crypto.Encrypt(s.ScriptPassword, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) AfterFind(tx *gorm.DB) error {
+	key := config.Global.Crypto.Key
+	if key == "" {
+		return nil
+	}
+	if s.Password != "" {
+		decrypted, err := crypto.Decrypt(s.Password, key)
+		if err != nil {
+			log.Printf("[WARN] failed to decrypt password for server %d, treating as plaintext: %v", s.ID, err)
+		} else {
+			s.Password = decrypted
+		}
+	}
+	if s.PrivateKey != "" {
+		decrypted, err := crypto.Decrypt(s.PrivateKey, key)
+		if err != nil {
+			log.Printf("[WARN] failed to decrypt private_key for server %d, treating as plaintext: %v", s.ID, err)
+		} else {
+			s.PrivateKey = decrypted
+		}
+	}
+	if s.ScriptPassword != "" {
+		decrypted, err := crypto.Decrypt(s.ScriptPassword, key)
+		if err != nil {
+			log.Printf("[WARN] failed to decrypt script_password for server %d, treating as plaintext: %v", s.ID, err)
+		} else {
+			s.ScriptPassword = decrypted
+		}
+	}
+	return nil
 }
