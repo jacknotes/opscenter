@@ -130,7 +130,7 @@ func ValidateCommand(serverType, command string) bool {
 	switch serverType {
 	case "lvs":
 		return lvsCommandPattern.MatchString(command)
-	case "kubernetes":
+	case "kubernetes", "preprod":
 		return k8sCommandPattern.MatchString(command)
 	case "nginx":
 		return nginxCommandPattern.MatchString(command)

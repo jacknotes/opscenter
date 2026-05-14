@@ -6,8 +6,8 @@
           <el-select v-model="module" placeholder="按模块筛选" clearable style="width: 150px" @change="loadData">
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
-            <el-option label="K8s" value="k8s" />
-            <el-option label="预生产" value="preprod" />
+            <el-option label="Kubernetes" value="k8s" />
+            <el-option label="Kubernetes-PrePro" value="preprod" />
           </el-select>
         </div>
       </template>

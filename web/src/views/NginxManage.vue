@@ -3,11 +3,11 @@
     <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器</span>
+          <span style="white-space: nowrap;">服务器：</span>
           <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <span style="white-space: nowrap;">文件</span>
+          <span style="white-space: nowrap;">文件：</span>
           <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="loadUpstreams">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
@@ -47,7 +47,7 @@
         <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
         <el-button type="info" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
         <el-button type="success" @click="handleViewConfig">查看配置</el-button>
-        <el-button type="warning" @click="handleReload">重载nginx服务</el-button>
+        <el-button type="warning" @click="handleReload">重载Nginx服务</el-button>
       </div>
 
       <!-- Upstream Groups -->
@@ -513,10 +513,10 @@ async function handleReload() {
   try {
     await ElMessageBox.confirm('确定要重载 Nginx 配置吗？', '确认')
     await nginxReload({ server_id: serverId.value })
-    ElMessage.success('重载nginx服务成功')
+    ElMessage.success('重载Nginx服务成功')
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '重载nginx服务失败')
+      ElMessage.error(e.response?.data?.error || '重载Nginx服务失败')
     }
   }
 }
