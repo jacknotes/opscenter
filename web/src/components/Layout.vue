@@ -29,7 +29,7 @@
         </el-menu-item>
         <el-menu-item index="/preprod">
           <el-icon><ZoomOut /></el-icon>
-          <span>预生产缩扩容</span>
+          <span>预生产扩缩容</span>
         </el-menu-item>
         <el-menu-item index="/logs">
           <el-icon><List /></el-icon>

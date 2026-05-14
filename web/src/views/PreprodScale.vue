@@ -10,54 +10,51 @@
         </div>
       </template>
 
-      <el-steps :active="currentStep" finish-status="success" style="margin-bottom: 20px;">
-        <el-step title="查看状态" />
-        <el-step title="缩容" />
-        <el-step title="部署验证" />
-        <el-step title="扩容" />
-      </el-steps>
-
-      <!-- Step 1: Status -->
-      <div v-if="currentStep === 0">
-        <el-table :data="resources" stripe border>
-          <el-table-column prop="category" label="类型" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.category === 'rollout' ? '' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="300" />
-          <el-table-column prop="desired" label="期望副本" width="100" />
-          <el-table-column prop="current" label="当前副本" width="100" />
-          <el-table-column prop="available" label="可用副本" width="100" />
-          <el-table-column prop="age" label="年龄" width="100" />
-        </el-table>
-        <el-button type="primary" style="margin-top: 15px;" @click="currentStep = 1">下一步：缩容</el-button>
+      <!-- 批量操作按钮 -->
+      <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+        <el-button type="primary" @click="toggleSelectAll">{{ isAllSelected ? '取消选择' : '全选' }}</el-button>
+        <el-button type="success" @click="loadData">刷新</el-button>
+        <el-button type="danger" :disabled="selectedRows.length === 0 || !canBatchScaleDown" @click="handleBatchScaleDown">
+          批量缩容 ({{ selectedRows.filter(r => r.current > 0).length }})
+        </el-button>
+        <el-button type="success" :disabled="selectedRows.length === 0 || !canBatchScaleUp" @click="handleBatchScaleUp">
+          批量扩容 ({{ selectedRows.filter(r => r.current === 0).length }})
+        </el-button>
       </div>
 
-      <!-- Step 2: Scale Down -->
-      <div v-if="currentStep === 1">
-        <el-alert title="缩容操作将把所有资源副本数降至0" type="warning" :closable="false" style="margin-bottom: 15px;" />
-        <el-button type="danger" @click="handleScaleDown">缩容预览</el-button>
-        <el-button @click="currentStep = 0">上一步</el-button>
-      </div>
-
-      <!-- Step 3: Verify -->
-      <div v-if="currentStep === 2">
-        <el-alert title="请手动验证部署是否正确" type="info" :closable="false" style="margin-bottom: 15px;" />
-        <el-button type="primary" @click="currentStep = 3">验证通过，下一步扩容</el-button>
-        <el-button @click="currentStep = 1">上一步</el-button>
-      </div>
-
-      <!-- Step 4: Scale Up -->
-      <div v-if="currentStep === 3">
-        <el-alert title="扩容操作将把所有资源恢复到目标副本数" type="success" :closable="false" style="margin-bottom: 15px;" />
-        <el-button type="success" @click="handleScaleUp">扩容预览</el-button>
-        <el-button @click="currentStep = 2">上一步</el-button>
-      </div>
+      <el-table ref="tableRef" :data="resources" stripe border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" :selectable="() => true" />
+        <el-table-column prop="category" label="类型" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.category === 'rollout' ? '' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="名称" min-width="300" />
+        <el-table-column prop="current" label="当前副本" width="90" align="center" />
+        <el-table-column prop="target_replicas" label="目标副本" width="90" align="center">
+          <template #default="{ row }">
+            <span :class="{ 'text-warning': row.current > 0 && row.current !== row.target_replicas }">
+              {{ row.target_replicas || '-' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="available" label="可用副本" width="90" align="center" />
+        <el-table-column prop="age" label="年龄" width="100" />
+        <el-table-column label="操作" width="120" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.current > 0" type="danger" size="small" link @click="handleSingleScaleDown(row)">
+              缩容
+            </el-button>
+            <el-button v-else type="success" size="small" link @click="handleSingleScaleUp(row)">
+              扩容
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="600px">
+    <el-dialog v-model="previewVisible" title="变更预览" width="650px">
       <div v-if="previewData">
         <p><strong>操作：</strong>{{ previewData.description }}</p>
         <p><strong>命令：</strong><code>{{ previewData.command }}</code></p>
@@ -80,20 +77,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleDownExecute, preprodScaleUpPreview, preprodScaleUpExecute } from '../api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const servers = ref([])
 const serverId = ref(null)
 const resources = ref([])
-const currentStep = ref(0)
+const selectedRows = ref([])
+const tableRef = ref(null)
 const previewVisible = ref(false)
 const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
 const currentAction = ref('')
+
+const canBatchScaleDown = computed(() => selectedRows.value.some(r => r.current > 0))
+const canBatchScaleUp = computed(() => selectedRows.value.some(r => r.current === 0))
+const isAllSelected = computed(() => resources.value.length > 0 && selectedRows.value.length === resources.value.length)
 
 onMounted(async () => {
   try {
@@ -111,29 +113,76 @@ async function loadData() {
   if (!serverId.value) return
   try {
     resources.value = await getPreprodStatus(serverId.value)
+    clearSelection()
   } catch (e) {
     ElMessage.error('加载数据失败')
   }
 }
 
-async function handleScaleDown() {
-  try {
-    const res = await preprodScaleDownPreview({ server_id: serverId.value })
-    previewData.value = res
-    previewId.value = res.preview_id
-    currentAction.value = 'scaledown'
-    previewVisible.value = true
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
+
+function clearSelection() {
+  tableRef.value?.clearSelection()
+  selectedRows.value = []
+}
+
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    clearSelection()
+  } else {
+    resources.value.forEach(row => tableRef.value?.toggleRowSelection(row, true))
   }
 }
 
-async function handleScaleUp() {
+async function handleSingleScaleDown(row) {
   try {
-    const res = await preprodScaleUpPreview({ server_id: serverId.value })
+    await ElMessageBox.confirm(`确认缩容 ${row.name} 至 0 副本？`, '确认缩容', { type: 'warning' })
+    await doPreview('scaledown', [row.name])
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+  }
+}
+
+async function handleSingleScaleUp(row) {
+  try {
+    await ElMessageBox.confirm(`确认扩容 ${row.name} 至 ${row.target_replicas} 副本？`, '确认扩容', { type: 'warning' })
+    await doPreview('scaleup', [row.name])
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+  }
+}
+
+async function handleBatchScaleDown() {
+  const names = selectedRows.value.filter(r => r.current > 0).map(r => r.name)
+  if (names.length === 0) return
+  try {
+    await ElMessageBox.confirm(`确认缩容以下 ${names.length} 个资源至 0 副本？\n\n${names.join('\n')}`, '批量缩容', { type: 'warning' })
+    await doPreview('scaledown', names)
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+  }
+}
+
+async function handleBatchScaleUp() {
+  const names = selectedRows.value.filter(r => r.current === 0).map(r => r.name)
+  if (names.length === 0) return
+  try {
+    await ElMessageBox.confirm(`确认扩容以下 ${names.length} 个资源至目标副本数？\n\n${names.join('\n')}`, '批量扩容', { type: 'warning' })
+    await doPreview('scaleup', names)
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+  }
+}
+
+async function doPreview(action, resourceNames) {
+  const previewFn = action === 'scaledown' ? preprodScaleDownPreview : preprodScaleUpPreview
+  try {
+    const res = await previewFn({ server_id: serverId.value, resource_names: resourceNames })
     previewData.value = res
     previewId.value = res.preview_id
-    currentAction.value = 'scaleup'
+    currentAction.value = action
     previewVisible.value = true
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '预览失败')
@@ -150,11 +199,6 @@ async function executePreview() {
     ElMessage.success('执行成功')
     previewVisible.value = false
     await loadData()
-    if (currentAction.value === 'scaledown') {
-      currentStep.value = 2
-    } else {
-      currentStep.value = 0
-    }
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '执行失败')
     output.value = e.response?.data?.output || ''
@@ -163,3 +207,10 @@ async function executePreview() {
   }
 }
 </script>
+
+<style scoped>
+.text-warning {
+  color: #e6a23c;
+  font-weight: bold;
+}
+</style>

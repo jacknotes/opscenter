@@ -12,8 +12,8 @@
       </template>
 
       <div style="margin-bottom: 15px; display: flex; gap: 10px;">
-        <el-button type="success" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="info" @click="handleRefresh">刷新</el-button>
+        <el-button type="primary" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <el-button type="primary" :disabled="selectedIds.size === 0" @click="handleBatch('online')">批量上线</el-button>
         <el-button type="warning" :disabled="selectedIds.size === 0" @click="handleBatch('sync')">批量同步</el-button>
         <el-button type="danger" :disabled="selectedIds.size === 0" @click="handleBatch('rollback')">批量回滚</el-button>

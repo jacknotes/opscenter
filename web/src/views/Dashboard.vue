@@ -27,7 +27,7 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" @click="$router.push('/preprod')">
-          <template #header>预生产缩扩容</template>
+          <template #header>预生产扩缩容</template>
           <div style="text-align: center; font-size: 32px; color: #F56C6C;">
             <el-icon><ZoomOut /></el-icon>
           </div>

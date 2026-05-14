@@ -39,7 +39,7 @@ const routes = [
         path: 'preprod',
         name: 'PreprodScale',
         component: () => import('../views/PreprodScale.vue'),
-        meta: { title: '预生产缩扩容' }
+        meta: { title: '预生产扩缩容' }
       },
       {
         path: 'logs',

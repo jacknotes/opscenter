@@ -27,10 +27,6 @@ func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *
 	}
 }
 
-type PreprodRequest struct {
-	ServerID uint `json:"server_id" binding:"required"`
-}
-
 func (h *PreprodHandler) Status(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -50,12 +46,21 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 		return
 	}
 
+	targetOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list-targets")
+
 	resources := h.preprodService.ParseListOutput(output)
+	if targetOutput != "" {
+		targets := h.preprodService.ParseTargetOutput(targetOutput)
+		resources = h.preprodService.MergeTargets(resources, targets)
+	}
 	c.JSON(http.StatusOK, resources)
 }
 
 func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
-	var req PreprodRequest
+	var req struct {
+		ServerID      uint     `json:"server_id" binding:"required"`
+		ResourceNames []string `json:"resource_names"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
@@ -68,10 +73,11 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 	}
 
 	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
-	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaledown")
+	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaledown", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaledown", req.ServerID, map[string]interface{}{
-		"command": command,
+		"command":        command,
+		"resource_names": req.ResourceNames,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -93,7 +99,10 @@ func (h *PreprodHandler) ScaleDownExecute(c *gin.Context) {
 }
 
 func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
-	var req PreprodRequest
+	var req struct {
+		ServerID      uint     `json:"server_id" binding:"required"`
+		ResourceNames []string `json:"resource_names"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
@@ -106,10 +115,11 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 	}
 
 	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
-	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaleup")
+	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaleup", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaleup", req.ServerID, map[string]interface{}{
-		"command": command,
+		"command":        command,
+		"resource_names": req.ResourceNames,
 	})
 
 	c.JSON(http.StatusOK, gin.H{

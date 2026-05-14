@@ -5,13 +5,14 @@ import (
 )
 
 type PreprodResource struct {
-	Category  string `json:"category"`
-	Name      string `json:"name"`
-	Desired   int    `json:"desired"`
-	Current   int    `json:"current"`
-	UpToDate  int    `json:"up_to_date"`
-	Available int    `json:"available"`
-	Age       string `json:"age"`
+	Category       string `json:"category"`
+	Name           string `json:"name"`
+	Desired        int    `json:"desired"`
+	Current        int    `json:"current"`
+	UpToDate       int    `json:"up_to_date"`
+	Available      int    `json:"available"`
+	Age            string `json:"age"`
+	TargetReplicas int    `json:"target_replicas"`
 }
 
 type PreprodService struct {
@@ -147,14 +148,60 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 	return resources
 }
 
-func (s *PreprodService) GeneratePreview(scriptPath, action string) (command, description string) {
+type TargetInfo struct {
+	Category string
+	Name     string
+	Replicas int
+}
+
+func (s *PreprodService) ParseTargetOutput(output string) []TargetInfo {
+	var targets []TargetInfo
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 4 {
+			continue
+		}
+		targets = append(targets, TargetInfo{
+			Category: fields[0],
+			Name:     fields[2],
+			Replicas: parseInt(fields[3]),
+		})
+	}
+	return targets
+}
+
+func (s *PreprodService) MergeTargets(resources []PreprodResource, targets []TargetInfo) []PreprodResource {
+	targetMap := make(map[string]int)
+	for _, t := range targets {
+		targetMap[t.Name] = t.Replicas
+	}
+	for i := range resources {
+		if rep, ok := targetMap[resources[i].Name]; ok {
+			resources[i].TargetReplicas = rep
+		}
+	}
+	return resources
+}
+
+func (s *PreprodService) GeneratePreview(scriptPath, action string, resourceNames []string) (command, description string) {
 	command = scriptPath + " " + action
+	if len(resourceNames) > 0 {
+		command += " " + strings.Join(resourceNames, " ")
+	}
 
 	switch action {
 	case "scaledown":
-		description = "缩容所有资源副本数至 0"
+		if len(resourceNames) > 0 {
+			description = "缩容选中的 " + strings.Join(resourceNames, ", ") + " 副本数至 0"
+		} else {
+			description = "缩容所有资源副本数至 0"
+		}
 	case "scaleup":
-		description = "扩容所有资源至目标副本数"
+		if len(resourceNames) > 0 {
+			description = "扩容选中的 " + strings.Join(resourceNames, ", ") + " 至目标副本数"
+		} else {
+			description = "扩容所有资源至目标副本数"
+		}
 	}
 	return
 }
