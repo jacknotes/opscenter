@@ -111,6 +111,8 @@ func parseInt(s string) int {
 	for _, c := range s {
 		if c >= '0' && c <= '9' {
 			n = n*10 + int(c-'0')
+		} else {
+			break
 		}
 	}
 	return n
