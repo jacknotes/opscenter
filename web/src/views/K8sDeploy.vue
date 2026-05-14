@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span>K8s部署</span>
+          <span>K8S发布</span>
           <div style="display: flex; gap: 10px;">
             <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 200px" @change="loadData">
               <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />

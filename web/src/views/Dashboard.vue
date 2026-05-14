@@ -19,7 +19,7 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" @click="$router.push('/k8s')">
-          <template #header>K8s部署</template>
+          <template #header>K8S发布</template>
           <div style="text-align: center; font-size: 32px; color: #E6A23C;">
             <el-icon><Box /></el-icon>
           </div>

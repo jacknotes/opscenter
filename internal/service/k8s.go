@@ -31,7 +31,8 @@ func (s *K8sService) ParseListOutput(output string) []Rollout {
 
 	lines := strings.Split(output, "\n")
 	for i, line := range lines {
-		if i == 0 || strings.TrimSpace(line) == "" {
+		trimmed := strings.TrimSpace(line)
+		if i == 0 || trimmed == "" || strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "NAMESPACE") {
 			continue
 		}
 

@@ -55,11 +55,11 @@
             <el-radio value="key">密钥</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="form.auth_type === 'password'" label="SSH密码">
-          <el-input v-model="form.password" type="password" show-password :placeholder="(isEdit || isCopy) && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'" />
+        <el-form-item v-if="form.auth_type === 'password'" label="SSH密码" :required="!isEdit">
+          <el-input v-model="form.password" type="password" show-password :placeholder="isEdit && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'" />
         </el-form-item>
-        <el-form-item v-if="form.auth_type === 'key'" label="私钥">
-          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="(isEdit || isCopy) && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'" />
+        <el-form-item v-if="form.auth_type === 'key'" label="私钥" :required="!isEdit">
+          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="isEdit && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'" />
         </el-form-item>
         <el-form-item label="服务器类型" required>
           <el-select v-model="form.server_type">
@@ -75,7 +75,7 @@
           <el-input v-model="form.script_path" placeholder="/shell/lvs.sh" />
         </el-form-item>
         <el-form-item label="脚本密码" v-if="form.server_type !== 'nginx'">
-          <el-input v-model="form.script_password" type="password" show-password :placeholder="(isEdit || isCopy) && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'" />
+          <el-input v-model="form.script_password" type="password" show-password :placeholder="isEdit && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'" />
         </el-form-item>
         <el-form-item label="配置路径" v-if="form.server_type === 'nginx'">
           <el-input v-model="form.config_path" placeholder="Nginx配置目录" />
@@ -191,10 +191,29 @@ async function handleDelete(row) {
 }
 
 async function handleSubmit() {
+  // 新建/复制时校验必填（脚本密码可不填）
+  if (!isEdit.value) {
+    if (form.value.auth_type === 'password' && !form.value.password) {
+      ElMessage.warning('请输入SSH密码')
+      return
+    }
+    if (form.value.auth_type === 'key' && !form.value.private_key) {
+      ElMessage.warning('请输入私钥')
+      return
+    }
+  }
   submitting.value = true
   try {
     if (isEdit.value) {
-      await updateServer(editId.value, form.value)
+      // 编辑时，密码框为空则发送哨兵值保留原密码
+      const data = { ...form.value }
+      if (data.auth_type === 'password') {
+        if (!data.password && form.value.has_password) data.password = '__keep__'
+      } else {
+        if (!data.private_key && form.value.has_private_key) data.private_key = '__keep__'
+      }
+      if (!data.script_password && form.value.has_script_password) data.script_password = '__keep__'
+      await updateServer(editId.value, data)
       ElMessage.success('更新成功')
     } else {
       await createServer(form.value)

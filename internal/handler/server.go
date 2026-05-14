@@ -11,9 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"gorm.io/gorm"
 
-	"opscenter/internal/config"
 	"opscenter/internal/model"
-	"opscenter/internal/pkg/crypto"
 )
 
 type ServerHandler struct {
@@ -96,7 +94,7 @@ func (h *ServerHandler) GetForEdit(c *gin.Context) {
 		"description":     server.Description,
 		"has_password":    server.Password != "",
 		"has_private_key": server.PrivateKey != "",
-		"has_script_pwd":  server.ScriptPassword != "",
+		"has_script_password":  server.ScriptPassword != "",
 	})
 }
 
@@ -141,33 +139,29 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// 如果前端没有发送密码，则保留原有密码（解密后交给 BeforeSave 重新加密）
-	key := config.Global.Crypto.Key
-	if input.Password == "" {
-		if existing.Password != "" && key != "" {
-			input.Password, _ = crypto.Decrypt(existing.Password, key)
-		}
-	}
-	if input.PrivateKey == "" {
-		if existing.PrivateKey != "" && key != "" {
-			input.PrivateKey, _ = crypto.Decrypt(existing.PrivateKey, key)
-		}
-	}
-	if input.ScriptPassword == "" {
-		if existing.ScriptPassword != "" && key != "" {
-			input.ScriptPassword, _ = crypto.Decrypt(existing.ScriptPassword, key)
-		}
-	}
+	// 前端发送 __keep__ 表示保留原密码，不覆盖
+	keepPassword := input.Password == "__keep__"
+	keepPrivateKey := input.PrivateKey == "__keep__"
+	keepScriptPwd := input.ScriptPassword == "__keep__"
 
 	input.ID = uint(id)
 	input.CreatedAt = existing.CreatedAt
 	// 使用 Select 明确指定要保存的字段，确保空字符串也能保存
-	if err := h.db.Select(
+	fields := []string{
 		"name", "host", "port", "username", "auth_type",
-		"password", "private_key", "server_type", "env",
-		"script_path", "script_password", "config_path",
-		"config_pattern", "backup_path", "description",
-	).Save(&input).Error; err != nil {
+		"server_type", "env", "script_path",
+		"config_path", "config_pattern", "backup_path", "description",
+	}
+	if !keepPassword {
+		fields = append(fields, "password")
+	}
+	if !keepPrivateKey {
+		fields = append(fields, "private_key")
+	}
+	if !keepScriptPwd {
+		fields = append(fields, "script_password")
+	}
+	if err := h.db.Select(fields).Save(&input).Error; err != nil {
 		log.Printf("更新服务器失败: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return

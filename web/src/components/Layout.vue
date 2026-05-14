@@ -25,7 +25,7 @@
         </el-menu-item>
         <el-menu-item index="/k8s">
           <el-icon><Box /></el-icon>
-          <span>K8s部署</span>
+          <span>K8S发布</span>
         </el-menu-item>
         <el-menu-item index="/preprod">
           <el-icon><ZoomOut /></el-icon>

@@ -33,7 +33,7 @@ const routes = [
         path: 'k8s',
         name: 'K8sDeploy',
         component: () => import('../views/K8sDeploy.vue'),
-        meta: { title: 'K8s部署' }
+        meta: { title: 'K8S发布' }
       },
       {
         path: 'preprod',
