@@ -80,7 +80,7 @@ export const nginxOfflineExecute = (data) => api.post('/nginx/upstream/offline/e
 export const nginxReload = (data) => api.post('/nginx/reload', data)
 export const nginxRollbackPreview = (data) => api.post('/nginx/rollback/preview', data)
 export const nginxRollbackExecute = (data) => api.post('/nginx/rollback/execute', data)
-export const getNginxBackups = (serverId) => api.get('/nginx/backups', { params: { server_id: serverId } })
+export const getNginxBackups = (serverId, opts) => api.get('/nginx/backups', { params: { server_id: serverId }, ...opts })
 
 // Logs
 export const getLogs = (params) => api.get('/logs', { params })

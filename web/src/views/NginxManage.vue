@@ -46,7 +46,7 @@
         <el-button size="large" :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
         <el-button size="large" type="success" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
         <el-button size="large" type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-        <el-button size="large" type="info" @click="backupDialogVisible = true">备份列表</el-button>
+        <el-button size="large" type="info" @click="openBackupDialog">备份列表</el-button>
         <el-button size="large" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
         <el-button size="large" type="primary" @click="handleRefresh">刷新</el-button>
       </div>
@@ -382,14 +382,6 @@ async function loadConfigs() {
   } catch (e) {
     ElMessage.error('加载配置列表失败: ' + (e.response?.data?.error || e.message))
   }
-  loadingBackups.value = true
-  try {
-    backups.value = await getNginxBackups(serverId.value)
-  } catch (e) {
-    console.error('加载备份列表失败:', e)
-  } finally {
-    loadingBackups.value = false
-  }
 }
 
 async function loadUpstreams() {
@@ -407,6 +399,31 @@ async function loadUpstreams() {
     ElMessage.error('加载upstream失败: ' + (e.response?.data?.error || e.message))
   } finally {
     loadingUpstreams.value = false
+  }
+}
+
+async function openBackupDialog() {
+  if (!serverId.value) {
+    ElMessage.warning('请先选择服务器')
+    return
+  }
+  backupDialogVisible.value = true
+  loadingBackups.value = true
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    const res = await getNginxBackups(serverId.value, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    backups.value = res || []
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      ElMessage.error('加载备份列表超时，请检查服务器连接')
+    } else {
+      ElMessage.error('加载备份列表失败: ' + (e.response?.data?.error || e.message))
+    }
+    backups.value = []
+  } finally {
+    loadingBackups.value = false
   }
 }
 

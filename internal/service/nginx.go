@@ -93,6 +93,21 @@ func (s *NginxService) ParseConfig(configContent string) []NginxUpstream {
 	return upstreams
 }
 
+func matchLine(line, backendIP string) bool {
+	if strings.Contains(line, backendIP) {
+		return true
+	}
+	// 后端 IP 带端口时，尝试只匹配 IP 部分（处理 upstream 中 server 未写端口的情况）
+	if idx := strings.LastIndex(backendIP, ":"); idx > 0 {
+		ipOnly := backendIP[:idx]
+		port := backendIP[idx+1:]
+		if port == "80" && strings.Contains(line, ipOnly) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, action string) (before, after string) {
 	before = config
 
@@ -106,7 +121,7 @@ func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, acti
 			inTargetUpstream = true
 		}
 
-		if inTargetUpstream && strings.Contains(line, backendIP) {
+		if inTargetUpstream && matchLine(line, backendIP) {
 			trimmedLine := strings.TrimSpace(line)
 			switch action {
 			case "online":
@@ -139,7 +154,19 @@ func (s *NginxService) GenerateBackupCommand(configPath, backupPath, configFile 
 
 func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamName string, backendIPs []string, action string) string {
 	// 构建多个 IP 的 OR 匹配模式: IP1\|IP2\|IP3
-	ipPattern := strings.Join(backendIPs, "\\|")
+	// 对于带 :80 端口的 IP，只用 IP 部分匹配（兼容 upstream 中 server 未写端口的情况）
+	var ipParts []string
+	for _, ip := range backendIPs {
+		if idx := strings.LastIndex(ip, ":"); idx > 0 {
+			port := ip[idx+1:]
+			if port == "80" {
+				ipParts = append(ipParts, ip[:idx])
+				continue
+			}
+		}
+		ipParts = append(ipParts, ip)
+	}
+	ipPattern := strings.Join(ipParts, "\\|")
 
 	var sedPattern string
 	switch action {
