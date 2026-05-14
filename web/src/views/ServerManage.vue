@@ -2,8 +2,7 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span>服务器管理</span>
+        <div style="display: flex; align-items: center; justify-content: flex-end;">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
         </div>
       </template>

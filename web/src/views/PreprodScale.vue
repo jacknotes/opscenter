@@ -2,8 +2,7 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span>预生产缩扩容</span>
+        <div style="display: flex; align-items: center; justify-content: flex-end;">
           <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 200px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>

@@ -2,16 +2,13 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span>K8S发布</span>
-          <div style="display: flex; gap: 10px;">
-            <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 200px" @change="loadData">
-              <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
-            </el-select>
-            <el-button type="primary" @click="handleFull('online')">全量上线</el-button>
-            <el-button type="warning" @click="handleFull('sync')">全量同步</el-button>
-            <el-button type="danger" @click="handleFull('rollback')">全量回滚</el-button>
-          </div>
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+          <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 200px" @change="loadData">
+            <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+          <el-button type="primary" @click="handleFull('online')">全量上线</el-button>
+          <el-button type="warning" @click="handleFull('sync')">全量同步</el-button>
+          <el-button type="danger" @click="handleFull('rollback')">全量回滚</el-button>
         </div>
       </template>
 

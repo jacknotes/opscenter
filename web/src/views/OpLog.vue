@@ -2,16 +2,13 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span>操作日志</span>
-          <div style="display: flex; gap: 10px;">
-            <el-select v-model="module" placeholder="按模块筛选" clearable style="width: 150px" @change="loadData">
-              <el-option label="LVS" value="lvs" />
-              <el-option label="Nginx" value="nginx" />
-              <el-option label="K8s" value="k8s" />
-              <el-option label="预生产" value="preprod" />
-            </el-select>
-          </div>
+        <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px;">
+          <el-select v-model="module" placeholder="按模块筛选" clearable style="width: 150px" @change="loadData">
+            <el-option label="LVS" value="lvs" />
+            <el-option label="Nginx" value="nginx" />
+            <el-option label="K8s" value="k8s" />
+            <el-option label="预生产" value="preprod" />
+          </el-select>
         </div>
       </template>
 
