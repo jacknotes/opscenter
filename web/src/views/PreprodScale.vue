@@ -8,11 +8,16 @@
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 220px;" />
+          <el-radio-group v-model="statusFilter" @change="currentPage = 1">
+            <el-radio-button value="all">全部</el-radio-button>
+            <el-radio-button value="up">已扩容</el-radio-button>
+            <el-radio-button value="down">已缩容</el-radio-button>
+          </el-radio-group>
         </div>
       </template>
 
       <!-- 批量操作按钮 -->
-      <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+      <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
         <el-button type="primary" @click="toggleSelectAll">{{ allSelected ? '取消选择' : '全选' }}</el-button>
         <el-button type="success" @click="handleRefresh">刷新</el-button>
         <el-button type="danger" :disabled="selectedIds.size === 0 || !canBatchScaleDown" @click="handleBatchScaleDown">
@@ -21,6 +26,11 @@
         <el-button type="success" :disabled="selectedIds.size === 0 || !canBatchScaleUp" @click="handleBatchScaleUp">
           批量扩容
         </el-button>
+        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
+          已选 {{ selectedIds.size }} 项
+          <template v-if="batchSkipDown > 0">，{{ batchSkipDown }} 项已缩容将跳过</template>
+          <template v-if="batchSkipUp > 0">，{{ batchSkipUp }} 项已扩容将跳过</template>
+        </span>
       </div>
 
       <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange">
@@ -31,7 +41,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="300" />
-        <el-table-column prop="current" label="当前副本" width="90" align="center" />
+        <el-table-column prop="current" label="当前副本" width="100" align="center">
+          <template #default="{ row }">
+            <span>{{ row.current }}</span>
+            <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px;">已缩容</el-tag>
+            <el-tag v-else-if="row.current > 0 && row.current === row.target_replicas" type="success" size="small" style="margin-left: 4px;">正常</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="target_replicas" label="目标副本" width="90" align="center">
           <template #default="{ row }">
             <span :class="{ 'text-warning': row.current > 0 && row.current !== row.target_replicas }">
@@ -41,16 +57,6 @@
         </el-table-column>
         <el-table-column prop="available" label="可用副本" width="90" align="center" />
         <el-table-column prop="age" label="年龄" width="100" />
-        <el-table-column label="操作" width="120" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button v-if="row.current > 0" type="danger" size="small" link @click="handleSingleScaleDown(row)">
-              缩容
-            </el-button>
-            <el-button v-else type="success" size="small" link @click="handleSingleScaleUp(row)">
-              扩容
-            </el-button>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
@@ -81,6 +87,23 @@
       </template>
     </el-dialog>
 
+    <!-- Large Batch Confirm Dialog -->
+    <el-dialog v-model="batchConfirmVisible" title="批量操作确认" width="500px">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px;">
+        <template #title>
+          当前选中 <b>{{ batchConfirmNames.length }}</b> 个资源，请输入 <b>确认执行</b> 以继续
+        </template>
+      </el-alert>
+      <div style="max-height: 200px; overflow-y: auto; background: #f5f7fa; padding: 10px; border-radius: 4px; margin-bottom: 16px;">
+        <div v-for="name in batchConfirmNames" :key="name" style="font-size: 13px; line-height: 1.8;">{{ name }}</div>
+      </div>
+      <el-input v-model="batchConfirmText" placeholder='请输入"确认执行"' />
+      <template #footer>
+        <el-button @click="batchConfirmVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="batchConfirmText !== '确认执行'" @click="onBatchConfirm">确认</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px;">
       <template #header>执行结果</template>
@@ -93,6 +116,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleDownExecute, preprodScaleUpPreview, preprodScaleUpExecute } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+const BATCH_THRESHOLD = 10
 
 const servers = ref([])
 const serverId = ref(null)
@@ -109,14 +134,29 @@ const search = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const skipSelectionSync = ref(false)
+const statusFilter = ref('all')
+
+// Large batch confirm
+const batchConfirmVisible = ref(false)
+const batchConfirmText = ref('')
+const batchConfirmNames = ref([])
+const batchConfirmAction = ref('')
 
 const filteredResources = computed(() => {
-  if (!search.value) return resources.value
-  const q = search.value.toLowerCase()
-  return resources.value.filter(r =>
-    r.category.toLowerCase().includes(q) ||
-    r.name.toLowerCase().includes(q)
-  )
+  let list = resources.value
+  if (statusFilter.value === 'up') {
+    list = list.filter(r => r.current > 0)
+  } else if (statusFilter.value === 'down') {
+    list = list.filter(r => r.current === 0)
+  }
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    list = list.filter(r =>
+      r.category.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q)
+    )
+  }
+  return list
 })
 
 const paginatedResources = computed(() => {
@@ -128,14 +168,26 @@ const allSelected = computed(() =>
   filteredResources.value.length > 0 && filteredResources.value.every(r => selectedIds.value.has(r.name))
 )
 
-const canBatchScaleDown = computed(() => {
-  const selected = filteredResources.value.filter(r => selectedIds.value.has(r.name))
-  return selected.some(r => r.current > 0)
+const selectedResources = computed(() =>
+  filteredResources.value.filter(r => selectedIds.value.has(r.name))
+)
+
+const canBatchScaleDown = computed(() =>
+  selectedResources.value.some(r => r.current > 0)
+)
+
+const canBatchScaleUp = computed(() =>
+  selectedResources.value.some(r => r.current === 0)
+)
+
+const batchSkipDown = computed(() => {
+  if (selectedIds.value.size === 0) return 0
+  return selectedResources.value.filter(r => r.current === 0).length
 })
 
-const canBatchScaleUp = computed(() => {
-  const selected = filteredResources.value.filter(r => selectedIds.value.has(r.name))
-  return selected.some(r => r.current === 0)
+const batchSkipUp = computed(() => {
+  if (selectedIds.value.size === 0) return 0
+  return selectedResources.value.filter(r => r.current > 0).length
 })
 
 function handleSizeChange(size) {
@@ -215,44 +267,67 @@ function handleSelectionChange(rows) {
   rows.forEach(r => selectedIds.value.add(r.name))
 }
 
-async function handleSingleScaleDown(row) {
-  try {
-    await ElMessageBox.confirm(`确认缩容 ${row.name} 至 0 副本？`, '确认缩容', { type: 'warning' })
-    await doPreview('scaledown', [row.name])
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
-  }
-}
-
-async function handleSingleScaleUp(row) {
-  try {
-    await ElMessageBox.confirm(`确认扩容 ${row.name} 至 ${row.target_replicas} 副本？`, '确认扩容', { type: 'warning' })
-    await doPreview('scaleup', [row.name])
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
-  }
-}
-
 async function handleBatchScaleDown() {
-  const names = filteredResources.value.filter(r => selectedIds.value.has(r.name) && r.current > 0).map(r => r.name)
+  const targets = selectedResources.value.filter(r => r.current > 0)
+  const skipCount = selectedResources.value.filter(r => r.current === 0).length
+  const names = targets.map(r => r.name)
   if (names.length === 0) return
-  try {
-    await ElMessageBox.confirm(`确认缩容以下 ${names.length} 个资源至 0 副本？\n\n${names.join('\n')}`, '批量缩容', { type: 'warning' })
-    await doPreview('scaledown', names)
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+
+  let msg = `确认缩容以下 ${names.length} 个资源至 0 副本？`
+  if (skipCount > 0) {
+    msg += `\n\n（已选 ${selectedIds.value.size} 项，其中 ${skipCount} 项已缩容将跳过）`
   }
+  msg += `\n\n${names.join('\n')}`
+
+  try {
+    await ElMessageBox.confirm(msg, '批量缩容', { type: 'warning' })
+  } catch (e) {
+    if (e === 'cancel') return
+  }
+
+  if (names.length > BATCH_THRESHOLD) {
+    batchConfirmNames.value = names
+    batchConfirmAction.value = 'scaledown'
+    batchConfirmText.value = ''
+    batchConfirmVisible.value = true
+    return
+  }
+
+  await doPreview('scaledown', names)
 }
 
 async function handleBatchScaleUp() {
-  const names = filteredResources.value.filter(r => selectedIds.value.has(r.name) && r.current === 0).map(r => r.name)
+  const targets = selectedResources.value.filter(r => r.current === 0)
+  const skipCount = selectedResources.value.filter(r => r.current > 0).length
+  const names = targets.map(r => r.name)
   if (names.length === 0) return
-  try {
-    await ElMessageBox.confirm(`确认扩容以下 ${names.length} 个资源至目标副本数？\n\n${names.join('\n')}`, '批量扩容', { type: 'warning' })
-    await doPreview('scaleup', names)
-  } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.response?.data?.error || '操作失败')
+
+  let msg = `确认扩容以下 ${names.length} 个资源至目标副本数？`
+  if (skipCount > 0) {
+    msg += `\n\n（已选 ${selectedIds.value.size} 项，其中 ${skipCount} 项已扩容将跳过）`
   }
+  msg += `\n\n${names.join('\n')}`
+
+  try {
+    await ElMessageBox.confirm(msg, '批量扩容', { type: 'warning' })
+  } catch (e) {
+    if (e === 'cancel') return
+  }
+
+  if (names.length > BATCH_THRESHOLD) {
+    batchConfirmNames.value = names
+    batchConfirmAction.value = 'scaleup'
+    batchConfirmText.value = ''
+    batchConfirmVisible.value = true
+    return
+  }
+
+  await doPreview('scaleup', names)
+}
+
+async function onBatchConfirm() {
+  batchConfirmVisible.value = false
+  await doPreview(batchConfirmAction.value, batchConfirmNames.value)
 }
 
 async function doPreview(action, resourceNames) {
