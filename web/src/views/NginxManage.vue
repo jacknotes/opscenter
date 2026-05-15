@@ -8,7 +8,7 @@
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <span style="white-space: nowrap;">文件：</span>
-          <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="loadUpstreams">
+          <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
           <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable style="width: 250px;">
@@ -375,12 +375,24 @@ async function loadConfigs() {
   try {
     configFiles.value = await getNginxConfigs(serverId.value)
     if (configFiles.value.length > 0) {
-      configFile.value = configFiles.value[0]
+      const saved = localStorage.getItem(`nginx_config_${serverId.value}`)
+      if (saved && configFiles.value.includes(saved)) {
+        configFile.value = saved
+      } else {
+        configFile.value = configFiles.value[0]
+      }
       await loadUpstreams()
     }
   } catch (e) {
     ElMessage.error('加载配置列表失败: ' + (e.response?.data?.error || e.message))
   }
+}
+
+function onConfigChange() {
+  if (serverId.value && configFile.value) {
+    localStorage.setItem(`nginx_config_${serverId.value}`, configFile.value)
+  }
+  loadUpstreams()
 }
 
 async function loadUpstreams() {

@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -77,23 +78,61 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 		configPattern = "*.conf"
 	}
 
-	cmd := fmt.Sprintf("ls %s%s", configPath, configPattern)
-	output, err := h.sshManager.Execute(&server, cmd)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("获取配置列表失败: %v", err)})
-		return
-	}
-
-	// 只返回文件名，不包含路径前缀
-	files := splitLines(output)
-	var fileNames []string
-	for _, f := range files {
-		if idx := lastIndexOf(f, '/'); idx >= 0 {
-			fileNames = append(fileNames, f[idx+1:])
+	// 分离正向模式和排除模式（! 前缀）
+	var includePatterns, excludePatterns []string
+	for _, p := range strings.Split(configPattern, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if strings.HasPrefix(p, "!") {
+			excludePatterns = append(excludePatterns, strings.TrimPrefix(p, "!"))
 		} else {
-			fileNames = append(fileNames, f)
+			includePatterns = append(includePatterns, p)
 		}
 	}
+
+	// 对每个正向模式执行 ls，合并结果
+	fileNames := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, pattern := range includePatterns {
+		cmd := fmt.Sprintf("ls %s%s", configPath, pattern)
+		output, err := h.sshManager.Execute(&server, cmd)
+		if err != nil {
+			continue // 该模式无匹配，跳过
+		}
+		for _, f := range splitLines(output) {
+			if f == "" {
+				continue
+			}
+			if idx := lastIndexOf(f, '/'); idx >= 0 {
+				f = f[idx+1:]
+			}
+			if !seen[f] {
+				seen[f] = true
+				fileNames = append(fileNames, f)
+			}
+		}
+	}
+
+	// 过滤排除模式
+	if len(excludePatterns) > 0 {
+		filtered := make([]string, 0)
+		for _, f := range fileNames {
+			excluded := false
+			for _, ep := range excludePatterns {
+				if matched, _ := filepath.Match(ep, f); matched {
+					excluded = true
+					break
+				}
+			}
+			if !excluded {
+				filtered = append(filtered, f)
+			}
+		}
+		fileNames = filtered
+	}
+
 	c.JSON(http.StatusOK, fileNames)
 }
 
