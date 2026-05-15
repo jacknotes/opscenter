@@ -15,12 +15,16 @@ export const useUserStore = defineStore('user', () => {
 
   function setUserInfo(info) {
     userInfo.value = info
+    if (info?.role) {
+      localStorage.setItem('role', info.role)
+    }
   }
 
   function logout() {
     token.value = ''
     userInfo.value = null
     localStorage.removeItem('token')
+    localStorage.removeItem('role')
   }
 
   return {

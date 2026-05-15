@@ -27,6 +27,7 @@ func Setup(db *gorm.DB) *gin.Engine {
 	// Services
 	sshManager := service.NewSSHManager()
 	previewMgr := service.NewPreviewManager()
+	lockManager := service.NewLockManager()
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(db)
@@ -34,9 +35,9 @@ func Setup(db *gorm.DB) *gin.Engine {
 	logHandler := handler.NewLogHandler(db)
 	lvsHandler := handler.NewLVSHandler(db, sshManager, previewMgr)
 	k8sHandler := handler.NewK8sHandler(db, sshManager, previewMgr)
-	preprodHandler := handler.NewPreprodHandler(db, sshManager, previewMgr)
+	preprodHandler := handler.NewPreprodHandler(db, sshManager, previewMgr, lockManager)
 	nginxHandler := handler.NewNginxHandler(db, sshManager, previewMgr)
-	wsHandler := handler.NewWSHandler(db, sshManager)
+	wsHandler := handler.NewWSHandler(db, sshManager, previewMgr, lockManager)
 
 	// Initialize admin user
 	authHandler.InitAdmin()
@@ -45,15 +46,15 @@ func Setup(db *gorm.DB) *gin.Engine {
 	api := r.Group("/api")
 	{
 		api.POST("/login", authHandler.Login)
-
-		// WebSocket
-		api.GET("/ws/exec", wsHandler.Handle)
 	}
 
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.Auth())
 	{
+		// WebSocket
+		protected.GET("/ws/exec", wsHandler.Handle)
+
 		// User info
 		protected.GET("/user/info", authHandler.GetUserInfo)
 
@@ -114,12 +115,14 @@ func Setup(db *gorm.DB) *gin.Engine {
 			nginx.GET("/backups", nginxHandler.Backups)
 		}
 
+		// Server list (any authenticated user)
+		protected.GET("/servers", serverHandler.List)
+		protected.GET("/servers/:id", serverHandler.Get)
+
 		// Server management (admin only)
 		servers := protected.Group("/servers")
-		servers.Use(middleware.AdminRequired())
+		servers.Use(middleware.AdminRequired(db))
 		{
-			servers.GET("", serverHandler.List)
-			servers.GET("/:id", serverHandler.Get)
 			servers.GET("/:id/edit", serverHandler.GetForEdit)
 			servers.POST("", serverHandler.Create)
 			servers.PUT("/:id", serverHandler.Update)
@@ -127,6 +130,20 @@ func Setup(db *gorm.DB) *gin.Engine {
 			servers.POST("/:id/test", serverHandler.TestConnection)
 			servers.PUT("/:id/toggle", serverHandler.ToggleEnabled)
 		}
+
+		// User management (admin only)
+		users := protected.Group("/users")
+		users.Use(middleware.AdminRequired(db))
+		{
+			users.GET("", authHandler.ListUsers)
+			users.POST("", authHandler.CreateUser)
+			users.PUT("/:id", authHandler.UpdateUser)
+			users.DELETE("/:id", authHandler.DeleteUser)
+			users.PUT("/:id/reset-password", authHandler.ResetPassword)
+		}
+
+		// Change password (any authenticated user, for self only)
+		protected.PUT("/users/:id/password", authHandler.ChangePassword)
 	}
 
 	return r

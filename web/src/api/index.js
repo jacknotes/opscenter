@@ -31,6 +31,14 @@ api.interceptors.response.use(
 export const login = (data) => api.post('/login', data)
 export const getUserInfo = () => api.get('/user/info')
 
+// WebSocket URL helper
+export const getWebSocketUrl = (path) => {
+  const userStore = useUserStore()
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const host = window.location.host
+  return `${protocol}//${host}${path}?token=${encodeURIComponent(userStore.token)}`
+}
+
 // Servers
 export const getServers = (type, all) => api.get('/servers', { params: { type, all: all ? 'true' : undefined } })
 export const getServer = (id) => api.get(`/servers/${id}`)
@@ -67,9 +75,9 @@ export const k8sFullRollbackExecute = (data) => api.post('/k8s/full_rollback/exe
 // Preprod
 export const getPreprodStatus = (serverId) => api.get('/preprod/status', { params: { server_id: serverId } })
 export const preprodScaleDownPreview = (data) => api.post('/preprod/scaledown/preview', data)
-export const preprodScaleDownExecute = (data) => api.post('/preprod/scaledown/execute', data)
+export const preprodScaleDownExecute = (data) => api.post('/preprod/scaledown/execute', data, { timeout: 600000 })
 export const preprodScaleUpPreview = (data) => api.post('/preprod/scaleup/preview', data)
-export const preprodScaleUpExecute = (data) => api.post('/preprod/scaleup/execute', data)
+export const preprodScaleUpExecute = (data) => api.post('/preprod/scaleup/execute', data, { timeout: 600000 })
 
 // Nginx
 export const getNginxConfigs = (serverId) => api.get('/nginx/configs', { params: { server_id: serverId } })
@@ -85,5 +93,13 @@ export const getNginxBackups = (serverId, opts) => api.get('/nginx/backups', { p
 
 // Logs
 export const getLogs = (params) => api.get('/logs', { params })
+
+// Users
+export const getUsers = () => api.get('/users')
+export const createUser = (data) => api.post('/users', data)
+export const updateUser = (id, data) => api.put(`/users/${id}`, data)
+export const deleteUser = (id) => api.delete(`/users/${id}`)
+export const resetPassword = (id, data) => api.put(`/users/${id}/reset-password`, data)
+export const changePassword = (id, data) => api.put(`/users/${id}/password`, data)
 
 export default api

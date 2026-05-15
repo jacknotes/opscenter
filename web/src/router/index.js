@@ -52,6 +52,12 @@ const routes = [
         name: 'ServerManage',
         component: () => import('../views/ServerManage.vue'),
         meta: { title: '服务器管理', admin: true }
+      },
+      {
+        path: 'users',
+        name: 'UserManage',
+        component: () => import('../views/UserManage.vue'),
+        meta: { title: '用户管理', admin: true }
       }
     ]
   }
@@ -68,6 +74,8 @@ router.beforeEach((to, from, next) => {
     next()
   } else if (!token) {
     next('/login')
+  } else if (to.meta.admin && localStorage.getItem('role') !== 'admin') {
+    next('/dashboard')
   } else {
     next()
   }

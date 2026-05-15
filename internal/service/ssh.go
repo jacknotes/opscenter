@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"regexp"
 	"sync"
 	"time"
@@ -119,10 +121,108 @@ func (m *SSHManager) Close() {
 	m.clients = make(map[uint]*ssh.Client)
 }
 
+type StreamChunk struct {
+	Line string
+	Err  bool
+}
+
+func (m *SSHManager) ExecuteStream(server *model.Server, command string, password string) (<-chan StreamChunk, <-chan error) {
+	ch := make(chan StreamChunk, 100)
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer close(ch)
+		defer close(errCh)
+
+		client, err := m.GetClient(server)
+		if err != nil {
+			errCh <- err
+			return
+		}
+
+		session, err := client.NewSession()
+		if err != nil {
+			// Try reconnect
+			m.mu.Lock()
+			delete(m.clients, server.ID)
+			m.mu.Unlock()
+
+			client, err = m.GetClient(server)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			session, err = client.NewSession()
+			if err != nil {
+				errCh <- fmt.Errorf("创建会话失败: %v", err)
+				return
+			}
+		}
+		defer session.Close()
+
+		stdin, err := session.StdinPipe()
+		if err != nil {
+			errCh <- fmt.Errorf("创建stdin管道失败: %v", err)
+			return
+		}
+
+		stdout, err := session.StdoutPipe()
+		if err != nil {
+			errCh <- fmt.Errorf("创建stdout管道失败: %v", err)
+			return
+		}
+
+		stderr, err := session.StderrPipe()
+		if err != nil {
+			errCh <- fmt.Errorf("创建stderr管道失败: %v", err)
+			return
+		}
+
+		if err := session.Start(command); err != nil {
+			errCh <- fmt.Errorf("启动命令失败: %v", err)
+			return
+		}
+
+		// Send password via stdin pipe
+		go func() {
+			defer stdin.Close()
+			io.WriteString(stdin, password+"\n")
+		}()
+
+		// Read stdout and stderr concurrently
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+			for scanner.Scan() {
+				ch <- StreamChunk{Line: scanner.Text(), Err: false}
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stderr)
+			scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+			for scanner.Scan() {
+				ch <- StreamChunk{Line: scanner.Text(), Err: true}
+			}
+		}()
+
+		// Wait for scanners to finish, then wait for session
+		wg.Wait()
+		errCh <- session.Wait()
+	}()
+
+	return ch, errCh
+}
+
 // Command whitelist patterns
 var (
 	lvsCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|status|op\s+\d{1,3}\s+\d{1,3}\s+(on|off)|swap\s+\d{1,3}\s+\d{1,3}\s+\d{1,3})$`)
-	k8sCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|single_(online|sync|rollback)\s+[\w.-]+\s+[\w-]+|full_(online|sync|rollback)|(scale(down|up)))$`)
+	k8sCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|single_(online|sync|rollback)\s+[\w.-]+\s+[\w-]+|full_(online|sync|rollback)|scale(down|up)(\s+[\w.-]+)*)$`)
 	nginxCommandPattern = regexp.MustCompile(`^(cat|cp|sed\s+-i|nginx\s+(-t|-s\s+reload)|ls)\s+[\w/.%*-]+$`)
 )
 

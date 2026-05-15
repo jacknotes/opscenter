@@ -1,0 +1,202 @@
+<template>
+  <div>
+    <el-card>
+      <template #header>
+        <div style="display: flex; align-items: center;">
+          <el-button type="primary" @click="handleAdd">添加用户</el-button>
+        </div>
+      </template>
+
+      <el-table :data="users" stripe border>
+        <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column prop="username" label="用户名" width="120" />
+        <el-table-column prop="name" label="姓名" width="100" />
+        <el-table-column prop="email" label="邮箱" min-width="180" />
+        <el-table-column label="角色" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.role === 'admin' ? 'danger' : 'info'">{{ row.role === 'admin' ? '管理员' : '普通用户' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="260" align="right" fixed="right">
+          <template #default="{ row }">
+            <el-button-group size="small">
+              <el-button type="primary" @click="handleEdit(row)">编辑</el-button>
+              <el-button type="warning" @click="handleResetPwd(row)">重置密码</el-button>
+              <el-button type="danger" @click="handleDelete(row)" :disabled="row.id === currentUserId">删除</el-button>
+            </el-button-group>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- Add/Edit Dialog -->
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑用户' : '添加用户'" width="500px">
+      <el-form :model="form" label-width="80px">
+        <el-form-item label="用户名" required>
+          <el-input v-model="form.username" :disabled="isEdit" />
+        </el-form-item>
+        <el-form-item label="姓名" required>
+          <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item label="邮箱" required>
+          <el-input v-model="form.email" />
+        </el-form-item>
+        <el-form-item v-if="!isEdit" label="密码" required>
+          <el-input v-model="form.password" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="角色" required>
+          <el-radio-group v-model="form.role">
+            <el-radio value="admin">管理员</el-radio>
+            <el-radio value="user">普通用户</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Reset Password Dialog -->
+    <el-dialog v-model="resetPwdVisible" title="重置密码" width="400px">
+      <el-form :model="resetPwdForm" label-width="80px">
+        <el-form-item label="用户名">
+          <el-input :model-value="resetPwdForm.username" disabled />
+        </el-form-item>
+        <el-form-item label="新密码" required>
+          <el-input v-model="resetPwdForm.password" type="password" show-password placeholder="请输入新密码" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="resetPwdVisible = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleSubmitResetPwd">确定</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { getUsers, createUser, updateUser, deleteUser, resetPassword } from '../api'
+import { useUserStore } from '../stores/user'
+import { ElMessage, ElMessageBox } from 'element-plus'
+
+const userStore = useUserStore()
+const currentUserId = computed(() => userStore.userInfo?.id)
+
+const users = ref([])
+const dialogVisible = ref(false)
+const isEdit = ref(false)
+const editId = ref(null)
+const submitting = ref(false)
+const form = ref({ username: '', password: '', name: '', email: '', role: 'user' })
+
+const resetPwdVisible = ref(false)
+const resetPwdForm = ref({ id: null, username: '', password: '' })
+
+function formatTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN')
+}
+
+onMounted(() => {
+  loadData()
+})
+
+async function loadData() {
+  try {
+    users.value = await getUsers()
+  } catch (e) {
+    ElMessage.error('加载用户列表失败')
+  }
+}
+
+function handleAdd() {
+  isEdit.value = false
+  editId.value = null
+  form.value = { username: '', password: '', name: '', email: '', role: 'user' }
+  dialogVisible.value = true
+}
+
+function handleEdit(row) {
+  isEdit.value = true
+  editId.value = row.id
+  form.value = { username: row.username, name: row.name, email: row.email, password: '', role: row.role }
+  dialogVisible.value = true
+}
+
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定要删除用户 "${row.username}" 吗？`, '确认删除')
+    await deleteUser(row.id)
+    ElMessage.success('删除成功')
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '删除失败')
+    }
+  }
+}
+
+function handleResetPwd(row) {
+  resetPwdForm.value = { id: row.id, username: row.username, password: '' }
+  resetPwdVisible.value = true
+}
+
+async function handleSubmit() {
+  if (!form.value.username) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (!form.value.name) {
+    ElMessage.warning('请输入姓名')
+    return
+  }
+  if (!form.value.email) {
+    ElMessage.warning('请输入邮箱')
+    return
+  }
+  if (!isEdit.value && !form.value.password) {
+    ElMessage.warning('请输入密码')
+    return
+  }
+
+  submitting.value = true
+  try {
+    if (isEdit.value) {
+      await updateUser(editId.value, { username: form.value.username, name: form.value.name, email: form.value.email, role: form.value.role })
+      ElMessage.success('更新成功')
+    } else {
+      await createUser(form.value)
+      ElMessage.success('添加成功')
+    }
+    dialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '操作失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function handleSubmitResetPwd() {
+  if (!resetPwdForm.value.password) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+
+  submitting.value = true
+  try {
+    await resetPassword(resetPwdForm.value.id, { password: resetPwdForm.value.password })
+    ElMessage.success('密码重置成功')
+    resetPwdVisible.value = false
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '重置失败')
+  } finally {
+    submitting.value = false
+  }
+}
+</script>

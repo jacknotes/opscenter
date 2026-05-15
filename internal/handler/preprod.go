@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -12,17 +13,19 @@ import (
 )
 
 type PreprodHandler struct {
-	db            *gorm.DB
-	sshManager    *service.SSHManager
-	previewMgr    *service.PreviewManager
+	db             *gorm.DB
+	sshManager     *service.SSHManager
+	previewMgr     *service.PreviewManager
+	lockManager    *service.LockManager
 	preprodService *service.PreprodService
 }
 
-func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *service.PreviewManager) *PreprodHandler {
+func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *service.PreviewManager, lockManager *service.LockManager) *PreprodHandler {
 	return &PreprodHandler{
 		db:             db,
 		sshManager:     sshManager,
 		previewMgr:     previewMgr,
+		lockManager:    lockManager,
 		preprodService: service.NewPreprodService(sshManager),
 	}
 }
@@ -157,6 +160,17 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
+
+	// Acquire lock
+	username := c.GetString("username")
+	locked, holder := h.lockManager.TryLock(preview.ServerID, username, 10*time.Minute)
+	if !locked {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": fmt.Sprintf("操作正在进行中，请等待 (当前操作人: %s)", holder.Username),
+		})
+		return
+	}
+	defer h.lockManager.Unlock(preview.ServerID, username)
 
 	command := preview.Params["command"].(string)
 	output, err := h.sshManager.ExecuteWithPipe(&server, command, server.ScriptPassword)
