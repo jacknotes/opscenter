@@ -27,6 +27,7 @@ type Server struct {
 	ConfigPattern  string         `gorm:"size:100" json:"config_pattern"`
 	BackupPath     string         `gorm:"size:255" json:"backup_path"`
 	Description    string         `gorm:"size:500" json:"description"`
+	Enabled        bool           `gorm:"default:true" json:"enabled"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
@@ -50,6 +51,7 @@ type ServerResponse struct {
 	ConfigPattern string    `json:"config_pattern"`
 	BackupPath    string    `json:"backup_path"`
 	Description   string    `json:"description"`
+	Enabled       bool      `json:"enabled"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -72,6 +74,7 @@ func (s *Server) ToResponse() ServerResponse {
 		ConfigPattern: s.ConfigPattern,
 		BackupPath:    s.BackupPath,
 		Description:   s.Description,
+		Enabled:       s.Enabled,
 		CreatedAt:     s.CreatedAt,
 		UpdatedAt:     s.UpdatedAt,
 	}

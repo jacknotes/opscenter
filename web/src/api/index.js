@@ -32,13 +32,14 @@ export const login = (data) => api.post('/login', data)
 export const getUserInfo = () => api.get('/user/info')
 
 // Servers
-export const getServers = (type) => api.get('/servers', { params: { type } })
+export const getServers = (type, all) => api.get('/servers', { params: { type, all: all ? 'true' : undefined } })
 export const getServer = (id) => api.get(`/servers/${id}`)
 export const getServerForEdit = (id) => api.get(`/servers/${id}/edit`)
 export const createServer = (data) => api.post('/servers', data)
 export const updateServer = (id, data) => api.put(`/servers/${id}`, data)
 export const deleteServer = (id) => api.delete(`/servers/${id}`)
 export const testConnection = (id) => api.post(`/servers/${id}/test`)
+export const toggleServerEnabled = (id) => api.put(`/servers/${id}/toggle`)
 
 // LVS
 export const getLvsList = (serverId) => api.get('/lvs/list', { params: { server_id: serverId } })

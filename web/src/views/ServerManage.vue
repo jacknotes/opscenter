@@ -7,8 +7,13 @@
         </div>
       </template>
 
-      <el-table :data="servers" stripe border>
+      <el-table :data="servers" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''">
         <el-table-column prop="id" label="ID" width="60" />
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="名称" width="150" />
         <el-table-column prop="host" label="IP地址" width="130" />
         <el-table-column prop="port" label="SSH端口" width="80" />
@@ -19,8 +24,8 @@
           </template>
         </el-table-column>
         <el-table-column prop="env" label="环境" width="80" />
-        <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+        <el-table-column label="操作" width="260" align="right" fixed="right">
           <template #default="{ row }">
             <el-button-group size="small">
               <el-button type="success" @click="handleTest(row)">测试连接</el-button>
@@ -89,6 +94,9 @@
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" />
         </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="form.enabled" active-text="启用" inactive-text="禁用" />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -127,7 +135,8 @@ function getDefaultForm() {
     config_path: '',
     config_pattern: '',
     backup_path: '',
-    description: ''
+    description: '',
+    enabled: true
   }
 }
 
@@ -137,7 +146,7 @@ onMounted(() => {
 
 async function loadData() {
   try {
-    servers.value = await getServers()
+    servers.value = await getServers(undefined, true)
   } catch (e) {
     ElMessage.error('加载服务器列表失败')
   }
@@ -243,4 +252,15 @@ async function handleTest(row) {
     ElMessage.error(e.response?.data?.error || '测试失败')
   }
 }
+
 </script>
+
+<style scoped>
+:deep(.disabled-row) {
+  background-color: #fafafa !important;
+  opacity: 0.6;
+}
+:deep(.disabled-row:hover > td) {
+  background-color: #f5f5f5 !important;
+}
+</style>

@@ -125,6 +125,7 @@ func Setup(db *gorm.DB) *gin.Engine {
 			servers.PUT("/:id", serverHandler.Update)
 			servers.DELETE("/:id", serverHandler.Delete)
 			servers.POST("/:id/test", serverHandler.TestConnection)
+			servers.PUT("/:id/toggle", serverHandler.ToggleEnabled)
 		}
 	}
 

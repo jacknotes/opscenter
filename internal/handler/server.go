@@ -24,11 +24,15 @@ func NewServerHandler(db *gorm.DB) *ServerHandler {
 
 func (h *ServerHandler) List(c *gin.Context) {
 	serverType := c.Query("type")
+	showAll := c.Query("all") == "true"
 
 	var servers []model.Server
 	query := h.db.Order("id ASC")
 	if serverType != "" {
 		query = query.Where("server_type = ?", serverType)
+	}
+	if !showAll {
+		query = query.Where("enabled = ?", true)
 	}
 
 	if err := query.Find(&servers).Error; err != nil {
@@ -92,6 +96,7 @@ func (h *ServerHandler) GetForEdit(c *gin.Context) {
 		"config_pattern":  server.ConfigPattern,
 		"backup_path":     server.BackupPath,
 		"description":     server.Description,
+		"enabled":         server.Enabled,
 		"has_password":    server.Password != "",
 		"has_private_key": server.PrivateKey != "",
 		"has_script_password":  server.ScriptPassword != "",
@@ -110,7 +115,7 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		"name", "host", "port", "username", "auth_type",
 		"password", "private_key", "server_type", "env",
 		"script_path", "script_password", "config_path",
-		"config_pattern", "backup_path", "description",
+		"config_pattern", "backup_path", "description", "enabled",
 	).Create(&server).Error; err != nil {
 		log.Printf("创建服务器失败: %+v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
@@ -150,7 +155,7 @@ func (h *ServerHandler) Update(c *gin.Context) {
 	fields := []string{
 		"name", "host", "port", "username", "auth_type",
 		"server_type", "env", "script_path",
-		"config_path", "config_pattern", "backup_path", "description",
+		"config_path", "config_pattern", "backup_path", "description", "enabled",
 	}
 	if !keepPassword {
 		fields = append(fields, "password")
@@ -183,6 +188,32 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+func (h *ServerHandler) ToggleEnabled(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	newState := !server.Enabled
+	if err := h.db.Model(&server).Update("enabled", newState).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
+		return
+	}
+
+	if newState {
+		c.JSON(http.StatusOK, gin.H{"message": "已启用", "enabled": true})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"message": "已禁用", "enabled": false})
+	}
 }
 
 func (h *ServerHandler) TestConnection(c *gin.Context) {
