@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器：</span>
+          <span style="white-space: nowrap;">服务器:</span>
           <el-select v-model="serverId" placeholder="选择LVS服务器" style="width: 200px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
@@ -78,7 +78,12 @@ onMounted(async () => {
   try {
     servers.value = await getServers('lvs')
     if (servers.value.length > 0) {
-      serverId.value = servers.value[0].id
+      const saved = localStorage.getItem('lvs_server')
+      if (saved && servers.value.some(s => s.id === Number(saved))) {
+        serverId.value = Number(saved)
+      } else {
+        serverId.value = servers.value[0].id
+      }
       await loadData()
     }
   } catch (e) {
@@ -88,6 +93,7 @@ onMounted(async () => {
 
 async function loadData() {
   if (!serverId.value) return
+  localStorage.setItem('lvs_server', serverId.value)
   try {
     lvsData.value = await getLvsList(serverId.value)
   } catch (e) {

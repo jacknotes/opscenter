@@ -8,7 +8,7 @@
           <el-tag v-else-if="status === 'done'" type="success" size="small">执行完成</el-tag>
           <el-tag v-else-if="status === 'error'" type="danger" size="small">执行失败</el-tag>
           <el-tag v-else-if="status === 'connecting'" type="info" size="small">连接中...</el-tag>
-          <el-button v-if="status === 'streaming'" type="danger" size="small" @click="$emit('cancel')">取消</el-button>
+          <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')">取消</el-button>
         </div>
       </div>
     </template>
@@ -27,6 +27,7 @@ import { ref, watch, nextTick } from 'vue'
 const props = defineProps({
   lines: { type: Array, default: () => [] },
   status: { type: String, default: 'idle' },
+  showCancel: { type: Boolean, default: true },
 })
 
 defineEmits(['cancel'])

@@ -43,6 +43,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	if !user.Enabled {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+		return
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
@@ -97,6 +102,7 @@ type UpdateUserRequest struct {
 	Name     string `json:"name" binding:"required"`
 	Email    string `json:"email" binding:"required"`
 	Role     string `json:"role" binding:"required"`
+	Enabled  *bool  `json:"enabled"`
 }
 
 type ResetPasswordRequest struct {
@@ -195,12 +201,27 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Model(&user).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"username": req.Username,
 		"name":     req.Name,
 		"email":    req.Email,
 		"role":     req.Role,
-	}).Error; err != nil {
+	}
+	if req.Enabled != nil {
+		// 不能禁用 admin 用户
+		if user.Username == "admin" && !*req.Enabled {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用 admin 用户"})
+			return
+		}
+		// 不能禁用自己
+		if currentUserID.(uint) == uint(id) && !*req.Enabled {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用自己的账户"})
+			return
+		}
+		updates["enabled"] = *req.Enabled
+	}
+
+	if err := h.db.Model(&user).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新失败"})
 		return
 	}
@@ -317,4 +338,38 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
+}
+
+func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	// 不能禁用自己
+	currentUserID, _ := c.Get("user_id")
+	if currentUserID.(uint) == uint(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用自己的账户"})
+		return
+	}
+
+	// 不能禁用 admin 用户
+	var user model.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	if user.Username == "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用 admin 用户"})
+		return
+	}
+
+	newStatus := !user.Enabled
+	if err := h.db.Model(&user).Update("enabled", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"enabled": newStatus})
 }

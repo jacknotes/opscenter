@@ -54,6 +54,32 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
+func UserEnabledCheck(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+			c.Abort()
+			return
+		}
+
+		var user model.User
+		if err := db.First(&user, userID).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
+			c.Abort()
+			return
+		}
+
+		if !user.Enabled {
+			c.JSON(http.StatusForbidden, gin.H{"error": "账户已被禁用"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func AdminRequired(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("user_id")

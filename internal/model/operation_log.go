@@ -13,6 +13,8 @@ type OperationLog struct {
 	Status     string    `gorm:"size:20;not null" json:"status"`
 	Output     string    `gorm:"type:text" json:"output"`
 	PreviewID  string    `gorm:"size:64" json:"preview_id"`
+	ServerID   uint      `gorm:"index" json:"server_id"`
+	ServerName string    `gorm:"size:100" json:"server_name"`
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 }
 

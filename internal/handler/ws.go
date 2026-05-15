@@ -211,12 +211,14 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}
 
 	logEntry := model.OperationLog{
-		Username:  usernameStr,
-		Module:    "preprod",
-		Action:    preview.Action,
-		Target:    command,
-		Detail:    command,
-		PreviewID: msg.PreviewID,
+		Username:   usernameStr,
+		Module:     "preprod",
+		Action:     preview.Action,
+		Target:     command,
+		Detail:     command,
+		PreviewID:  msg.PreviewID,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 
 	// Stream execution

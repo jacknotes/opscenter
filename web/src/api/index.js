@@ -12,6 +12,10 @@ api.interceptors.request.use(config => {
   if (userStore.token) {
     config.headers.Authorization = `Bearer ${userStore.token}`
   }
+  // 为GET请求添加cache-busting参数
+  if (config.method === 'get') {
+    config.params = { ...config.params, _t: Date.now() }
+  }
   return config
 })
 
@@ -60,17 +64,17 @@ export const lvsSwapExecute = (data) => api.post('/lvs/swap/execute', data)
 // K8s
 export const getK8sRollouts = (serverId) => api.get('/k8s/rollouts', { params: { server_id: serverId } })
 export const k8sOnlinePreview = (data) => api.post('/k8s/online/preview', data)
-export const k8sOnlineExecute = (data) => api.post('/k8s/online/execute', data)
+export const k8sOnlineExecute = (data) => api.post('/k8s/online/execute', data, { timeout: 600000 })
 export const k8sSyncPreview = (data) => api.post('/k8s/sync/preview', data)
-export const k8sSyncExecute = (data) => api.post('/k8s/sync/execute', data)
+export const k8sSyncExecute = (data) => api.post('/k8s/sync/execute', data, { timeout: 600000 })
 export const k8sRollbackPreview = (data) => api.post('/k8s/rollback/preview', data)
-export const k8sRollbackExecute = (data) => api.post('/k8s/rollback/execute', data)
+export const k8sRollbackExecute = (data) => api.post('/k8s/rollback/execute', data, { timeout: 600000 })
 export const k8sFullOnlinePreview = (data) => api.post('/k8s/full_online/preview', data)
-export const k8sFullOnlineExecute = (data) => api.post('/k8s/full_online/execute', data)
+export const k8sFullOnlineExecute = (data) => api.post('/k8s/full_online/execute', data, { timeout: 600000 })
 export const k8sFullSyncPreview = (data) => api.post('/k8s/full_sync/preview', data)
-export const k8sFullSyncExecute = (data) => api.post('/k8s/full_sync/execute', data)
+export const k8sFullSyncExecute = (data) => api.post('/k8s/full_sync/execute', data, { timeout: 600000 })
 export const k8sFullRollbackPreview = (data) => api.post('/k8s/full_rollback/preview', data)
-export const k8sFullRollbackExecute = (data) => api.post('/k8s/full_rollback/execute', data)
+export const k8sFullRollbackExecute = (data) => api.post('/k8s/full_rollback/execute', data, { timeout: 600000 })
 
 // Preprod
 export const getPreprodStatus = (serverId) => api.get('/preprod/status', { params: { server_id: serverId } })
@@ -101,5 +105,6 @@ export const updateUser = (id, data) => api.put(`/users/${id}`, data)
 export const deleteUser = (id) => api.delete(`/users/${id}`)
 export const resetPassword = (id, data) => api.put(`/users/${id}/reset-password`, data)
 export const changePassword = (id, data) => api.put(`/users/${id}/password`, data)
+export const toggleUserEnabled = (id) => api.put(`/users/${id}/toggle`)
 
 export default api

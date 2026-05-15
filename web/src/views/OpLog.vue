@@ -3,11 +3,18 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <el-select v-model="module" placeholder="按模块筛选" clearable style="width: 150px" @change="loadData">
+          <span style="white-space: nowrap;">模块:</span>
+          <el-select v-model="module" style="width: 150px" @change="loadData">
+            <el-option label="ALL" value="all" />
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
             <el-option label="Kubernetes" value="k8s" />
             <el-option label="Kubernetes-PrePro" value="preprod" />
+          </el-select>
+          <span style="white-space: nowrap;">服务器:</span>
+          <el-select v-model="serverId" style="width: 200px" @change="loadData">
+            <el-option label="ALL" :value="0" />
+            <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </div>
       </template>
@@ -20,6 +27,7 @@
             <el-tag>{{ row.module }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
         <el-table-column prop="action" label="动作" width="120" />
         <el-table-column prop="target" label="目标" min-width="200" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
@@ -55,22 +63,32 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getLogs } from '../api'
+import { getLogs, getServers } from '../api'
 import { ElMessage } from 'element-plus'
 
 const logs = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const module = ref('')
+const module = ref('all')
+const serverId = ref(0)
+const servers = ref([])
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    servers.value = await getServers()
+  } catch (e) {
+    console.error('Failed to load servers:', e)
+  }
   loadData()
 })
 
 async function loadData() {
   try {
-    const res = await getLogs({ page: page.value, size: pageSize.value, module: module.value })
+    const params = { page: page.value, size: pageSize.value }
+    if (module.value && module.value !== 'all') params.module = module.value
+    if (serverId.value && serverId.value !== 0) params.server_id = serverId.value
+    const res = await getLogs(params)
     logs.value = res.data || []
     total.value = res.total || 0
   } catch (e) {

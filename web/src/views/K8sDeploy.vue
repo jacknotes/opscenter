@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器：</span>
+          <span style="white-space: nowrap;">服务器:</span>
           <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 250px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
@@ -14,12 +14,12 @@
       <div style="margin-bottom: 15px; display: flex; gap: 10px;">
         <el-button type="primary" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="success" @click="handleRefresh">刷新</el-button>
-        <el-button type="primary" :disabled="selectedIds.size === 0" @click="handleBatch('online')">批量上线</el-button>
-        <el-button type="warning" :disabled="selectedIds.size === 0" @click="handleBatch('sync')">批量同步</el-button>
-        <el-button type="danger" :disabled="selectedIds.size === 0" @click="handleBatch('rollback')">批量回滚</el-button>
-        <el-button type="primary" @click="handleFull('online')">全量上线</el-button>
-        <el-button type="warning" @click="handleFull('sync')">全量同步</el-button>
-        <el-button type="danger" @click="handleFull('rollback')">全量回滚</el-button>
+        <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
+        <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
+        <el-button type="danger" @click="handleAction('rollback')">{{ selectedIds.size > 0 ? '批量回滚' : '全量回滚' }}</el-button>
+        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
+          已选 {{ selectedIds.size }} 项
+        </span>
       </div>
 
       <el-table ref="tableRef" :data="paginatedRollouts" :row-key="row => row.namespace + '/' + row.name" stripe border @selection-change="handleSelectionChange">
@@ -169,15 +169,24 @@ function handleToggleSelect() {
 }
 
 async function handleRefresh() {
-  await loadData()
-  ElMessage.success('刷新成功')
+  try {
+    await loadData()
+    ElMessage.success('刷新成功')
+  } catch (e) {
+    // loadData 已经处理了错误提示
+  }
 }
 
 onMounted(async () => {
   try {
     servers.value = await getServers('kubernetes')
     if (servers.value.length > 0) {
-      serverId.value = servers.value[0].id
+      const saved = localStorage.getItem('k8s_server')
+      if (saved && servers.value.some(s => s.id === Number(saved))) {
+        serverId.value = Number(saved)
+      } else {
+        serverId.value = servers.value[0].id
+      }
       await loadData()
     }
   } catch (e) {
@@ -187,12 +196,17 @@ onMounted(async () => {
 
 async function loadData() {
   if (!serverId.value) return
+  localStorage.setItem('k8s_server', serverId.value)
+
   try {
-    rollouts.value = await getK8sRollouts(serverId.value)
+    const data = await getK8sRollouts(serverId.value)
+    // 处理后端可能返回null的情况
+    rollouts.value = Array.isArray(data) ? data : []
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
     ElMessage.error('加载数据失败')
+    throw e
   }
 }
 
@@ -204,6 +218,14 @@ function handleSelectionChange(val) {
   const pageKeys = paginatedRollouts.value.map(r => r.namespace + '/' + r.name)
   pageKeys.forEach(key => selectedIds.value.delete(key))
   val.forEach(r => selectedIds.value.add(r.namespace + '/' + r.name))
+}
+
+async function handleAction(action) {
+  if (selectedIds.value.size > 0) {
+    await handleBatch(action)
+  } else {
+    await handleFull(action)
+  }
 }
 
 async function handleBatch(action) {
@@ -263,7 +285,12 @@ async function executePreview() {
     output.value = JSON.stringify(res.output, null, 2)
     ElMessage.success('执行成功')
     previewVisible.value = false
-    await loadData()
+    // 刷新数据，如果失败不影响执行成功的提示
+    try {
+      await loadData()
+    } catch (e) {
+      // loadData已经显示了错误提示
+    }
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '执行失败')
     output.value = JSON.stringify(e.response?.data?.output, null, 2) || ''

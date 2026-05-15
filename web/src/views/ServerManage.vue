@@ -2,39 +2,34 @@
   <div>
     <el-card>
       <template #header>
-        <div style="display: flex; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
+          <el-button type="success" @click="handleTest" :disabled="!selectedRow">测试连接</el-button>
+          <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
+          <el-button type="warning" @click="handleCopySelected" :disabled="!selectedRow">复制</el-button>
+          <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow">删除</el-button>
         </div>
       </template>
 
-      <el-table :data="servers" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''">
+      <el-table :data="servers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" width="150" />
-        <el-table-column prop="host" label="IP地址" width="130" />
+        <el-table-column prop="name" label="名称" min-width="120" />
+        <el-table-column prop="host" label="IP地址" min-width="120" />
         <el-table-column prop="port" label="SSH端口" width="80" />
-        <el-table-column prop="username" label="用户名" width="100" />
-        <el-table-column prop="server_type" label="类型" width="120">
+        <el-table-column prop="username" label="用户名" min-width="100" />
+        <el-table-column prop="server_type" label="类型" min-width="140">
           <template #default="{ row }">
             <el-tag :type="row.server_type === 'lvs' ? '' : row.server_type === 'nginx' ? 'success' : row.server_type === 'preprod' ? 'warning' : 'info'">{{ row.server_type === 'kubernetes' ? 'Kubernetes' : row.server_type === 'preprod' ? 'Kubernetes-PrePro' : row.server_type }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="env" label="环境" width="80" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column label="操作" width="260" align="right" fixed="right">
-          <template #default="{ row }">
-            <el-button-group size="small">
-              <el-button type="success" @click="handleTest(row)">测试连接</el-button>
-              <el-button type="primary" @click="handleEdit(row)">编辑</el-button>
-              <el-button type="warning" @click="handleCopy(row)">复制</el-button>
-              <el-button type="danger" @click="handleDelete(row)">删除</el-button>
-            </el-button-group>
-          </template>
-        </el-table-column>
       </el-table>
     </el-card>
 
@@ -118,6 +113,8 @@ const isCopy = ref(false)
 const editId = ref(null)
 const submitting = ref(false)
 const form = ref(getDefaultForm())
+const selectedRow = ref(null)
+const tableRef = ref(null)
 
 function getDefaultForm() {
   return {
@@ -137,6 +134,24 @@ function getDefaultForm() {
     backup_path: '',
     description: '',
     enabled: true
+  }
+}
+
+function tableRowClassName({ row }) {
+  if (row.enabled === false) return 'disabled-row'
+  return ''
+}
+
+function handleSelectionChange(rows) {
+  if (rows.length > 1) {
+    // 只允许选中一个，取消之前的选择
+    tableRef.value.clearSelection()
+    tableRef.value.toggleRowSelection(rows[rows.length - 1], true)
+    selectedRow.value = rows[rows.length - 1]
+  } else if (rows.length === 1) {
+    selectedRow.value = rows[0]
+  } else {
+    selectedRow.value = null
   }
 }
 
@@ -160,6 +175,11 @@ function handleAdd() {
   dialogVisible.value = true
 }
 
+function handleCopySelected() {
+  if (!selectedRow.value) return
+  handleCopy(selectedRow.value)
+}
+
 async function handleCopy(row) {
   isEdit.value = false
   isCopy.value = true
@@ -171,6 +191,11 @@ async function handleCopy(row) {
   } catch (e) {
     ElMessage.error('获取服务器信息失败')
   }
+}
+
+function handleEditSelected() {
+  if (!selectedRow.value) return
+  handleEdit(selectedRow.value)
 }
 
 async function handleEdit(row) {
@@ -186,11 +211,17 @@ async function handleEdit(row) {
   }
 }
 
+function handleDeleteSelected() {
+  if (!selectedRow.value) return
+  handleDelete(selectedRow.value)
+}
+
 async function handleDelete(row) {
   try {
     await ElMessageBox.confirm(`确定要删除服务器 "${row.name}" 吗？`, '确认删除')
     await deleteServer(row.id)
     ElMessage.success('删除成功')
+    selectedRow.value = null
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -200,7 +231,6 @@ async function handleDelete(row) {
 }
 
 async function handleSubmit() {
-  // 新建/复制时校验必填（脚本密码可不填）
   if (!isEdit.value) {
     if (form.value.auth_type === 'password' && !form.value.password) {
       ElMessage.warning('请输入SSH密码')
@@ -214,7 +244,6 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (isEdit.value) {
-      // 编辑时，密码框为空则发送哨兵值保留原密码
       const data = { ...form.value }
       if (data.auth_type === 'password') {
         if (!data.password && form.value.has_password) data.password = '__keep__'
@@ -237,10 +266,11 @@ async function handleSubmit() {
   }
 }
 
-async function handleTest(row) {
+async function handleTest() {
+  if (!selectedRow.value) return
   const loading = ElMessage({ message: '正在测试连接...', type: 'info', duration: 0 })
   try {
-    const res = await testConnection(row.id)
+    const res = await testConnection(selectedRow.value.id)
     loading.close()
     if (res.success) {
       ElMessage.success(res.message)
@@ -252,7 +282,6 @@ async function handleTest(row) {
     ElMessage.error(e.response?.data?.error || '测试失败')
   }
 }
-
 </script>
 
 <style scoped>

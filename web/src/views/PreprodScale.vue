@@ -3,16 +3,11 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器：</span>
+          <span style="white-space: nowrap;">服务器:</span>
           <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 280px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 220px;" />
-          <el-radio-group v-model="statusFilter" @change="currentPage = 1">
-            <el-radio-button value="all">全部</el-radio-button>
-            <el-radio-button value="up">已扩容</el-radio-button>
-            <el-radio-button value="down">已缩容</el-radio-button>
-          </el-radio-group>
         </div>
       </template>
 
@@ -26,6 +21,11 @@
         <el-button type="success" :disabled="selectedIds.size > 0 ? !canBatchScaleUp : !canFullScaleUp" @click="handleBatchScaleUp">
           {{ selectedIds.size > 0 ? '批量扩容' : '全量扩容' }}
         </el-button>
+        <el-select v-model="statusFilter" style="width: 120px; margin-left: 10px;" @change="currentPage = 1">
+          <el-option label="全部" value="all" />
+          <el-option label="已扩容" value="up" />
+          <el-option label="已缩容" value="down" />
+        </el-select>
         <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
           已选 {{ selectedIds.size }} 项
           <template v-if="batchSkipDown > 0">，{{ batchSkipDown }} 项已缩容将跳过</template>
@@ -96,7 +96,7 @@
           </template>
         </el-alert>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 14px; color: #303133;">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本：' : '以下资源将扩容至目标副本数：' }}</span>
+          <span style="font-size: 14px; color: #303133;">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
           <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
         </div>
         <el-scrollbar max-height="320px">
@@ -162,7 +162,7 @@
       v-if="streamStatus !== 'idle'"
       :lines="outputLines"
       :status="streamStatus"
-      @cancel="handleCancel"
+      :showCancel="false"
     />
   </div>
 </template>
@@ -188,7 +188,7 @@ const executing = ref(false)
 const currentAction = ref('')
 
 // Streaming state
-const { outputLines, status: streamStatus, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket()
+const { outputLines, status: streamStatus, connect: wsConnect } = useWebSocket()
 const search = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -327,7 +327,12 @@ onMounted(async () => {
   try {
     servers.value = await getServers('preprod')
     if (servers.value.length > 0) {
-      serverId.value = servers.value[0].id
+      const saved = localStorage.getItem('preprod_server')
+      if (saved && servers.value.some(s => s.id === Number(saved))) {
+        serverId.value = Number(saved)
+      } else {
+        serverId.value = servers.value[0].id
+      }
       await loadData()
     }
   } catch (e) {
@@ -337,6 +342,7 @@ onMounted(async () => {
 
 async function loadData() {
   if (!serverId.value) return
+  localStorage.setItem('preprod_server', serverId.value)
   try {
     resources.value = await getPreprodStatus(serverId.value)
     selectedIds.value.clear()
@@ -491,12 +497,6 @@ function executePreview() {
       ElMessage.error(msg)
     },
   })
-}
-
-function handleCancel() {
-  wsDisconnect()
-  executing.value = false
-  ElMessage.warning('已取消执行')
 }
 </script>
 

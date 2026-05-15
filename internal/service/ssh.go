@@ -25,11 +25,12 @@ func NewSSHManager() *SSHManager {
 
 func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	m.mu.RLock()
-	if client, ok := m.clients[server.ID]; ok {
-		m.mu.RUnlock()
+	client, ok := m.clients[server.ID]
+	m.mu.RUnlock()
+
+	if ok {
 		return client, nil
 	}
-	m.mu.RUnlock()
 
 	return m.connect(server)
 }
@@ -119,6 +120,17 @@ func (m *SSHManager) Close() {
 		client.Close()
 	}
 	m.clients = make(map[uint]*ssh.Client)
+}
+
+// CloseServer 关闭指定服务器的SSH连接，强制下次请求重新连接
+func (m *SSHManager) CloseServer(serverID uint) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if client, ok := m.clients[serverID]; ok {
+		client.Close()
+		delete(m.clients, serverID)
+	}
 }
 
 type StreamChunk struct {

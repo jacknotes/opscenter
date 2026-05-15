@@ -160,14 +160,19 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 
 	output, err := h.sshManager.Execute(&server, command)
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	logEntry := model.OperationLog{
-		UserID:    0,
-		Username:  c.GetString("username"),
-		Module:    "lvs",
-		Action:    "op",
-		Target:    fmt.Sprintf("VS:%s RS:%s State:%s", params["vs_ip"], params["rs_ip"], params["state"]),
-		Detail:    command,
-		PreviewID: req.PreviewID,
+		UserID:     0,
+		Username:   c.GetString("username"),
+		Module:     "lvs",
+		Action:     "op",
+		Target:     fmt.Sprintf("VS:%s RS:%s State:%s", params["vs_ip"], params["rs_ip"], params["state"]),
+		Detail:     command,
+		PreviewID:  req.PreviewID,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 
 	if err != nil {
@@ -250,13 +255,18 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 
 	output, err := h.sshManager.Execute(&server, command)
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	logEntry := model.OperationLog{
-		Username:  c.GetString("username"),
-		Module:    "lvs",
-		Action:    "swap",
-		Target:    fmt.Sprintf("VS:%s RS1:%s RS2:%s", params["vs_ip"], params["rs_ip1"], params["rs_ip2"]),
-		Detail:    command,
-		PreviewID: req.PreviewID,
+		Username:   c.GetString("username"),
+		Module:     "lvs",
+		Action:     "swap",
+		Target:     fmt.Sprintf("VS:%s RS1:%s RS2:%s", params["vs_ip"], params["rs_ip1"], params["rs_ip2"]),
+		Detail:     command,
+		PreviewID:  req.PreviewID,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 
 	if err != nil {

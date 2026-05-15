@@ -50,7 +50,7 @@ func Setup(db *gorm.DB) *gin.Engine {
 
 	// Protected routes
 	protected := api.Group("")
-	protected.Use(middleware.Auth())
+	protected.Use(middleware.Auth(), middleware.UserEnabledCheck(db))
 	{
 		// WebSocket
 		protected.GET("/ws/exec", wsHandler.Handle)
@@ -140,6 +140,7 @@ func Setup(db *gorm.DB) *gin.Engine {
 			users.PUT("/:id", authHandler.UpdateUser)
 			users.DELETE("/:id", authHandler.DeleteUser)
 			users.PUT("/:id/reset-password", authHandler.ResetPassword)
+			users.PUT("/:id/toggle", authHandler.ToggleUserEnabled)
 		}
 
 		// Change password (any authenticated user, for self only)

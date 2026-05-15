@@ -22,6 +22,7 @@ func (h *LogHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
 	module := c.Query("module")
+	serverID := c.Query("server_id")
 
 	if page < 1 {
 		page = 1
@@ -36,6 +37,9 @@ func (h *LogHandler) List(c *gin.Context) {
 	query := h.db.Model(&model.OperationLog{})
 	if module != "" {
 		query = query.Where("module = ?", module)
+	}
+	if serverID != "" {
+		query = query.Where("server_id = ?", serverID)
 	}
 
 	query.Count(&total)

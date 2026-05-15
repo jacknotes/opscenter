@@ -52,6 +52,9 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 	targetOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list-targets")
 
 	resources := h.preprodService.ParseListOutput(output)
+	if resources == nil {
+		resources = []service.PreprodResource{}
+	}
 	if targetOutput != "" {
 		targets := h.preprodService.ParseTargetOutput(targetOutput)
 		resources = h.preprodService.MergeTargets(resources, targets)
@@ -175,13 +178,18 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 	command := preview.Params["command"].(string)
 	output, err := h.sshManager.ExecuteWithPipe(&server, command, server.ScriptPassword)
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	logEntry := model.OperationLog{
-		Username:  c.GetString("username"),
-		Module:    "preprod",
-		Action:    action,
-		Target:    command,
-		Detail:    command,
-		PreviewID: previewID,
+		Username:   c.GetString("username"),
+		Module:     "preprod",
+		Action:     action,
+		Target:     command,
+		Detail:     command,
+		PreviewID:  previewID,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 
 	if err != nil {

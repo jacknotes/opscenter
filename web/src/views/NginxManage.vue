@@ -3,11 +3,11 @@
     <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器：</span>
+          <span style="white-space: nowrap;">服务器:</span>
           <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <span style="white-space: nowrap;">文件：</span>
+          <span style="white-space: nowrap;">文件:</span>
           <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
@@ -362,7 +362,12 @@ onMounted(async () => {
   try {
     servers.value = await getServers('nginx')
     if (servers.value.length > 0) {
-      serverId.value = servers.value[0].id
+      const saved = localStorage.getItem('nginx_server')
+      if (saved && servers.value.some(s => s.id === Number(saved))) {
+        serverId.value = Number(saved)
+      } else {
+        serverId.value = servers.value[0].id
+      }
       await loadConfigs()
     }
   } catch (e) {
@@ -372,6 +377,7 @@ onMounted(async () => {
 
 async function loadConfigs() {
   if (!serverId.value) return
+  localStorage.setItem('nginx_server', serverId.value)
   try {
     configFiles.value = await getNginxConfigs(serverId.value)
     if (configFiles.value.length > 0) {

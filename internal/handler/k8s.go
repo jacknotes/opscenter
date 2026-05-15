@@ -65,6 +65,9 @@ func (h *K8sHandler) Rollouts(c *gin.Context) {
 	}
 
 	rollouts := h.k8sService.ParseListOutput(output)
+	if rollouts == nil {
+		rollouts = []service.Rollout{}
+	}
 	c.JSON(http.StatusOK, rollouts)
 }
 
@@ -304,13 +307,18 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 		}
 	}
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	logEntry := model.OperationLog{
-		Username:  c.GetString("username"),
-		Module:    "k8s",
-		Action:    action,
-		Target:    fmt.Sprintf("Commands: %v", commands),
-		Detail:    fmt.Sprintf("%v", commands),
-		PreviewID: previewID,
+		Username:   c.GetString("username"),
+		Module:     "k8s",
+		Action:     action,
+		Target:     fmt.Sprintf("Commands: %v", commands),
+		Detail:     fmt.Sprintf("%v", commands),
+		PreviewID:  previewID,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 
 	if lastErr != nil {

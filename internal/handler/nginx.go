@@ -370,13 +370,15 @@ func (h *NginxHandler) Reload(c *gin.Context) {
 	}
 
 	logEntry := model.OperationLog{
-		Username: c.GetString("username"),
-		Module:   "nginx",
-		Action:   "reload",
-		Target:   server.Name,
-		Detail:   fmt.Sprintf("%s && %s", testCmd, reloadCmd),
-		Status:   "success",
-		Output:   fmt.Sprintf("%s\nnginx reload 成功", testOutput),
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     "reload",
+		Target:     server.Name,
+		Detail:     fmt.Sprintf("%s && %s", testCmd, reloadCmd),
+		Status:     "success",
+		Output:     fmt.Sprintf("%s\nnginx reload 成功", testOutput),
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 	h.db.Create(&logEntry)
 
@@ -472,18 +474,23 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 	reloadCmd := "systemctl reload nginx"
 	h.sshManager.Execute(&server, reloadCmd)
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	detail := fmt.Sprintf("%s\n%s && %s", copyCmd, testCmd, reloadCmd)
 	logOutput := fmt.Sprintf("%s\n回滚成功: %s -> %s", testOutput, backupFile, configFile)
 
 	logEntry := model.OperationLog{
-		Username:  c.GetString("username"),
-		Module:    "nginx",
-		Action:    "rollback",
-		Target:    fmt.Sprintf("%s -> %s", configFile, backupFile),
-		Detail:    detail,
-		PreviewID: req.PreviewID,
-		Status:    "success",
-		Output:    logOutput,
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     "rollback",
+		Target:     fmt.Sprintf("%s -> %s", configFile, backupFile),
+		Detail:     detail,
+		PreviewID:  req.PreviewID,
+		Status:     "success",
+		Output:     logOutput,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 	h.db.Create(&logEntry)
 	h.previewMgr.Delete(req.PreviewID)
@@ -595,6 +602,9 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 
 	h.sshManager.Execute(&server, "systemctl reload nginx")
 
+	// 执行完成后关闭SSH连接，强制下次请求重新连接
+	h.sshManager.CloseServer(server.ID)
+
 	// sed -i 无输出，生成有意义的操作摘要
 	actionDesc := "上线"
 	if action == "offline" {
@@ -603,14 +613,16 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	logOutput := fmt.Sprintf("成功将 %s 在 %v 中%s", backendIP, upstreamNames, actionDesc)
 
 	logEntry := model.OperationLog{
-		Username:  c.GetString("username"),
-		Module:    "nginx",
-		Action:    action,
-		Target:    fmt.Sprintf("%s %v %s", configFile, upstreamNames, backendIP),
-		Detail:    strings.Join(commands, "\n"),
-		PreviewID: previewID,
-		Status:    "success",
-		Output:    logOutput,
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     action,
+		Target:     fmt.Sprintf("%s %v %s", configFile, upstreamNames, backendIP),
+		Detail:     strings.Join(commands, "\n"),
+		PreviewID:  previewID,
+		Status:     "success",
+		Output:     logOutput,
+		ServerID:   server.ID,
+		ServerName: server.Name,
 	}
 	h.db.Create(&logEntry)
 	h.previewMgr.Delete(previewID)
