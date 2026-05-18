@@ -282,7 +282,7 @@ async function executePreview() {
 
   try {
     const res = await executeFn({ preview_id: previewId.value })
-    output.value = JSON.stringify(res.output, null, 2)
+    output.value = Array.isArray(res.output) ? res.output.join('\n') : String(res.output ?? '')
     ElMessage.success('执行成功')
     previewVisible.value = false
     // 刷新数据，如果失败不影响执行成功的提示
@@ -293,7 +293,8 @@ async function executePreview() {
     }
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '执行失败')
-    output.value = JSON.stringify(e.response?.data?.output, null, 2) || ''
+    const errOutput = e.response?.data?.output
+    output.value = Array.isArray(errOutput) ? errOutput.join('\n') : String(errOutput ?? '')
   } finally {
     executing.value = false
   }
