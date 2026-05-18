@@ -61,17 +61,22 @@ type NginxSwapRequest struct {
 	OnlineIP      string   `json:"online_ip" binding:"required"`
 }
 
-type NginxBatchSwapItem struct {
-	UpstreamName string `json:"upstream_name"`
-	OfflineIP    string `json:"offline_ip"`
-	OnlineIP     string `json:"online_ip"`
+type NginxToggleRequest struct {
+	ServerID      uint     `json:"server_id" binding:"required"`
+	ConfigFile    string   `json:"config_file" binding:"required"`
+	UpstreamNames []string `json:"upstream_names" binding:"required"`
 }
 
-type NginxBatchRequest struct {
-	ServerID   uint                 `json:"server_id" binding:"required"`
-	ConfigFile string               `json:"config_file" binding:"required"`
-	Swaps      []NginxBatchSwapItem `json:"swaps"`
-	Offlines   []NginxBatchSwapItem `json:"offlines"`
+type NginxBatchItem struct {
+	UpstreamName string `json:"upstream_name"`
+	Action       string `json:"action"`                   // "online", "offline", "toggle"
+	BackendIP    string `json:"backend_ip,omitempty"`      // online/offline 时需要
+}
+
+type NginxBatchRequestV2 struct {
+	ServerID   uint             `json:"server_id" binding:"required"`
+	ConfigFile string           `json:"config_file" binding:"required"`
+	Items      []NginxBatchItem `json:"items" binding:"required"`
 }
 
 func (h *NginxHandler) Configs(c *gin.Context) {
@@ -556,14 +561,200 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
 }
 
-func (h *NginxHandler) BatchPreview(c *gin.Context) {
-	var req NginxBatchRequest
+func (h *NginxHandler) TogglePreview(c *gin.Context) {
+	var req NginxToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
 
-	if len(req.Swaps) == 0 && len(req.Offlines) == 0 {
+	var server model.Server
+	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
+	config, err := h.sshManager.Execute(&server, cmd)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
+		return
+	}
+
+	// 校验每个 upstream 同时存在 up 和 down 的 server
+	upstreams := h.nginxService.ParseConfig(config)
+	upstreamMap := make(map[string]*service.NginxUpstream)
+	for i := range upstreams {
+		upstreamMap[upstreams[i].Name] = &upstreams[i]
+	}
+	for _, name := range req.UpstreamNames {
+		u, ok := upstreamMap[name]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", name)})
+			return
+		}
+		hasUp, hasDown := false, false
+		for _, s := range u.Servers {
+			if s.Status == "up" {
+				hasUp = true
+			} else {
+				hasDown = true
+			}
+		}
+		if !hasUp || !hasDown {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中所有服务器状态相同，无需切换", name)})
+			return
+		}
+	}
+
+	// 依次对每个 upstream 生成 toggle diff
+	currentConfig := config
+	for _, name := range req.UpstreamNames {
+		_, currentConfig = h.nginxService.GenerateToggleDiff(currentConfig, name)
+	}
+	lineDiffs := h.nginxService.GenerateLineDiffs(config, currentConfig)
+
+	previewID := h.previewMgr.Create("nginx", "toggle", req.ServerID, map[string]interface{}{
+		"config_file":    req.ConfigFile,
+		"upstream_names": req.UpstreamNames,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"preview_id":  previewID,
+		"before":      config,
+		"after":       currentConfig,
+		"line_diffs":  lineDiffs,
+		"description": fmt.Sprintf("切换 %v 中所有服务器状态", req.UpstreamNames),
+	})
+}
+
+func (h *NginxHandler) ToggleExecute(c *gin.Context) {
+	var req PreviewExecuteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	preview, ok := h.previewMgr.Get(req.PreviewID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
+		return
+	}
+
+	if preview.Module != "nginx" || preview.Action != "toggle" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览类型不匹配"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	params := preview.Params
+	configFile := params["config_file"].(string)
+
+	var upstreamNames []string
+	switch v := params["upstream_names"].(type) {
+	case []string:
+		upstreamNames = v
+	case []interface{}:
+		for _, item := range v {
+			upstreamNames = append(upstreamNames, item.(string))
+		}
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	// 备份
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	h.sshManager.Execute(&server, backupCmd)
+
+	backupPath := server.BackupPath
+	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
+		backupPath += "/"
+	}
+	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	h.sshManager.Execute(&server, cleanupCmd)
+
+	// 读取配置并解析 upstream 的 server 列表
+	catCmd := fmt.Sprintf("cat %s%s", configPath, configFile)
+	configContent, err := h.sshManager.Execute(&server, catCmd)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
+		return
+	}
+	parsed := h.nginxService.ParseConfig(configContent)
+	upstreamMap := make(map[string]*service.NginxUpstream)
+	for i := range parsed {
+		upstreamMap[parsed[i].Name] = &parsed[i]
+	}
+
+	// 对每个 upstream 执行切换
+	var allCommands []string
+	for _, upstreamName := range upstreamNames {
+		u, ok := upstreamMap[upstreamName]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", upstreamName)})
+			return
+		}
+		commands := h.nginxService.GenerateToggleModifyCommands(configPath, configFile, upstreamName, u.Servers)
+		allCommands = append(allCommands, commands...)
+		for _, cmd := range commands {
+			_, err := h.sshManager.Execute(&server, cmd)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
+				return
+			}
+		}
+	}
+
+	// 测试并重载
+	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		return
+	}
+
+	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.CloseServer(server.ID)
+
+	logOutput := fmt.Sprintf("切换成功: %v 中所有服务器状态已反转", upstreamNames)
+	logEntry := model.OperationLog{
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     "toggle",
+		Target:     fmt.Sprintf("%s %v", configFile, upstreamNames),
+		Detail:     strings.Join(allCommands, "\n"),
+		PreviewID:  req.PreviewID,
+		Status:     "success",
+		Output:     logOutput,
+		ServerID:   server.ID,
+		ServerName: server.Name,
+	}
+	h.db.Create(&logEntry)
+	h.previewMgr.Delete(req.PreviewID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
+}
+
+func (h *NginxHandler) BatchPreview(c *gin.Context) {
+	var req NginxBatchRequestV2
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.Items) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请至少选择一个操作"})
 		return
 	}
@@ -592,51 +783,88 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 		upstreamMap[upstreams[i].Name] = &upstreams[i]
 	}
 
-	// 校验并生成 diff
+	// 统计每个 upstream 被下线的服务器数量，防止累积下线导致全部离线
+	offlineCountMap := make(map[string]int)
+	for _, item := range req.Items {
+		if item.Action == "offline" {
+			offlineCountMap[item.UpstreamName]++
+		}
+	}
+	// 校验累积下线数量
+	for upstreamName, offlineCount := range offlineCountMap {
+		u, ok := upstreamMap[upstreamName]
+		if !ok {
+			continue
+		}
+		upCount := 0
+		for _, s := range u.Servers {
+			if s.Status == "up" {
+				upCount++
+			}
+		}
+		if offlineCount >= upCount {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中所有在线服务器都将被下线（%d 台下线 / %d 台在线），至少需要保留一台在线服务器", upstreamName, offlineCount, upCount)})
+			return
+		}
+	}
+
+	// 校验并生成 diff（按顺序处理每个 item，前一个的 after 是下一个的 before）
 	currentConfig := config
 	var descriptions []string
 
-	for _, item := range req.Swaps {
-		offlineIP := normalizeIP(item.OfflineIP)
-		onlineIP := normalizeIP(item.OnlineIP)
+	for _, item := range req.Items {
 		u, ok := upstreamMap[item.UpstreamName]
 		if !ok {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", item.UpstreamName)})
 			return
 		}
-		if !validateServerStatus(u, offlineIP, "up") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在线", item.UpstreamName, offlineIP)})
-			return
-		}
-		if !validateServerStatus(u, onlineIP, "down") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不离线", item.UpstreamName, onlineIP)})
-			return
-		}
-		_, currentConfig = h.nginxService.GenerateSwapDiff(currentConfig, item.UpstreamName, offlineIP, onlineIP)
-		descriptions = append(descriptions, fmt.Sprintf("[%s] %s↔%s 切换", item.UpstreamName, offlineIP, onlineIP))
-	}
 
-	for _, item := range req.Offlines {
-		offlineIP := normalizeIP(item.OfflineIP)
-		u, ok := upstreamMap[item.UpstreamName]
-		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", item.UpstreamName)})
+		switch item.Action {
+		case "online":
+			backendIP := normalizeIP(item.BackendIP)
+			if !validateServerStatus(u, backendIP, "down") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在离线状态", item.UpstreamName, backendIP)})
+				return
+			}
+			_, currentConfig = h.nginxService.GenerateDiff(currentConfig, item.UpstreamName, backendIP, "online")
+			descriptions = append(descriptions, fmt.Sprintf("[%s] %s 上线", item.UpstreamName, backendIP))
+
+		case "offline":
+			backendIP := normalizeIP(item.BackendIP)
+			if !validateServerStatus(u, backendIP, "up") {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在在线状态", item.UpstreamName, backendIP)})
+				return
+			}
+			_, currentConfig = h.nginxService.GenerateDiff(currentConfig, item.UpstreamName, backendIP, "offline")
+			descriptions = append(descriptions, fmt.Sprintf("[%s] %s 下线", item.UpstreamName, backendIP))
+
+		case "toggle":
+			hasUp, hasDown := false, false
+			for _, s := range u.Servers {
+				if s.Status == "up" {
+					hasUp = true
+				} else {
+					hasDown = true
+				}
+			}
+			if !hasUp || !hasDown {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中所有服务器状态相同，无需切换", item.UpstreamName)})
+				return
+			}
+			_, currentConfig = h.nginxService.GenerateToggleDiff(currentConfig, item.UpstreamName)
+			descriptions = append(descriptions, fmt.Sprintf("[%s] 切换所有状态", item.UpstreamName))
+
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("不支持的操作类型: %s", item.Action)})
 			return
 		}
-		if !validateServerStatus(u, offlineIP, "up") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在线", item.UpstreamName, offlineIP)})
-			return
-		}
-		_, currentConfig = h.nginxService.GenerateDiff(currentConfig, item.UpstreamName, offlineIP, "offline")
-		descriptions = append(descriptions, fmt.Sprintf("[%s] %s 下线", item.UpstreamName, offlineIP))
 	}
 
 	lineDiffs := h.nginxService.GenerateLineDiffs(config, currentConfig)
 
 	previewID := h.previewMgr.Create("nginx", "batch", req.ServerID, map[string]interface{}{
 		"config_file": req.ConfigFile,
-		"swaps":       req.Swaps,
-		"offlines":    req.Offlines,
+		"items":       req.Items,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -675,27 +903,34 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	params := preview.Params
 	configFile := params["config_file"].(string)
 
-	// 解析 swaps
-	var swaps []NginxBatchSwapItem
-	for _, item := range params["swaps"].([]interface{}) {
-		m := item.(map[string]interface{})
-		swaps = append(swaps, NginxBatchSwapItem{
-			UpstreamName: m["upstream_name"].(string),
-			OfflineIP:    normalizeIP(m["offline_ip"].(string)),
-			OnlineIP:     normalizeIP(m["online_ip"].(string)),
-		})
+	// 解析 items
+	var items []NginxBatchItem
+	rawItems, ok := params["items"]
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览数据中缺少 items"})
+		return
 	}
-
-	// 解析 offlines
-	var offlines []NginxBatchSwapItem
-	if rawOfflines, ok := params["offlines"]; ok && rawOfflines != nil {
-		for _, item := range rawOfflines.([]interface{}) {
-			m := item.(map[string]interface{})
-			offlines = append(offlines, NginxBatchSwapItem{
+	switch v := rawItems.(type) {
+	case []NginxBatchItem:
+		items = v
+	case []interface{}:
+		for _, item := range v {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			bi := NginxBatchItem{
 				UpstreamName: m["upstream_name"].(string),
-				OfflineIP:    normalizeIP(m["offline_ip"].(string)),
-			})
+				Action:       m["action"].(string),
+			}
+			if ip, ok := m["backend_ip"].(string); ok {
+				bi.BackendIP = normalizeIP(ip)
+			}
+			items = append(items, bi)
 		}
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("items 类型异常: %T", rawItems)})
+		return
 	}
 
 	configPath := server.ConfigPath
@@ -714,26 +949,58 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
 	h.sshManager.Execute(&server, cleanupCmd)
 
-	// 执行切换操作
-	var allCommands []string
-	for _, item := range swaps {
-		commands := h.nginxService.GenerateSwapModifyCommands(configPath, configFile, item.UpstreamName, item.OfflineIP, item.OnlineIP)
-		allCommands = append(allCommands, commands...)
-		for _, cmd := range commands {
-			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
-				return
-			}
-		}
+	// 读取配置用于 toggle 操作获取 server 列表
+	catCmd := fmt.Sprintf("cat %s%s", configPath, configFile)
+	configContent, err := h.sshManager.Execute(&server, catCmd)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
+		return
+	}
+	parsed := h.nginxService.ParseConfig(configContent)
+	upstreamMap := make(map[string]*service.NginxUpstream)
+	for i := range parsed {
+		upstreamMap[parsed[i].Name] = &parsed[i]
 	}
 
-	// 执行下线操作
-	for _, item := range offlines {
-		cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.OfflineIP}, "offline")
-		allCommands = append(allCommands, cmd)
-		if _, err := h.sshManager.Execute(&server, cmd); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
-			return
+	// 按顺序执行每个操作
+	var allCommands []string
+	var actionCounts = map[string]int{"online": 0, "offline": 0, "toggle": 0}
+
+	for _, item := range items {
+		switch item.Action {
+		case "online":
+			cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.BackendIP}, "online")
+			allCommands = append(allCommands, cmd)
+			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] %s 上线失败: %v", item.UpstreamName, item.BackendIP, err)})
+				return
+			}
+			actionCounts["online"]++
+
+		case "offline":
+			cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.BackendIP}, "offline")
+			allCommands = append(allCommands, cmd)
+			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] %s 下线失败: %v", item.UpstreamName, item.BackendIP, err)})
+				return
+			}
+			actionCounts["offline"]++
+
+		case "toggle":
+			u, ok := upstreamMap[item.UpstreamName]
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", item.UpstreamName)})
+				return
+			}
+			commands := h.nginxService.GenerateToggleModifyCommands(configPath, configFile, item.UpstreamName, u.Servers)
+			allCommands = append(allCommands, commands...)
+			for _, cmd := range commands {
+				if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] 切换失败: %v (命令: %s)", item.UpstreamName, err, cmd)})
+					return
+				}
+			}
+			actionCounts["toggle"]++
 		}
 	}
 
@@ -747,12 +1014,12 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	h.sshManager.Execute(&server, "systemctl reload nginx")
 	h.sshManager.CloseServer(server.ID)
 
-	logOutput := fmt.Sprintf("批量操作成功：%d 个切换，%d 个下线", len(swaps), len(offlines))
+	logOutput := fmt.Sprintf("批量操作成功：%d 个上线，%d 个下线，%d 个切换", actionCounts["online"], actionCounts["offline"], actionCounts["toggle"])
 	logEntry := model.OperationLog{
 		Username:   c.GetString("username"),
 		Module:     "nginx",
 		Action:     "batch",
-		Target:     fmt.Sprintf("%s %d swaps, %d offlines", configFile, len(swaps), len(offlines)),
+		Target:     fmt.Sprintf("%s %d items", configFile, len(items)),
 		Detail:     strings.Join(allCommands, "\n"),
 		PreviewID:  req.PreviewID,
 		Status:     "success",

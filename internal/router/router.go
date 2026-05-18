@@ -111,6 +111,8 @@ func Setup(db *gorm.DB) *gin.Engine {
 			nginx.POST("/upstream/offline/execute", nginxHandler.OfflineExecute)
 			nginx.POST("/upstream/swap/preview", nginxHandler.SwapPreview)
 			nginx.POST("/upstream/swap/execute", nginxHandler.SwapExecute)
+			nginx.POST("/upstream/toggle/preview", nginxHandler.TogglePreview)
+			nginx.POST("/upstream/toggle/execute", nginxHandler.ToggleExecute)
 			nginx.POST("/upstream/batch/preview", nginxHandler.BatchPreview)
 			nginx.POST("/upstream/batch/execute", nginxHandler.BatchExecute)
 			nginx.POST("/reload", nginxHandler.Reload)

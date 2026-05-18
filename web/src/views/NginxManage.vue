@@ -63,6 +63,13 @@
                   <span class="badge badge-success">{{ upstream.servers.filter(s => s.status === 'up').length }} up</span>
                   <span class="badge badge-danger">{{ upstream.servers.filter(s => s.status === 'down').length }} down</span>
                 </div>
+                <el-button
+                  v-if="upstream.servers.some(s => s.status === 'up') && upstream.servers.some(s => s.status === 'down')"
+                  type="warning"
+                  size="small"
+                  class="upstream-toggle-btn"
+                  @click.stop="handleToggleAll(upstream)"
+                >切换</el-button>
               </div>
             </template>
             <el-table :data="upstream.servers" size="small" :row-class-name="({ row }) => isServerSelected(upstream.name, row) ? 'selected-row' : ''" class="server-table">
@@ -187,35 +194,96 @@
     </el-dialog>
 
     <!-- Batch Operations Dialog -->
-    <el-dialog v-model="batchDialogVisible" title="批量操作" width="700px" class="cool-dialog">
+    <el-dialog v-model="batchDialogVisible" title="批量操作" width="800px" class="cool-dialog">
       <div class="batch-dialog-body">
-        <!-- Swaps Section -->
-        <div v-if="batchSwaps.length > 0" class="batch-section">
-          <div class="batch-section-title">切换操作（一上一下）</div>
-          <div v-for="item in batchSwaps" :key="'s-' + item.upstreamName" class="batch-item">
-            <el-checkbox v-model="item.checked" />
-            <span class="upstream-name">{{ item.upstreamName }}</span>
-            <el-tag type="danger" size="small">{{ item.offlineIP }} 下线</el-tag>
-            <span class="swap-arrow-sm">→</span>
-            <el-tag type="success" size="small">{{ item.onlineIP }} 上线</el-tag>
-          </div>
+        <div class="batch-hint">
+          <span>为每个 Upstream 组选择操作类型，支持上线、下线、切换（反转全部状态）混合操作</span>
+          <el-button size="small" @click="toggleBatchSelectAll" style="margin-left: 12px;">
+            {{ isBatchAllSelected ? '取消全选' : '全选' }}
+          </el-button>
         </div>
-        <!-- Offlines Section -->
-        <div v-if="batchOfflines.length > 0" class="batch-section">
-          <div class="batch-section-title">下线操作</div>
-          <div v-for="item in batchOfflines" :key="'o-' + item.upstreamName + '-' + item.offlineIP" class="batch-item">
-            <el-checkbox v-model="item.checked" />
-            <span class="upstream-name">{{ item.upstreamName }}</span>
-            <el-tag type="danger" size="small">{{ item.offlineIP }} 下线</el-tag>
-          </div>
-        </div>
-        <div v-if="batchSwaps.length === 0 && batchOfflines.length === 0" class="batch-empty">
+        <el-table :data="batchItems" size="small" max-height="500" class="batch-table">
+          <el-table-column label="启用" width="60" align="center">
+            <template #default="{ row }">
+              <el-checkbox v-model="row.enabled" :disabled="!row.hasBoth && !row.hasMultipleUp" />
+            </template>
+          </el-table-column>
+          <el-table-column label="Upstream 组" prop="upstreamName" min-width="150" />
+          <el-table-column label="状态" width="130">
+            <template #default="{ row }">
+              <span class="badge badge-success">{{ row.upCount }} up</span>
+              <span class="badge badge-danger">{{ row.downCount }} down</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作类型" width="180">
+            <template #default="{ row }">
+              <el-select
+                v-model="row.action"
+                placeholder="选择操作"
+                size="small"
+                :disabled="!row.enabled"
+                style="width: 100%"
+                @change="onBatchActionChange(row)"
+              >
+                <el-option
+                  v-for="a in getAvailableActions(row)"
+                  :key="a.value"
+                  :label="a.label"
+                  :value="a.value"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标服务器" min-width="200">
+            <template #default="{ row }">
+              <template v-if="row.action === 'online' || row.action === 'offline'">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <el-select
+                    v-model="row.backendIPs"
+                    placeholder="选择服务器（可多选）"
+                    size="small"
+                    multiple
+                    collapse-tags
+                    collapse-tags-tooltip
+                    style="flex: 1"
+                  >
+                    <template #header>
+                      <el-button
+                        size="small"
+                        type="primary"
+                        text
+                        @click.stop="toggleBatchIPSelectAll(row)"
+                        style="padding: 0 4px; font-size: 12px;"
+                      >{{ isBatchIPAllSelected(row) ? '取消全选' : '全选' }}</el-button>
+                    </template>
+                    <el-option
+                      v-for="s in getSelectableServers(row)"
+                      :key="serverKey(s)"
+                      :label="serverKey(s)"
+                      :value="normalizeIPKey(s)"
+                    />
+                  </el-select>
+                </div>
+                <div v-if="row.action === 'offline'" class="batch-offline-hint">
+                  至少保留 1 台在线服务器
+                </div>
+              </template>
+              <span v-else-if="row.action === 'toggle'" style="color: #909399; font-size: 12px;">全部反转</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="batchItems.length === 0" class="batch-empty">
           暂无可执行的批量操作
         </div>
       </div>
       <template #footer>
         <el-button @click="batchDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="executing" :disabled="batchSwaps.filter(i => i.checked).length + batchOfflines.filter(i => i.checked).length === 0" @click="executeBatch">确认执行</el-button>
+        <el-button
+          type="primary"
+          :loading="executing"
+          :disabled="batchValidCount === 0"
+          @click="executeBatch"
+        >预览并执行（{{ batchValidCount }} 项）</el-button>
       </template>
     </el-dialog>
 
@@ -224,8 +292,8 @@
       <div v-if="resultData" class="result-body">
         <div class="result-item">
           <span class="result-label">操作</span>
-          <el-tag :type="resultData.action === 'online' ? 'success' : resultData.action === 'swap' || resultData.action === 'batch' ? 'warning' : 'danger'" size="large">
-            {{ resultData.action === 'online' ? '批量上线' : resultData.action === 'swap' ? '切换' : resultData.action === 'batch' ? '批量操作' : '批量下线' }}
+          <el-tag :type="resultData.action === 'online' ? 'success' : resultData.action === 'swap' || resultData.action === 'batch' || resultData.action === 'toggle' ? 'warning' : 'danger'" size="large">
+            {{ resultData.action === 'online' ? '批量上线' : resultData.action === 'swap' ? '切换' : resultData.action === 'toggle' ? '组切换' : resultData.action === 'batch' ? '批量操作' : '批量下线' }}
           </el-tag>
         </div>
         <div class="result-item">
@@ -258,6 +326,7 @@ import {
   nginxOnlinePreview, nginxOnlineExecute,
   nginxOfflinePreview, nginxOfflineExecute,
   nginxSwapPreview, nginxSwapExecute,
+  nginxTogglePreview, nginxToggleExecute,
   nginxBatchPreview, nginxBatchExecute,
   nginxReload, nginxRollbackPreview, nginxRollbackExecute,
   getNginxBackups
@@ -291,8 +360,7 @@ const swapOfflineIP = ref('')
 const swapOnlineIP = ref('')
 const swapAffectedUpstreams = ref([])
 const batchDialogVisible = ref(false)
-const batchSwaps = ref([])
-const batchOfflines = ref([])
+const batchItems = ref([])
 
 const selectedMap = ref({})
 
@@ -652,81 +720,183 @@ async function confirmSwap() {
   }
 }
 
-function openBatchDialog() {
-  // 扫描所有 upstream，检测可切换和可下线的操作
-  const swaps = []
-  const offlines = []
+async function handleToggleAll(upstream) {
+  const upCount = upstream.servers.filter(s => s.status === 'up').length
+  const downCount = upstream.servers.filter(s => s.status === 'down').length
+  try {
+    await ElMessageBox.confirm(
+      `将反转 ${upstream.name} 中所有服务器状态：${upCount} 台 up → down，${downCount} 台 down → up。确认执行？`,
+      '切换确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
 
-  for (const u of upstreams.value) {
+  try {
+    const res = await nginxTogglePreview({
+      server_id: serverId.value,
+      config_file: configFile.value,
+      upstream_names: [upstream.name]
+    })
+    previewData.value = res
+    previewId.value = res.preview_id
+    currentAction.value = 'toggle'
+    currentBatchInfo.value = { upstreamNames: [upstream.name], ipCount: upstream.servers.length, action: 'toggle' }
+    previewVisible.value = true
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '预览失败')
+  }
+}
+
+function openBatchDialog() {
+  // 列出所有 upstream 组，让用户选择操作类型
+  const items = upstreams.value.map(u => {
     const upServers = u.servers.filter(s => s.status === 'up')
     const downServers = u.servers.filter(s => s.status === 'down')
+    const hasBoth = upServers.length > 0 && downServers.length > 0
+    const hasMultipleUp = upServers.length >= 2
 
-    // 切换：一上一下配对
-    if (upServers.length === 1 && downServers.length >= 1) {
-      swaps.push({
-        upstreamName: u.name,
-        offlineIP: normalizeIPKey(upServers[0]),
-        onlineIP: normalizeIPKey(downServers[0]),
-        checked: true
-      })
-    } else if (upServers.length >= 1 && downServers.length >= 1) {
-      swaps.push({
-        upstreamName: u.name,
-        offlineIP: normalizeIPKey(upServers[0]),
-        onlineIP: normalizeIPKey(downServers[0]),
-        checked: true
-      })
+    // 默认操作：有 up 和 down 的默认 toggle，只有 up 的默认不操作
+    let defaultAction = ''
+    if (hasBoth) defaultAction = 'toggle'
+
+    return {
+      upstreamName: u.name,
+      enabled: false,
+      action: defaultAction,
+      backendIPs: [],
+      servers: u.servers,
+      upCount: upServers.length,
+      downCount: downServers.length,
+      hasBoth,
+      hasMultipleUp
+    }
+  })
+  batchItems.value = items
+  batchDialogVisible.value = true
+}
+
+const isBatchAllSelected = computed(() => {
+  const eligible = batchItems.value.filter(i => i.hasBoth || i.hasMultipleUp)
+  return eligible.length > 0 && eligible.every(i => i.enabled)
+})
+
+function toggleBatchSelectAll() {
+  const newState = !isBatchAllSelected.value
+  batchItems.value.forEach(i => {
+    if (i.hasBoth || i.hasMultipleUp) {
+      i.enabled = newState
+    }
+  })
+}
+
+const batchValidCount = computed(() => {
+  return batchItems.value.filter(i => {
+    if (!i.enabled || !i.action) return false
+    if (i.action === 'toggle') return true
+    return i.backendIPs && i.backendIPs.length > 0
+  }).reduce((sum, i) => {
+    if (i.action === 'toggle') return sum + 1
+    return sum + i.backendIPs.length
+  }, 0)
+})
+
+function getAvailableActions(item) {
+  const actions = []
+  if (item.hasBoth) {
+    actions.push({ label: '切换（反转全部）', value: 'toggle' })
+  }
+  if (item.hasMultipleUp) {
+    actions.push({ label: '下线', value: 'offline' })
+  }
+  if (item.downCount > 0) {
+    actions.push({ label: '上线', value: 'online' })
+  }
+  return actions
+}
+
+function getSelectableServers(item) {
+  if (item.action === 'online') {
+    return item.servers.filter(s => s.status === 'down')
+  } else if (item.action === 'offline') {
+    return item.servers.filter(s => s.status === 'up')
+  }
+  return []
+}
+
+// 获取下线操作时允许全选的服务器（排除第一台，确保至少保留一台在线）
+function getOfflineSafeServers(item) {
+  const upServers = item.servers.filter(s => s.status === 'up')
+  return upServers.slice(1)
+}
+
+function isBatchIPAllSelected(item) {
+  const selectable = getSelectableServers(item)
+  if (selectable.length === 0) return false
+  if (item.action === 'offline') {
+    const safe = getOfflineSafeServers(item)
+    return safe.length > 0 && safe.every(s => item.backendIPs.includes(normalizeIPKey(s)))
+  }
+  return selectable.every(s => item.backendIPs.includes(normalizeIPKey(s)))
+}
+
+function toggleBatchIPSelectAll(item) {
+  if (isBatchIPAllSelected(item)) {
+    item.backendIPs = []
+  } else {
+    if (item.action === 'offline') {
+      // 下线全选：排除第一台在线服务器
+      item.backendIPs = getOfflineSafeServers(item).map(s => normalizeIPKey(s))
+    } else {
+      item.backendIPs = getSelectableServers(item).map(s => normalizeIPKey(s))
+    }
+  }
+}
+
+function onBatchActionChange(row) {
+  row.backendIPs = []
+}
+
+async function executeBatch() {
+  // 校验：下线操作不能将所有在线服务器下线
+  for (const i of batchItems.value) {
+    if (!i.enabled || i.action !== 'offline') continue
+    const upServers = i.servers.filter(s => s.status === 'up')
+    if (i.backendIPs.length >= upServers.length) {
+      ElMessage.error(`upstream [${i.upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
+      return
     }
   }
 
-  // 下线：upstream 中有多台在线服务器，可以下线其中一台
-  for (const u of upstreams.value) {
-    const upServers = u.servers.filter(s => s.status === 'up')
-    if (upServers.length >= 2) {
-      // 跳过已被 swap 覆盖的 upstream
-      if (swaps.some(s => s.upstreamName === u.name)) continue
-      for (const s of upServers) {
-        offlines.push({
-          upstreamName: u.name,
-          offlineIP: normalizeIPKey(s),
-          checked: false
-        })
+  // 展开多选 IP：每个 IP 生成一个独立的 item
+  const items = []
+  for (const i of batchItems.value) {
+    if (!i.enabled || !i.action) continue
+    if (i.action === 'toggle') {
+      items.push({ upstream_name: i.upstreamName, action: 'toggle', backend_ip: '' })
+    } else if (i.backendIPs && i.backendIPs.length > 0) {
+      for (const ip of i.backendIPs) {
+        items.push({ upstream_name: i.upstreamName, action: i.action, backend_ip: ip })
       }
     }
   }
 
-  batchSwaps.value = swaps
-  batchOfflines.value = offlines
-  batchDialogVisible.value = true
-}
-
-async function executeBatch() {
-  const selectedSwaps = batchSwaps.value.filter(i => i.checked).map(i => ({
-    upstream_name: i.upstreamName,
-    offline_ip: i.offlineIP,
-    online_ip: i.onlineIP
-  }))
-  const selectedOfflines = batchOfflines.value.filter(i => i.checked).map(i => ({
-    upstream_name: i.upstreamName,
-    offline_ip: i.offlineIP,
-    online_ip: ''
-  }))
-
-  if (selectedSwaps.length + selectedOfflines.length === 0) return
+  if (items.length === 0) {
+    ElMessage.warning('请至少配置一个操作')
+    return
+  }
 
   try {
     const res = await nginxBatchPreview({
       server_id: serverId.value,
       config_file: configFile.value,
-      swaps: selectedSwaps,
-      offlines: selectedOfflines
+      items
     })
     previewData.value = res
     previewId.value = res.preview_id
     currentAction.value = 'batch'
     currentBatchInfo.value = {
-      upstreamNames: [...selectedSwaps.map(i => i.upstream_name), ...selectedOfflines.map(i => i.upstream_name)],
-      ipCount: selectedSwaps.length * 2 + selectedOfflines.length,
+      upstreamNames: items.map(i => i.upstream_name),
+      ipCount: items.length,
       action: 'batch'
     }
     batchDialogVisible.value = false
@@ -809,6 +979,7 @@ async function executePreview() {
     online: nginxOnlineExecute,
     offline: nginxOfflineExecute,
     swap: nginxSwapExecute,
+    toggle: nginxToggleExecute,
     batch: nginxBatchExecute,
     rollback: nginxRollbackExecute
   }[currentAction.value]
@@ -828,8 +999,9 @@ async function executePreview() {
     await loadUpstreams()
     await loadConfigs()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '执行失败')
-    output.value = e.response?.data?.output || ''
+    const msg = e.response?.data?.error || e.message || '执行失败'
+    ElMessage.error(msg)
+    output.value = e.response?.data?.output || msg
   } finally {
     executing.value = false
   }
@@ -1363,49 +1535,23 @@ async function executePreview() {
 
 /* ===== Batch Dialog ===== */
 .batch-dialog-body {
-  max-height: 500px;
+  max-height: 550px;
   overflow-y: auto;
 }
 
-.batch-section {
-  margin-bottom: 20px;
-}
-
-.batch-section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #303133;
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.batch-item {
+.batch-hint {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  margin-bottom: 6px;
-  transition: background 0.15s;
-}
-
-.batch-item:hover {
-  background: #f5f7fa;
-}
-
-.batch-item .upstream-name {
-  font-weight: 600;
-  color: #303133;
   font-size: 13px;
-  min-width: 140px;
+  color: #909399;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
 }
 
-.swap-arrow-sm {
-  color: #409eff;
-  font-weight: 700;
-  font-size: 16px;
+.batch-table {
+  width: 100%;
 }
 
 .batch-empty {
@@ -1413,5 +1559,18 @@ async function executePreview() {
   color: #909399;
   padding: 30px 0;
   font-size: 14px;
+}
+
+.batch-offline-hint {
+  font-size: 11px;
+  color: #e6a23c;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+/* ===== Upstream Toggle Button ===== */
+.upstream-toggle-btn {
+  margin-left: auto;
+  margin-right: 8px;
 }
 </style>

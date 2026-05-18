@@ -240,6 +240,62 @@ func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstre
 	return []string{offlineCmd, onlineCmd}
 }
 
+// GenerateToggleDiff 生成组切换操作的 diff（反转整个 upstream 组内所有 server 的状态）
+func (s *NginxService) GenerateToggleDiff(config, upstreamName string) (before, after string) {
+	before = config
+
+	lines := strings.Split(config, "\n")
+	var newLines []string
+	inTargetUpstream := false
+
+	for _, line := range lines {
+		if strings.Contains(line, "upstream") {
+			inTargetUpstream = strings.Contains(line, upstreamName)
+		}
+
+		if inTargetUpstream && strings.TrimSpace(line) == "}" {
+			inTargetUpstream = false
+		} else if inTargetUpstream {
+			trimmedLine := strings.TrimSpace(line)
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			if commentedServerPattern.FindStringSubmatch(trimmedLine) != nil {
+				// 注释的 server → 取消注释（上线）
+				line = indent + strings.TrimLeft(trimmedLine, "#")
+			} else if serverPattern.FindStringSubmatch(trimmedLine) != nil {
+				// 未注释的 server → 加注释（下线）
+				line = indent + "#" + trimmedLine
+			}
+		}
+
+		newLines = append(newLines, line)
+	}
+
+	after = strings.Join(newLines, "\n")
+	return
+}
+
+// GenerateToggleModifyCommands 生成组切换操作的 sed 命令列表（按 IP 精确匹配，避免相互干扰）
+func (s *NginxService) GenerateToggleModifyCommands(configPath, configFile, upstreamName string, servers []NginxServer) []string {
+	var commands []string
+	for _, srv := range servers {
+		// 处理 :80 端口，只用 IP 部分匹配
+		ipPattern := srv.IP
+		if srv.Port == "80" {
+			// 不需要端口，直接用 IP
+		} else if srv.Port != "" {
+			ipPattern = srv.IP + ":" + srv.Port
+		}
+		if srv.Status == "up" {
+			// 当前在线 → 注释掉（下线）
+			commands = append(commands, fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile))
+		} else {
+			// 当前离线 → 取消注释（上线）
+			commands = append(commands, fmt.Sprintf("sed -i '/%s/,/}/{s/#\\+server\\(.*\\(%s\\)\\)/server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile))
+		}
+	}
+	return commands
+}
+
 // LineDiff 表示一行的 diff
 type LineDiff struct {
 	LineNum int    `json:"line_num"`
