@@ -48,6 +48,7 @@
         <el-button type="info" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
         <el-button type="success" @click="handleViewConfig">查看配置</el-button>
         <el-button type="warning" @click="handleReload">重载Nginx服务</el-button>
+        <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
       </div>
 
       <!-- Upstream Groups -->
@@ -82,6 +83,17 @@
                 </template>
               </el-table-column>
               <el-table-column prop="weight" label="权重" width="80" />
+              <el-table-column label="操作" width="80">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="upstream.servers.some(s => s.status !== row.status)"
+                    type="primary"
+                    size="small"
+                    link
+                    @click="handleSwap(upstream, row)"
+                  >切换</el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </el-collapse-item>
         </el-collapse>
@@ -146,13 +158,74 @@
       <pre class="terminal-pre terminal-lg" v-html="highlightedConfig"></pre>
     </el-dialog>
 
+    <!-- Swap Target Dialog -->
+    <el-dialog v-model="swapDialogVisible" title="切换服务器" width="600px" class="cool-dialog">
+      <div v-if="swapOfflineIP" class="swap-dialog-body">
+        <div class="swap-ip-pair">
+          <el-tag type="danger" size="large">{{ swapOfflineIP }} (下线)</el-tag>
+          <span class="swap-arrow">⇅</span>
+          <el-tag type="success" size="large">{{ swapOnlineIP }} (上线)</el-tag>
+        </div>
+        <div class="swap-upstream-list">
+          <div class="swap-label">选择要执行切换的 Upstream 组：</div>
+          <div v-for="item in swapAffectedUpstreams" :key="item.name" class="swap-upstream-item">
+            <el-checkbox v-model="item.checked" />
+            <span class="upstream-name">{{ item.name }}</span>
+            <span class="badge badge-info">{{ item.totalCount }} 台</span>
+            <span class="badge badge-success">{{ item.upCount }} up</span>
+            <span class="badge badge-danger">{{ item.downCount }} down</span>
+          </div>
+          <div v-if="swapAffectedUpstreams.length === 0" style="color: #909399; padding: 20px 0; text-align: center;">
+            未找到同时包含这两台服务器的 Upstream 组
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="swapDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="swapAffectedUpstreams.filter(i => i.checked).length === 0" @click="confirmSwap">确认切换</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Batch Operations Dialog -->
+    <el-dialog v-model="batchDialogVisible" title="批量操作" width="700px" class="cool-dialog">
+      <div class="batch-dialog-body">
+        <!-- Swaps Section -->
+        <div v-if="batchSwaps.length > 0" class="batch-section">
+          <div class="batch-section-title">切换操作（一上一下）</div>
+          <div v-for="item in batchSwaps" :key="'s-' + item.upstreamName" class="batch-item">
+            <el-checkbox v-model="item.checked" />
+            <span class="upstream-name">{{ item.upstreamName }}</span>
+            <el-tag type="danger" size="small">{{ item.offlineIP }} 下线</el-tag>
+            <span class="swap-arrow-sm">→</span>
+            <el-tag type="success" size="small">{{ item.onlineIP }} 上线</el-tag>
+          </div>
+        </div>
+        <!-- Offlines Section -->
+        <div v-if="batchOfflines.length > 0" class="batch-section">
+          <div class="batch-section-title">下线操作</div>
+          <div v-for="item in batchOfflines" :key="'o-' + item.upstreamName + '-' + item.offlineIP" class="batch-item">
+            <el-checkbox v-model="item.checked" />
+            <span class="upstream-name">{{ item.upstreamName }}</span>
+            <el-tag type="danger" size="small">{{ item.offlineIP }} 下线</el-tag>
+          </div>
+        </div>
+        <div v-if="batchSwaps.length === 0 && batchOfflines.length === 0" class="batch-empty">
+          暂无可执行的批量操作
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="batchDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="executing" :disabled="batchSwaps.filter(i => i.checked).length + batchOfflines.filter(i => i.checked).length === 0" @click="executeBatch">确认执行</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Operation Result Dialog -->
     <el-dialog v-model="resultDialogVisible" title="操作完成" width="500px" class="cool-dialog">
       <div v-if="resultData" class="result-body">
         <div class="result-item">
           <span class="result-label">操作</span>
-          <el-tag :type="resultData.action === 'online' ? 'success' : 'danger'" size="large">
-            {{ resultData.action === 'online' ? '批量上线' : '批量下线' }}
+          <el-tag :type="resultData.action === 'online' ? 'success' : resultData.action === 'swap' || resultData.action === 'batch' ? 'warning' : 'danger'" size="large">
+            {{ resultData.action === 'online' ? '批量上线' : resultData.action === 'swap' ? '切换' : resultData.action === 'batch' ? '批量操作' : '批量下线' }}
           </el-tag>
         </div>
         <div class="result-item">
@@ -184,6 +257,8 @@ import {
   getServers, getNginxConfigs, getNginxUpstreams,
   nginxOnlinePreview, nginxOnlineExecute,
   nginxOfflinePreview, nginxOfflineExecute,
+  nginxSwapPreview, nginxSwapExecute,
+  nginxBatchPreview, nginxBatchExecute,
   nginxReload, nginxRollbackPreview, nginxRollbackExecute,
   getNginxBackups
 } from '../api'
@@ -211,6 +286,13 @@ const loadingUpstreams = ref(false)
 const loadingBackups = ref(false)
 const resultDialogVisible = ref(false)
 const resultData = ref(null)
+const swapDialogVisible = ref(false)
+const swapOfflineIP = ref('')
+const swapOnlineIP = ref('')
+const swapAffectedUpstreams = ref([])
+const batchDialogVisible = ref(false)
+const batchSwaps = ref([])
+const batchOfflines = ref([])
 
 const selectedMap = ref({})
 
@@ -505,6 +587,155 @@ async function handleBatchOffline() {
   await handleBatchAction(upstreamNames, allIps, 'offline')
 }
 
+function normalizeIPKey(s) {
+  const key = serverKey(s)
+  return key.endsWith(':80') ? key.slice(0, -3) : key
+}
+
+function handleSwap(upstream, server) {
+  // 找出同 upstream 中状态相反的 server
+  const opposite = upstream.servers.find(s => s.status !== server.status)
+  if (!opposite) return
+
+  // 确定 offlineIP 和 onlineIP
+  const offlineIP = server.status === 'up' ? normalizeIPKey(server) : normalizeIPKey(opposite)
+  const onlineIP = server.status === 'up' ? normalizeIPKey(opposite) : normalizeIPKey(server)
+
+  swapOfflineIP.value = offlineIP
+  swapOnlineIP.value = onlineIP
+
+  // 扫描所有 upstream，找到同时包含这两个 IP 且状态正确的组
+  const affected = []
+  for (const u of upstreams.value) {
+    let hasOffline = false
+    let hasOnline = false
+    for (const s of u.servers) {
+      const key = normalizeIPKey(s)
+      if (key === offlineIP && s.status === 'up') hasOffline = true
+      if (key === onlineIP && s.status === 'down') hasOnline = true
+    }
+    if (hasOffline && hasOnline) {
+      affected.push({
+        name: u.name,
+        totalCount: u.servers.length,
+        upCount: u.servers.filter(s => s.status === 'up').length,
+        downCount: u.servers.filter(s => s.status === 'down').length,
+        checked: true
+      })
+    }
+  }
+
+  swapAffectedUpstreams.value = affected
+  swapDialogVisible.value = true
+}
+
+async function confirmSwap() {
+  const selectedUpstreams = swapAffectedUpstreams.value.filter(i => i.checked).map(i => i.name)
+  if (selectedUpstreams.length === 0) return
+  swapDialogVisible.value = false
+
+  try {
+    const res = await nginxSwapPreview({
+      server_id: serverId.value,
+      config_file: configFile.value,
+      upstream_names: selectedUpstreams,
+      offline_ip: swapOfflineIP.value,
+      online_ip: swapOnlineIP.value
+    })
+    previewData.value = res
+    previewId.value = res.preview_id
+    currentAction.value = 'swap'
+    currentBatchInfo.value = { upstreamNames: selectedUpstreams, ipCount: 2, action: 'swap' }
+    previewVisible.value = true
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '预览失败')
+  }
+}
+
+function openBatchDialog() {
+  // 扫描所有 upstream，检测可切换和可下线的操作
+  const swaps = []
+  const offlines = []
+
+  for (const u of upstreams.value) {
+    const upServers = u.servers.filter(s => s.status === 'up')
+    const downServers = u.servers.filter(s => s.status === 'down')
+
+    // 切换：一上一下配对
+    if (upServers.length === 1 && downServers.length >= 1) {
+      swaps.push({
+        upstreamName: u.name,
+        offlineIP: normalizeIPKey(upServers[0]),
+        onlineIP: normalizeIPKey(downServers[0]),
+        checked: true
+      })
+    } else if (upServers.length >= 1 && downServers.length >= 1) {
+      swaps.push({
+        upstreamName: u.name,
+        offlineIP: normalizeIPKey(upServers[0]),
+        onlineIP: normalizeIPKey(downServers[0]),
+        checked: true
+      })
+    }
+  }
+
+  // 下线：upstream 中有多台在线服务器，可以下线其中一台
+  for (const u of upstreams.value) {
+    const upServers = u.servers.filter(s => s.status === 'up')
+    if (upServers.length >= 2) {
+      // 跳过已被 swap 覆盖的 upstream
+      if (swaps.some(s => s.upstreamName === u.name)) continue
+      for (const s of upServers) {
+        offlines.push({
+          upstreamName: u.name,
+          offlineIP: normalizeIPKey(s),
+          checked: false
+        })
+      }
+    }
+  }
+
+  batchSwaps.value = swaps
+  batchOfflines.value = offlines
+  batchDialogVisible.value = true
+}
+
+async function executeBatch() {
+  const selectedSwaps = batchSwaps.value.filter(i => i.checked).map(i => ({
+    upstream_name: i.upstreamName,
+    offline_ip: i.offlineIP,
+    online_ip: i.onlineIP
+  }))
+  const selectedOfflines = batchOfflines.value.filter(i => i.checked).map(i => ({
+    upstream_name: i.upstreamName,
+    offline_ip: i.offlineIP,
+    online_ip: ''
+  }))
+
+  if (selectedSwaps.length + selectedOfflines.length === 0) return
+
+  try {
+    const res = await nginxBatchPreview({
+      server_id: serverId.value,
+      config_file: configFile.value,
+      swaps: selectedSwaps,
+      offlines: selectedOfflines
+    })
+    previewData.value = res
+    previewId.value = res.preview_id
+    currentAction.value = 'batch'
+    currentBatchInfo.value = {
+      upstreamNames: [...selectedSwaps.map(i => i.upstream_name), ...selectedOfflines.map(i => i.upstream_name)],
+      ipCount: selectedSwaps.length * 2 + selectedOfflines.length,
+      action: 'batch'
+    }
+    batchDialogVisible.value = false
+    previewVisible.value = true
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '预览失败')
+  }
+}
+
 async function handleBatchAction(upstreamNames, ips, action) {
   const previewFn = action === 'online' ? nginxOnlinePreview : nginxOfflinePreview
 
@@ -577,6 +808,8 @@ async function executePreview() {
   const executeFn = {
     online: nginxOnlineExecute,
     offline: nginxOfflineExecute,
+    swap: nginxSwapExecute,
+    batch: nginxBatchExecute,
     rollback: nginxRollbackExecute
   }[currentAction.value]
 
@@ -1072,5 +1305,113 @@ async function executePreview() {
 
 :deep(.el-loading-mask) {
   border-radius: 8px;
+}
+
+/* ===== Swap Dialog ===== */
+.swap-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.swap-ip-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.swap-label {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.swap-arrow {
+  font-size: 28px;
+  color: #409eff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.swap-upstream-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.swap-upstream-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: background 0.15s;
+}
+
+.swap-upstream-item:hover {
+  background: #f5f7fa;
+}
+
+.swap-upstream-item .upstream-name {
+  font-weight: 600;
+  color: #303133;
+  font-size: 14px;
+}
+
+/* ===== Batch Dialog ===== */
+.batch-dialog-body {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.batch-section {
+  margin-bottom: 20px;
+}
+
+.batch-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #303133;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.batch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  transition: background 0.15s;
+}
+
+.batch-item:hover {
+  background: #f5f7fa;
+}
+
+.batch-item .upstream-name {
+  font-weight: 600;
+  color: #303133;
+  font-size: 13px;
+  min-width: 140px;
+}
+
+.swap-arrow-sm {
+  color: #409eff;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.batch-empty {
+  text-align: center;
+  color: #909399;
+  padding: 30px 0;
+  font-size: 14px;
 }
 </style>

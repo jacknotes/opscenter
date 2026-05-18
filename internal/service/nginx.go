@@ -116,29 +116,28 @@ func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, acti
 	inTargetUpstream := false
 
 	for _, line := range lines {
-		// 检测进入目标 upstream 块
-		if strings.Contains(line, "upstream") && strings.Contains(line, upstreamName) {
-			inTargetUpstream = true
+		// 检测进入目标 upstream 块，重置其他 upstream 的状态
+		if strings.Contains(line, "upstream") {
+			inTargetUpstream = strings.Contains(line, upstreamName)
 		}
 
-		if inTargetUpstream && matchLine(line, backendIP) {
+		if inTargetUpstream && strings.TrimSpace(line) == "}" {
+			inTargetUpstream = false
+		} else if inTargetUpstream && matchLine(line, backendIP) {
 			trimmedLine := strings.TrimSpace(line)
 			switch action {
 			case "online":
-				// 去掉 server 前面所有 #，支持 #server、##server、###server 等
 				trimmed := strings.TrimLeft(trimmedLine, "#")
 				if strings.HasPrefix(trimmed, "server") {
 					indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 					line = indent + trimmed
 				}
 			case "offline":
-				// 在 server 前面加 #，变成 #server
 				if strings.HasPrefix(trimmedLine, "server") {
 					indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 					line = indent + "#" + trimmedLine
 				}
 			}
-			inTargetUpstream = false
 		}
 
 		newLines = append(newLines, line)
@@ -178,6 +177,67 @@ func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamNam
 		sedPattern = fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile)
 	}
 	return sedPattern
+}
+
+// GenerateSwapDiff 生成切换操作的 diff（同时下线一个 server 并上线另一个 server）
+func (s *NginxService) GenerateSwapDiff(config, upstreamName, offlineIP, onlineIP string) (before, after string) {
+	before = config
+
+	lines := strings.Split(config, "\n")
+	var newLines []string
+	inTargetUpstream := false
+
+	for _, line := range lines {
+		// 检测进入目标 upstream 块，重置其他 upstream 的状态
+		if strings.Contains(line, "upstream") {
+			inTargetUpstream = strings.Contains(line, upstreamName)
+		}
+
+		if inTargetUpstream && strings.TrimSpace(line) == "}" {
+			inTargetUpstream = false
+		} else if inTargetUpstream && matchLine(line, offlineIP) {
+			trimmedLine := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmedLine, "server") {
+				indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+				line = indent + "#" + trimmedLine
+			}
+		} else if inTargetUpstream && matchLine(line, onlineIP) {
+			trimmedLine := strings.TrimSpace(line)
+			trimmed := strings.TrimLeft(trimmedLine, "#")
+			if strings.HasPrefix(trimmed, "server") {
+				indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+				line = indent + trimmed
+			}
+		}
+
+		newLines = append(newLines, line)
+	}
+
+	after = strings.Join(newLines, "\n")
+	return
+}
+
+// GenerateSwapModifyCommands 生成切换操作的 sed 命令列表
+func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP string) []string {
+	// 处理 :80 端口，只用 IP 部分匹配
+	offlinePattern := offlineIP
+	if idx := strings.LastIndex(offlineIP, ":"); idx > 0 {
+		if offlineIP[idx+1:] == "80" {
+			offlinePattern = offlineIP[:idx]
+		}
+	}
+	onlinePattern := onlineIP
+	if idx := strings.LastIndex(onlineIP, ":"); idx > 0 {
+		if onlineIP[idx+1:] == "80" {
+			onlinePattern = onlineIP[:idx]
+		}
+	}
+
+	// 先下线（加 #），再上线（去 #）
+	offlineCmd := fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, offlinePattern, configPath, configFile)
+	onlineCmd := fmt.Sprintf("sed -i '/%s/,/}/{s/#\\+server\\(.*\\(%s\\)\\)/server\\1/}' %s/%s", upstreamName, onlinePattern, configPath, configFile)
+
+	return []string{offlineCmd, onlineCmd}
 }
 
 // LineDiff 表示一行的 diff

@@ -53,6 +53,27 @@ type NginxRollbackRequest struct {
 	BackupFile string `json:"backup_file" binding:"required"`
 }
 
+type NginxSwapRequest struct {
+	ServerID      uint     `json:"server_id" binding:"required"`
+	ConfigFile    string   `json:"config_file" binding:"required"`
+	UpstreamNames []string `json:"upstream_names" binding:"required"`
+	OfflineIP     string   `json:"offline_ip" binding:"required"`
+	OnlineIP      string   `json:"online_ip" binding:"required"`
+}
+
+type NginxBatchSwapItem struct {
+	UpstreamName string `json:"upstream_name"`
+	OfflineIP    string `json:"offline_ip"`
+	OnlineIP     string `json:"online_ip"`
+}
+
+type NginxBatchRequest struct {
+	ServerID   uint                 `json:"server_id" binding:"required"`
+	ConfigFile string               `json:"config_file" binding:"required"`
+	Swaps      []NginxBatchSwapItem `json:"swaps"`
+	Offlines   []NginxBatchSwapItem `json:"offlines"`
+}
+
 func (h *NginxHandler) Configs(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -338,6 +359,422 @@ func (h *NginxHandler) OfflineExecute(c *gin.Context) {
 	}
 
 	h.executeNginxAction(c, req.PreviewID, "offline")
+}
+
+func (h *NginxHandler) SwapPreview(c *gin.Context) {
+	var req NginxSwapRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
+	config, err := h.sshManager.Execute(&server, cmd)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
+		return
+	}
+
+	// 规范化 IP：去掉默认端口 :80
+	offlineIP := normalizeIP(req.OfflineIP)
+	onlineIP := normalizeIP(req.OnlineIP)
+
+	// 校验每个 upstream
+	upstreams := h.nginxService.ParseConfig(config)
+	for _, upstreamName := range req.UpstreamNames {
+		var targetUpstream *service.NginxUpstream
+		for _, u := range upstreams {
+			if u.Name == upstreamName {
+				targetUpstream = &u
+				break
+			}
+		}
+		if targetUpstream == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", upstreamName)})
+			return
+		}
+
+		offlineFound, onlineFound := false, false
+		for _, s := range targetUpstream.Servers {
+			addr := normalizeIP(s.IP + ":" + s.Port)
+			if addr == offlineIP || s.IP == offlineIP {
+				if s.Status != "up" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 当前不是在线状态，无法下线", upstreamName, offlineIP)})
+					return
+				}
+				offlineFound = true
+			}
+			if addr == onlineIP || s.IP == onlineIP {
+				if s.Status != "down" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 当前不是离线状态，无法上线", upstreamName, onlineIP)})
+					return
+				}
+				onlineFound = true
+			}
+		}
+		if !offlineFound {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中未找到服务器 %s", upstreamName, offlineIP)})
+			return
+		}
+		if !onlineFound {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中未找到服务器 %s", upstreamName, onlineIP)})
+			return
+		}
+	}
+
+	// 生成整个文件的 diff（依次对每个 upstream 执行切换）
+	currentConfig := config
+	for _, upstreamName := range req.UpstreamNames {
+		_, currentConfig = h.nginxService.GenerateSwapDiff(currentConfig, upstreamName, offlineIP, onlineIP)
+	}
+	lineDiffs := h.nginxService.GenerateLineDiffs(config, currentConfig)
+
+	previewID := h.previewMgr.Create("nginx", "swap", req.ServerID, map[string]interface{}{
+		"config_file":    req.ConfigFile,
+		"upstream_names": req.UpstreamNames,
+		"offline_ip":     offlineIP,
+		"online_ip":      onlineIP,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"preview_id":  previewID,
+		"before":      config,
+		"after":       currentConfig,
+		"line_diffs":  lineDiffs,
+		"description": fmt.Sprintf("切换 %v: %s 下线 → %s 上线", req.UpstreamNames, offlineIP, onlineIP),
+	})
+}
+
+func (h *NginxHandler) SwapExecute(c *gin.Context) {
+	var req PreviewExecuteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	preview, ok := h.previewMgr.Get(req.PreviewID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
+		return
+	}
+
+	if preview.Module != "nginx" || preview.Action != "swap" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览类型不匹配"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	params := preview.Params
+	configFile := params["config_file"].(string)
+	offlineIP := params["offline_ip"].(string)
+	onlineIP := params["online_ip"].(string)
+
+	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string
+	var upstreamNames []string
+	switch v := params["upstream_names"].(type) {
+	case []string:
+		upstreamNames = v
+	case []interface{}:
+		for _, item := range v {
+			upstreamNames = append(upstreamNames, item.(string))
+		}
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	// 备份
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	h.sshManager.Execute(&server, backupCmd)
+
+	// 清理旧备份
+	backupPath := server.BackupPath
+	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
+		backupPath += "/"
+	}
+	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	h.sshManager.Execute(&server, cleanupCmd)
+
+	// 对每个 upstream 执行切换
+	var allCommands []string
+	for _, upstreamName := range upstreamNames {
+		commands := h.nginxService.GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP)
+		allCommands = append(allCommands, commands...)
+		for _, cmd := range commands {
+			_, err := h.sshManager.Execute(&server, cmd)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
+				return
+			}
+		}
+	}
+
+	// 测试并重载
+	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		return
+	}
+
+	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.CloseServer(server.ID)
+
+	logOutput := fmt.Sprintf("切换成功: %v %s 下线 → %s 上线", upstreamNames, offlineIP, onlineIP)
+	logEntry := model.OperationLog{
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     "swap",
+		Target:     fmt.Sprintf("%s %v %s->%s", configFile, upstreamNames, offlineIP, onlineIP),
+		Detail:     strings.Join(allCommands, "\n"),
+		PreviewID:  req.PreviewID,
+		Status:     "success",
+		Output:     logOutput,
+		ServerID:   server.ID,
+		ServerName: server.Name,
+	}
+	h.db.Create(&logEntry)
+	h.previewMgr.Delete(req.PreviewID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
+}
+
+func (h *NginxHandler) BatchPreview(c *gin.Context) {
+	var req NginxBatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.Swaps) == 0 && len(req.Offlines) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请至少选择一个操作"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
+	config, err := h.sshManager.Execute(&server, cmd)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
+		return
+	}
+
+	upstreams := h.nginxService.ParseConfig(config)
+	upstreamMap := make(map[string]*service.NginxUpstream)
+	for i := range upstreams {
+		upstreamMap[upstreams[i].Name] = &upstreams[i]
+	}
+
+	// 校验并生成 diff
+	currentConfig := config
+	var descriptions []string
+
+	for _, item := range req.Swaps {
+		offlineIP := normalizeIP(item.OfflineIP)
+		onlineIP := normalizeIP(item.OnlineIP)
+		u, ok := upstreamMap[item.UpstreamName]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", item.UpstreamName)})
+			return
+		}
+		if !validateServerStatus(u, offlineIP, "up") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在线", item.UpstreamName, offlineIP)})
+			return
+		}
+		if !validateServerStatus(u, onlineIP, "down") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不离线", item.UpstreamName, onlineIP)})
+			return
+		}
+		_, currentConfig = h.nginxService.GenerateSwapDiff(currentConfig, item.UpstreamName, offlineIP, onlineIP)
+		descriptions = append(descriptions, fmt.Sprintf("[%s] %s↔%s 切换", item.UpstreamName, offlineIP, onlineIP))
+	}
+
+	for _, item := range req.Offlines {
+		offlineIP := normalizeIP(item.OfflineIP)
+		u, ok := upstreamMap[item.UpstreamName]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 不存在", item.UpstreamName)})
+			return
+		}
+		if !validateServerStatus(u, offlineIP, "up") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream [%s] 中服务器 %s 不在线", item.UpstreamName, offlineIP)})
+			return
+		}
+		_, currentConfig = h.nginxService.GenerateDiff(currentConfig, item.UpstreamName, offlineIP, "offline")
+		descriptions = append(descriptions, fmt.Sprintf("[%s] %s 下线", item.UpstreamName, offlineIP))
+	}
+
+	lineDiffs := h.nginxService.GenerateLineDiffs(config, currentConfig)
+
+	previewID := h.previewMgr.Create("nginx", "batch", req.ServerID, map[string]interface{}{
+		"config_file": req.ConfigFile,
+		"swaps":       req.Swaps,
+		"offlines":    req.Offlines,
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"preview_id":  previewID,
+		"before":      config,
+		"after":       currentConfig,
+		"line_diffs":  lineDiffs,
+		"description": "批量操作：" + strings.Join(descriptions, "；"),
+	})
+}
+
+func (h *NginxHandler) BatchExecute(c *gin.Context) {
+	var req PreviewExecuteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	preview, ok := h.previewMgr.Get(req.PreviewID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
+		return
+	}
+
+	if preview.Module != "nginx" || preview.Action != "batch" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览类型不匹配"})
+		return
+	}
+
+	var server model.Server
+	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
+		return
+	}
+
+	params := preview.Params
+	configFile := params["config_file"].(string)
+
+	// 解析 swaps
+	var swaps []NginxBatchSwapItem
+	for _, item := range params["swaps"].([]interface{}) {
+		m := item.(map[string]interface{})
+		swaps = append(swaps, NginxBatchSwapItem{
+			UpstreamName: m["upstream_name"].(string),
+			OfflineIP:    normalizeIP(m["offline_ip"].(string)),
+			OnlineIP:     normalizeIP(m["online_ip"].(string)),
+		})
+	}
+
+	// 解析 offlines
+	var offlines []NginxBatchSwapItem
+	if rawOfflines, ok := params["offlines"]; ok && rawOfflines != nil {
+		for _, item := range rawOfflines.([]interface{}) {
+			m := item.(map[string]interface{})
+			offlines = append(offlines, NginxBatchSwapItem{
+				UpstreamName: m["upstream_name"].(string),
+				OfflineIP:    normalizeIP(m["offline_ip"].(string)),
+			})
+		}
+	}
+
+	configPath := server.ConfigPath
+	if configPath != "" && configPath[len(configPath)-1] != '/' {
+		configPath += "/"
+	}
+
+	// 备份
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	h.sshManager.Execute(&server, backupCmd)
+
+	backupPath := server.BackupPath
+	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
+		backupPath += "/"
+	}
+	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	h.sshManager.Execute(&server, cleanupCmd)
+
+	// 执行切换操作
+	var allCommands []string
+	for _, item := range swaps {
+		commands := h.nginxService.GenerateSwapModifyCommands(configPath, configFile, item.UpstreamName, item.OfflineIP, item.OnlineIP)
+		allCommands = append(allCommands, commands...)
+		for _, cmd := range commands {
+			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
+				return
+			}
+		}
+	}
+
+	// 执行下线操作
+	for _, item := range offlines {
+		cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.OfflineIP}, "offline")
+		allCommands = append(allCommands, cmd)
+		if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
+			return
+		}
+	}
+
+	// 测试并重载
+	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		return
+	}
+
+	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.CloseServer(server.ID)
+
+	logOutput := fmt.Sprintf("批量操作成功：%d 个切换，%d 个下线", len(swaps), len(offlines))
+	logEntry := model.OperationLog{
+		Username:   c.GetString("username"),
+		Module:     "nginx",
+		Action:     "batch",
+		Target:     fmt.Sprintf("%s %d swaps, %d offlines", configFile, len(swaps), len(offlines)),
+		Detail:     strings.Join(allCommands, "\n"),
+		PreviewID:  req.PreviewID,
+		Status:     "success",
+		Output:     logOutput,
+		ServerID:   server.ID,
+		ServerName: server.Name,
+	}
+	h.db.Create(&logEntry)
+	h.previewMgr.Delete(req.PreviewID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "批量操作成功", "output": logOutput})
+}
+
+// validateServerStatus 校验指定 IP 的服务器状态
+func validateServerStatus(upstream *service.NginxUpstream, ip, expectedStatus string) bool {
+	for _, s := range upstream.Servers {
+		addr := normalizeIP(s.IP + ":" + s.Port)
+		if addr == ip || s.IP == ip {
+			return s.Status == expectedStatus
+		}
+	}
+	return false
 }
 
 func (h *NginxHandler) Reload(c *gin.Context) {
@@ -640,6 +1077,14 @@ func splitIPs(ips string) []string {
 		}
 	}
 	return result
+}
+
+// normalizeIP 规范化 IP 地址，去掉默认端口 :80
+func normalizeIP(ip string) string {
+	if strings.HasSuffix(ip, ":80") {
+		return ip[:len(ip)-3]
+	}
+	return ip
 }
 
 func lastIndexOf(s string, c byte) int {
