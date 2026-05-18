@@ -13,19 +13,19 @@
 
       <!-- 批量操作按钮 -->
       <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+        <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
+          <el-option label="全部" value="all" />
+          <el-option label="已扩容" value="up" />
+          <el-option label="已缩容" value="down" />
+        </el-select>
         <el-button type="primary" @click="toggleSelectAll">{{ allSelected ? '取消选择' : '全选' }}</el-button>
-        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <el-button type="danger" :disabled="selectedIds.size > 0 ? !canBatchScaleDown : !canFullScaleDown" @click="handleBatchScaleDown">
           {{ selectedIds.size > 0 ? '批量缩容' : '全量缩容' }}
         </el-button>
         <el-button type="success" :disabled="selectedIds.size > 0 ? !canBatchScaleUp : !canFullScaleUp" @click="handleBatchScaleUp">
           {{ selectedIds.size > 0 ? '批量扩容' : '全量扩容' }}
         </el-button>
-        <el-select v-model="statusFilter" style="width: 120px; margin-left: 10px;" @change="currentPage = 1">
-          <el-option label="全部" value="all" />
-          <el-option label="已扩容" value="up" />
-          <el-option label="已缩容" value="down" />
-        </el-select>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
           已选 {{ selectedIds.size }} 项
           <template v-if="batchSkipDown > 0">，{{ batchSkipDown }} 项已缩容将跳过</template>

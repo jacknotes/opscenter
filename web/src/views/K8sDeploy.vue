@@ -13,10 +13,10 @@
 
       <div style="margin-bottom: 15px; display: flex; gap: 10px;">
         <el-button type="primary" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
         <el-button type="danger" @click="handleAction('rollback')">{{ selectedIds.size > 0 ? '批量回滚' : '全量回滚' }}</el-button>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
           已选 {{ selectedIds.size }} 项
         </span>

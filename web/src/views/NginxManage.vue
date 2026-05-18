@@ -41,14 +41,12 @@
       <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
         <el-button type="danger" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
         <el-button :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="success" @click="handleRefresh">刷新</el-button>
         <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
         <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-        <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
-        <el-button type="info" :disabled="!output" @click="outputDialogVisible = true">执行结果</el-button>
-        <el-button type="success" @click="handleViewConfig">查看配置</el-button>
-        <el-button type="warning" @click="handleReload">重载Nginx服务</el-button>
         <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
+        <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
+        <el-button type="success" @click="handleViewConfig">查看配置</el-button>
+        <el-button type="success" @click="handleRefresh">刷新</el-button>
       </div>
 
       <!-- Upstream Groups -->
@@ -153,11 +151,6 @@
         <el-button @click="previewVisible = false">取消</el-button>
         <el-button type="primary" :loading="executing" @click="executePreview">确认执行</el-button>
       </template>
-    </el-dialog>
-
-    <!-- Output Dialog -->
-    <el-dialog v-model="outputDialogVisible" title="执行结果" width="600px" class="cool-dialog">
-      <pre class="terminal-pre">{{ output }}</pre>
     </el-dialog>
 
     <!-- Config Viewer Dialog -->
@@ -287,35 +280,44 @@
       </template>
     </el-dialog>
 
-    <!-- Operation Result Dialog -->
-    <el-dialog v-model="resultDialogVisible" title="操作完成" width="500px" class="cool-dialog">
-      <div v-if="resultData" class="result-body">
-        <div class="result-item">
-          <span class="result-label">操作</span>
-          <el-tag :type="resultData.action === 'online' ? 'success' : resultData.action === 'swap' || resultData.action === 'batch' || resultData.action === 'toggle' ? 'warning' : 'danger'" size="large">
-            {{ resultData.action === 'online' ? '批量上线' : resultData.action === 'swap' ? '切换' : resultData.action === 'toggle' ? '组切换' : resultData.action === 'batch' ? '批量操作' : '批量下线' }}
-          </el-tag>
+    <!-- Output Area -->
+    <el-card v-if="output" style="margin-top: 20px;">
+      <template #header>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-weight: 700;">执行结果</span>
+          <el-button size="small" text @click="output = ''">关闭</el-button>
         </div>
-        <div class="result-item">
-          <span class="result-label">Upstream 组</span>
-          <span class="result-value">{{ resultData.upstreamNames.length }} 个</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">涉及 Upstream</span>
-          <div class="result-tags">
-            <el-tag v-for="name in resultData.upstreamNames" :key="name" size="small" type="info">{{ name }}</el-tag>
+      </template>
+      <div class="output-body">
+        <div class="output-meta">
+          <div class="output-meta-item">
+            <span class="output-meta-label">操作类型</span>
+            <el-tag :type="outputMeta.actionType" size="small">{{ outputMeta.actionLabel }}</el-tag>
+          </div>
+          <div class="output-meta-item" v-if="outputMeta.upstreamNames.length > 0">
+            <span class="output-meta-label">Upstream 组</span>
+            <div class="output-meta-tags">
+              <el-tag v-for="name in outputMeta.upstreamNames" :key="name" size="small" type="info">{{ name }}</el-tag>
+            </div>
+          </div>
+          <div class="output-meta-item" v-if="outputMeta.ipCount > 0">
+            <span class="output-meta-label">涉及服务器</span>
+            <span class="output-meta-value">{{ outputMeta.ipCount }} 台</span>
+          </div>
+          <div class="output-meta-item">
+            <span class="output-meta-label">执行状态</span>
+            <el-tag :type="outputMeta.success ? 'success' : 'danger'" size="small">
+              {{ outputMeta.success ? '执行成功' : '执行失败' }}
+            </el-tag>
+          </div>
+          <div class="output-meta-item">
+            <span class="output-meta-label">执行时间</span>
+            <span class="output-meta-value">{{ outputMeta.time }}</span>
           </div>
         </div>
-        <div class="result-item">
-          <span class="result-label">后端 IP</span>
-          <span class="result-value">{{ resultData.ipCount }} 个</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">状态</span>
-          <el-tag type="success" size="large">执行成功</el-tag>
-        </div>
+        <pre class="terminal-pre terminal-lg">{{ output }}</pre>
       </div>
-    </el-dialog>
+    </el-card>
   </div>
 </template>
 
@@ -328,7 +330,7 @@ import {
   nginxSwapPreview, nginxSwapExecute,
   nginxTogglePreview, nginxToggleExecute,
   nginxBatchPreview, nginxBatchExecute,
-  nginxReload, nginxRollbackPreview, nginxRollbackExecute,
+  nginxRollbackPreview, nginxRollbackExecute,
   getNginxBackups
 } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -340,12 +342,12 @@ const configFile = ref('')
 const upstreams = ref([])
 const backups = ref([])
 const backupDialogVisible = ref(false)
-const outputDialogVisible = ref(false)
 const previewVisible = ref(false)
 const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
+const outputMeta = ref({ actionType: 'info', actionLabel: '', upstreamNames: [], ipCount: 0, success: true, time: '' })
 const currentAction = ref('')
 const expandedUpstreams = ref([])
 const filterKeyword = ref('')
@@ -353,8 +355,6 @@ const rawConfig = ref('')
 const configDialogVisible = ref(false)
 const loadingUpstreams = ref(false)
 const loadingBackups = ref(false)
-const resultDialogVisible = ref(false)
-const resultData = ref(null)
 const swapDialogVisible = ref(false)
 const swapOfflineIP = ref('')
 const swapOnlineIP = ref('')
@@ -928,18 +928,6 @@ async function handleBatchAction(upstreamNames, ips, action) {
 
 const currentBatchInfo = ref(null)
 
-async function handleReload() {
-  try {
-    await ElMessageBox.confirm('确定要重载 Nginx 配置吗？', '确认')
-    await nginxReload({ server_id: serverId.value })
-    ElMessage.success('重载Nginx服务成功')
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '重载Nginx服务失败')
-    }
-  }
-}
-
 async function handleRollbackFromDialog(backupFile) {
   try {
     await ElMessageBox.confirm(
@@ -973,8 +961,24 @@ async function handleRollback(backupFile) {
   }
 }
 
+const ACTION_META = {
+  online:  { type: 'success', label: '批量上线' },
+  offline: { type: 'danger',  label: '批量下线' },
+  swap:    { type: 'warning', label: '切换' },
+  toggle:  { type: 'warning', label: '组切换' },
+  batch:   { type: 'warning', label: '批量操作' },
+  rollback:{ type: 'info',    label: '回滚' }
+}
+
+function getNowStr() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 async function executePreview() {
   executing.value = true
+  const action = currentAction.value
   const executeFn = {
     online: nginxOnlineExecute,
     offline: nginxOfflineExecute,
@@ -982,26 +986,40 @@ async function executePreview() {
     toggle: nginxToggleExecute,
     batch: nginxBatchExecute,
     rollback: nginxRollbackExecute
-  }[currentAction.value]
+  }[action]
+
+  const meta = ACTION_META[action] || { type: 'info', label: action }
 
   try {
     const res = await executeFn({ preview_id: previewId.value })
-    output.value = res.output || res.message
-    previewVisible.value = false
-
-    if (currentBatchInfo.value && currentAction.value !== 'rollback') {
-      resultData.value = currentBatchInfo.value
-      resultDialogVisible.value = true
-    } else {
-      ElMessage.success('执行成功')
+    const msg = res.output || res.message || '执行成功'
+    output.value = msg
+    outputMeta.value = {
+      actionType: meta.type,
+      actionLabel: meta.label,
+      upstreamNames: currentBatchInfo.value?.upstreamNames || [],
+      ipCount: currentBatchInfo.value?.ipCount || 0,
+      success: true,
+      time: getNowStr()
     }
+    previewVisible.value = false
+    ElMessage.success('执行成功')
 
     await loadUpstreams()
     await loadConfigs()
   } catch (e) {
     const msg = e.response?.data?.error || e.message || '执行失败'
+    const detail = e.response?.data?.output || ''
     ElMessage.error(msg)
-    output.value = e.response?.data?.output || msg
+    output.value = detail ? `${msg}\n\n${detail}` : msg
+    outputMeta.value = {
+      actionType: 'danger',
+      actionLabel: meta.label + '（失败）',
+      upstreamNames: currentBatchInfo.value?.upstreamNames || [],
+      ipCount: currentBatchInfo.value?.ipCount || 0,
+      success: false,
+      time: getNowStr()
+    }
   } finally {
     executing.value = false
   }
@@ -1441,38 +1459,45 @@ async function executePreview() {
   font-weight: 600;
 }
 
-/* ===== Result Dialog ===== */
-.result-body {
+/* ===== Output Area ===== */
+.output-body {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.result-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.result-label {
-  min-width: 80px;
-  font-size: 13px;
-  color: #909399;
-  font-weight: 500;
-  line-height: 32px;
-}
-
-.result-value {
-  font-size: 14px;
-  color: #303133;
-  font-weight: 600;
-  line-height: 32px;
-}
-
-.result-tags {
+.output-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+}
+
+.output-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.output-meta-label {
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+.output-meta-value {
+  font-size: 13px;
+  color: #303133;
+  font-weight: 600;
+}
+
+.output-meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 :deep(.el-loading-mask) {
