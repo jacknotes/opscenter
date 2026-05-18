@@ -57,6 +57,7 @@ func Setup(db *gorm.DB) *gin.Engine {
 
 		// User info
 		protected.GET("/user/info", authHandler.GetUserInfo)
+		protected.POST("/logout", authHandler.Logout)
 
 		// Logs
 		protected.GET("/logs", logHandler.List)

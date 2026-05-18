@@ -210,7 +210,14 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	var userID uint
+	if uid, exists := c.Get("user_id"); exists {
+		if id, ok := uid.(uint); ok {
+			userID = id
+		}
+	}
 	logEntry := model.OperationLog{
+		UserID:     userID,
 		Username:   usernameStr,
 		Module:     "preprod",
 		Action:     preview.Action,
@@ -219,6 +226,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		PreviewID:  msg.PreviewID,
 		ServerID:   server.ID,
 		ServerName: server.Name,
+		IP:         c.ClientIP(),
 	}
 
 	// Stream execution

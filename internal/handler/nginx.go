@@ -543,19 +543,9 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("切换成功: %v %s 下线 → %s 上线", upstreamNames, offlineIP, onlineIP)
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     "swap",
-		Target:     fmt.Sprintf("%s %v %s->%s", configFile, upstreamNames, offlineIP, onlineIP),
-		Detail:     strings.Join(allCommands, "\n"),
-		PreviewID:  req.PreviewID,
-		Status:     "success",
-		Output:     logOutput,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", "swap",
+		fmt.Sprintf("%s %v %s->%s", configFile, upstreamNames, offlineIP, onlineIP),
+		strings.Join(allCommands, "\n"), "success", logOutput, server.ID, server.Name)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
@@ -729,19 +719,9 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("切换成功: %v 中所有服务器状态已反转", upstreamNames)
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     "toggle",
-		Target:     fmt.Sprintf("%s %v", configFile, upstreamNames),
-		Detail:     strings.Join(allCommands, "\n"),
-		PreviewID:  req.PreviewID,
-		Status:     "success",
-		Output:     logOutput,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", "toggle",
+		fmt.Sprintf("%s %v", configFile, upstreamNames),
+		strings.Join(allCommands, "\n"), "success", logOutput, server.ID, server.Name)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
@@ -1015,19 +995,9 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("批量操作成功：%d 个上线，%d 个下线，%d 个切换", actionCounts["online"], actionCounts["offline"], actionCounts["toggle"])
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     "batch",
-		Target:     fmt.Sprintf("%s %d items", configFile, len(items)),
-		Detail:     strings.Join(allCommands, "\n"),
-		PreviewID:  req.PreviewID,
-		Status:     "success",
-		Output:     logOutput,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", "batch",
+		fmt.Sprintf("%s %d items", configFile, len(items)),
+		strings.Join(allCommands, "\n"), "success", logOutput, server.ID, server.Name)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "批量操作成功", "output": logOutput})
@@ -1073,18 +1043,10 @@ func (h *NginxHandler) Reload(c *gin.Context) {
 		return
 	}
 
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     "reload",
-		Target:     server.Name,
-		Detail:     fmt.Sprintf("%s && %s", testCmd, reloadCmd),
-		Status:     "success",
-		Output:     fmt.Sprintf("%s\nnginx reload 成功", testOutput),
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", "reload",
+		server.Name,
+		fmt.Sprintf("%s && %s", testCmd, reloadCmd), "success",
+		fmt.Sprintf("%s\nnginx reload 成功", testOutput), server.ID, server.Name)
 
 	c.JSON(http.StatusOK, gin.H{"message": "reload成功"})
 }
@@ -1184,19 +1146,9 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 	detail := fmt.Sprintf("%s\n%s && %s", copyCmd, testCmd, reloadCmd)
 	logOutput := fmt.Sprintf("%s\n回滚成功: %s -> %s", testOutput, backupFile, configFile)
 
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     "rollback",
-		Target:     fmt.Sprintf("%s -> %s", configFile, backupFile),
-		Detail:     detail,
-		PreviewID:  req.PreviewID,
-		Status:     "success",
-		Output:     logOutput,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", "rollback",
+		fmt.Sprintf("%s -> %s", configFile, backupFile),
+		detail, "success", logOutput, server.ID, server.Name)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"message": "回滚成功"})
@@ -1316,19 +1268,9 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	}
 	logOutput := fmt.Sprintf("成功将 %s 在 %v 中%s", backendIP, upstreamNames, actionDesc)
 
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "nginx",
-		Action:     action,
-		Target:     fmt.Sprintf("%s %v %s", configFile, upstreamNames, backendIP),
-		Detail:     strings.Join(commands, "\n"),
-		PreviewID:  previewID,
-		Status:     "success",
-		Output:     logOutput,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-	}
-	h.db.Create(&logEntry)
+	createAuditLog(h.db, c, "nginx", action,
+		fmt.Sprintf("%s %v %s", configFile, upstreamNames, backendIP),
+		strings.Join(commands, "\n"), "success", logOutput, server.ID, server.Name)
 	h.previewMgr.Delete(previewID)
 
 	c.JSON(http.StatusOK, gin.H{"message": action + "成功", "output": logOutput})

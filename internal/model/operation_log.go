@@ -15,6 +15,7 @@ type OperationLog struct {
 	PreviewID  string    `gorm:"size:64" json:"preview_id"`
 	ServerID   uint      `gorm:"index" json:"server_id"`
 	ServerName string    `gorm:"size:100" json:"server_name"`
+	IP         string    `gorm:"size:45" json:"ip"`
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 }
 

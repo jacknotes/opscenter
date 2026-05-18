@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,6 +24,11 @@ func (h *LogHandler) List(c *gin.Context) {
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
 	module := c.Query("module")
 	serverID := c.Query("server_id")
+	username := c.Query("username")
+	status := c.Query("status")
+	action := c.Query("action")
+	startTime := c.Query("start_time")
+	endTime := c.Query("end_time")
 
 	if page < 1 {
 		page = 1
@@ -40,6 +46,25 @@ func (h *LogHandler) List(c *gin.Context) {
 	}
 	if serverID != "" {
 		query = query.Where("server_id = ?", serverID)
+	}
+	if username != "" {
+		query = query.Where("username LIKE ?", "%"+username+"%")
+	}
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if action != "" {
+		query = query.Where("action = ?", action)
+	}
+	if startTime != "" {
+		if t, err := time.Parse("2006-01-02", startTime); err == nil {
+			query = query.Where("created_at >= ?", t)
+		}
+	}
+	if endTime != "" {
+		if t, err := time.Parse("2006-01-02", endTime); err == nil {
+			query = query.Where("created_at < ?", t.Add(24*time.Hour))
+		}
 	}
 
 	query.Count(&total)

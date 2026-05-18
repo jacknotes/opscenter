@@ -163,29 +163,18 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
 
-	logEntry := model.OperationLog{
-		UserID:     0,
-		Username:   c.GetString("username"),
-		Module:     "lvs",
-		Action:     "op",
-		Target:     fmt.Sprintf("VS:%s RS:%s State:%s", params["vs_ip"], params["rs_ip"], params["state"]),
-		Detail:     command,
-		PreviewID:  req.PreviewID,
-		ServerID:   server.ID,
-		ServerName: server.Name,
+	status := "success"
+	if err != nil {
+		status = "failed"
 	}
+	createAuditLog(h.db, c, "lvs", "op",
+		fmt.Sprintf("VS:%s RS:%s State:%s", params["vs_ip"], params["rs_ip"], params["state"]),
+		command, status, output, server.ID, server.Name)
 
 	if err != nil {
-		logEntry.Status = "failed"
-		logEntry.Output = output
-		h.db.Create(&logEntry)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err), "output": output})
 		return
 	}
-
-	logEntry.Status = "success"
-	logEntry.Output = output
-	h.db.Create(&logEntry)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})
@@ -258,28 +247,18 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
 
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "lvs",
-		Action:     "swap",
-		Target:     fmt.Sprintf("VS:%s RS1:%s RS2:%s", params["vs_ip"], params["rs_ip1"], params["rs_ip2"]),
-		Detail:     command,
-		PreviewID:  req.PreviewID,
-		ServerID:   server.ID,
-		ServerName: server.Name,
+	status := "success"
+	if err != nil {
+		status = "failed"
 	}
+	createAuditLog(h.db, c, "lvs", "swap",
+		fmt.Sprintf("VS:%s RS1:%s RS2:%s", params["vs_ip"], params["rs_ip1"], params["rs_ip2"]),
+		command, status, output, server.ID, server.Name)
 
 	if err != nil {
-		logEntry.Status = "failed"
-		logEntry.Output = output
-		h.db.Create(&logEntry)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err), "output": output})
 		return
 	}
-
-	logEntry.Status = "success"
-	logEntry.Output = output
-	h.db.Create(&logEntry)
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})

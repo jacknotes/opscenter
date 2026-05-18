@@ -98,7 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getUserInfo, changePassword } from '../api'
+import { getUserInfo, changePassword, logout } from '../api'
 import { ElMessage } from 'element-plus'
 import { Monitor, Connection, Document, Box, ZoomOut, List, Setting, Fold, Expand, UserFilled, ArrowDown } from '@element-plus/icons-vue'
 
@@ -122,6 +122,7 @@ onMounted(async () => {
 
 function handleCommand(cmd) {
   if (cmd === 'logout') {
+    logout().catch(() => {})
     userStore.logout()
     router.push('/login')
   } else if (cmd === 'changePwd') {

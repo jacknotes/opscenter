@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -39,16 +40,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	var user model.User
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	if !user.Enabled {
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
@@ -59,7 +63,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "登录成功", 0, "")
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	username, _ := c.Get("username")
+	createAuditLog(h.db, c, "auth", "logout", fmt.Sprintf("%v", username), "", "success", "登出成功", 0, "")
+	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }
 
 func (h *AuthHandler) GetUserInfo(c *gin.Context) {
@@ -154,6 +165,9 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "create_user",
+		fmt.Sprintf("创建用户: %s (角色: %s)", req.Username, req.Role),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusCreated, user)
 }
 
@@ -226,6 +240,9 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "update_user",
+		fmt.Sprintf("更新用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusOK, user)
 }
 
@@ -259,6 +276,9 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "delete_user",
+		fmt.Sprintf("删除用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -292,6 +312,9 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "reset_password",
+		fmt.Sprintf("重置密码: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
 }
 
@@ -337,6 +360,9 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	createAuditLog(h.db, c, "auth", "change_password",
+		fmt.Sprintf("修改密码: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
 }
 
@@ -371,5 +397,12 @@ func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 		return
 	}
 
+	action := "enable_user"
+	if !newStatus {
+		action = "disable_user"
+	}
+	createAuditLog(h.db, c, "auth", action,
+		fmt.Sprintf("%s用户: %s (ID: %d)", map[bool]string{true: "启用", false: "禁用"}[newStatus], user.Username, id),
+		"", "success", "", 0, "")
 	c.JSON(http.StatusOK, gin.H{"enabled": newStatus})
 }

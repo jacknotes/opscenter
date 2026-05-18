@@ -310,28 +310,18 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
 
-	logEntry := model.OperationLog{
-		Username:   c.GetString("username"),
-		Module:     "k8s",
-		Action:     action,
-		Target:     fmt.Sprintf("Commands: %v", commands),
-		Detail:     fmt.Sprintf("%v", commands),
-		PreviewID:  previewID,
-		ServerID:   server.ID,
-		ServerName: server.Name,
+	status := "success"
+	if lastErr != nil {
+		status = "failed"
 	}
+	createAuditLog(h.db, c, "k8s", action,
+		fmt.Sprintf("Commands: %v", commands),
+		fmt.Sprintf("%v", commands), status, fmt.Sprintf("%v", outputs), server.ID, server.Name)
 
 	if lastErr != nil {
-		logEntry.Status = "failed"
-		logEntry.Output = fmt.Sprintf("%v", outputs)
-		h.db.Create(&logEntry)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", lastErr), "output": outputs})
 		return
 	}
-
-	logEntry.Status = "success"
-	logEntry.Output = fmt.Sprintf("%v", outputs)
-	h.db.Create(&logEntry)
 	h.previewMgr.Delete(previewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": outputs, "status": "success"})

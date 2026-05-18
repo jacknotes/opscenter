@@ -4,8 +4,8 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
-          <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
           <el-button :type="selectedRow?.enabled ? 'warning' : 'success'" @click="handleToggleSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">{{ selectedRow?.enabled ? '禁用' : '启用' }}</el-button>
+          <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
           <el-button type="warning" @click="handleResetPwdSelected" :disabled="!selectedRow">重置密码</el-button>
           <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow || selectedRow?.id === currentUserId || selectedRow?.username === 'admin'">删除</el-button>
         </div>

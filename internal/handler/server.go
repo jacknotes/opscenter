@@ -14,6 +14,10 @@ import (
 	"opscenter/internal/model"
 )
 
+func (h *ServerHandler) auditLog(c *gin.Context, action, target, detail, status, output string) {
+	createAuditLog(h.db, c, "server", action, target, detail, status, output, 0, "")
+}
+
 type ServerHandler struct {
 	db *gorm.DB
 }
@@ -122,6 +126,7 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		return
 	}
 
+	h.auditLog(c, "create_server", fmt.Sprintf("创建服务器: %s (%s:%d)", server.Name, server.Host, server.Port), "", "success", "")
 	c.JSON(http.StatusCreated, server.ToResponse())
 }
 
@@ -172,6 +177,7 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		return
 	}
 
+	h.auditLog(c, "update_server", fmt.Sprintf("更新服务器: %s (ID: %d)", input.Name, id), "", "success", "")
 	c.JSON(http.StatusOK, input.ToResponse())
 }
 
@@ -182,11 +188,18 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	var serverName string
+	var server model.Server
+	if err := h.db.First(&server, id).Error; err == nil {
+		serverName = server.Name
+	}
+
 	if err := h.db.Delete(&model.Server{}, id).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除失败"})
 		return
 	}
 
+	h.auditLog(c, "delete_server", fmt.Sprintf("删除服务器: %s (ID: %d)", serverName, id), "", "success", "")
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -208,6 +221,12 @@ func (h *ServerHandler) ToggleEnabled(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
 		return
 	}
+
+	action := "enable_server"
+	if !newState {
+		action = "disable_server"
+	}
+	h.auditLog(c, action, fmt.Sprintf("%s服务器: %s (ID: %d)", map[bool]string{true: "启用", false: "禁用"}[newState], server.Name, id), "", "success", "")
 
 	if newState {
 		c.JSON(http.StatusOK, gin.H{"message": "已启用", "enabled": true})

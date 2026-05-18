@@ -33,6 +33,7 @@ api.interceptors.response.use(
 
 // Auth
 export const login = (data) => api.post('/login', data)
+export const logout = () => api.post('/logout')
 export const getUserInfo = () => api.get('/user/info')
 
 // WebSocket URL helper
