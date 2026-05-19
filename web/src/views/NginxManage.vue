@@ -3,11 +3,11 @@
     <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器:</span>
+          <span class="filter-label">服务器:</span>
           <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 250px" @change="loadConfigs">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <span style="white-space: nowrap;">文件:</span>
+          <span class="filter-label">文件:</span>
           <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>

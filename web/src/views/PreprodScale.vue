@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">服务器:</span>
+          <span class="filter-label">服务器:</span>
           <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 250px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>

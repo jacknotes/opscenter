@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="white-space: nowrap;">模块:</span>
+          <span class="filter-label">模块:</span>
           <el-select v-model="module" style="width: 150px" @change="loadData">
             <el-option label="全部" value="all" />
             <el-option label="LVS" value="lvs" />
@@ -13,18 +13,18 @@
             <el-option label="认证" value="auth" />
             <el-option label="服务器" value="server" />
           </el-select>
-          <span style="white-space: nowrap;">服务器:</span>
+          <span class="filter-label">服务器:</span>
           <el-select v-model="serverId" style="width: 150px" @change="loadData">
             <el-option label="全部" :value="0" />
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <span style="white-space: nowrap;">状态:</span>
+          <span class="filter-label">状态:</span>
           <el-select v-model="status" style="width: 100px" @change="loadData">
             <el-option label="全部" value="all" />
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
           </el-select>
-          <span style="white-space: nowrap;">操作人:</span>
+          <span class="filter-label">操作人:</span>
           <el-input v-model="username" style="width: 120px" placeholder="用户名" clearable @change="loadData" @clear="loadData" />
           <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width: 180px" @change="onDateChange" @clear="onDateChange" clearable />
         </div>
