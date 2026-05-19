@@ -20,6 +20,7 @@ type PreviewData struct {
 type PreviewManager struct {
 	previews sync.Map
 	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 func NewPreviewManager() *PreviewManager {
@@ -68,7 +69,9 @@ func (pm *PreviewManager) Delete(id string) {
 }
 
 func (pm *PreviewManager) Stop() {
-	close(pm.stop)
+	pm.stopOnce.Do(func() {
+		close(pm.stop)
+	})
 }
 
 func (pm *PreviewManager) cleanup() {

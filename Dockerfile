@@ -20,7 +20,6 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-COPY --from=frontend-builder /app/web/dist ./web/dist
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o opscenter ./cmd/server/
 

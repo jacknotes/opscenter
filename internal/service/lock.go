@@ -14,8 +14,9 @@ type LockInfo struct {
 }
 
 type LockManager struct {
-	locks sync.Map
-	stop  chan struct{}
+	locks    sync.Map
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 func NewLockManager() *LockManager {
@@ -90,7 +91,9 @@ func (lm *LockManager) IsLocked(serverID uint) (bool, *LockInfo) {
 }
 
 func (lm *LockManager) Stop() {
-	close(lm.stop)
+	lm.stopOnce.Do(func() {
+		close(lm.stop)
+	})
 }
 
 func (lm *LockManager) cleanup() {

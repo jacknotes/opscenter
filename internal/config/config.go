@@ -85,6 +85,12 @@ func Load(path string) error {
 			return fmt.Errorf("crypto.key 长度必须为 16、24 或 32 字节，当前为 %d 字节", keyLen)
 		}
 	}
+	if Global.JWT.Secret == "" {
+		return fmt.Errorf("jwt.secret 不能为空")
+	}
+	if len(Global.JWT.Secret) < 16 {
+		return fmt.Errorf("jwt.secret 长度至少 16 字节，当前为 %d 字节", len(Global.JWT.Secret))
+	}
 	return nil
 }
 

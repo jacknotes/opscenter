@@ -275,7 +275,7 @@ var (
 	validateNamespacePattern   = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 
 	// 文件路径中不允许的字符（防注入）
-	unsafePathChars = regexp.MustCompile(`[;&|$\x60]`)
+	unsafePathChars = regexp.MustCompile(`[;&|$\x60\n\r]`)
 )
 
 func ValidateCommand(serverType, command string) bool {

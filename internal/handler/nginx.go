@@ -526,7 +526,12 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 		upstreamNames = v
 	case []interface{}:
 		for _, item := range v {
-			upstreamNames = append(upstreamNames, item.(string))
+			s, ok := item.(string)
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "upstream_names 元素类型错误"})
+				return
+			}
+			upstreamNames = append(upstreamNames, s)
 		}
 	}
 
@@ -1180,7 +1185,11 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
 		return
 	}
-	backupFile := params["backup_file"].(string)
+	backupFile, _ := params["backup_file"].(string)
+	if backupFile == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 
 	// Copy backup to config
 	copyCmd := fmt.Sprintf("cp %s/%s %s/%s", server.BackupPath, backupFile, server.ConfigPath, configFile)
@@ -1263,7 +1272,7 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
 		return
 	}
-	backendIP := params["backend_ip"].(string)
+	backendIP, _ := params["backend_ip"].(string)
 
 	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string
 	var upstreamNames []string
@@ -1272,7 +1281,12 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 		upstreamNames = v
 	case []interface{}:
 		for _, item := range v {
-			upstreamNames = append(upstreamNames, item.(string))
+			s, ok := item.(string)
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "upstream_names 元素类型错误"})
+				return
+			}
+			upstreamNames = append(upstreamNames, s)
 		}
 	}
 

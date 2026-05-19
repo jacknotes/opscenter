@@ -168,7 +168,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl } from '../api'
 import { useWebSocket } from '../composables/useWebSocket'
 import { useUserStore } from '../stores/user'
@@ -190,7 +190,7 @@ const currentAction = ref('')
 
 // Streaming state
 const userStore = useUserStore()
-const { outputLines, status: streamStatus, connect: wsConnect } = useWebSocket()
+const { outputLines, status: streamStatus, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket()
 const search = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -344,6 +344,10 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load servers:', e)
   }
+})
+
+onBeforeUnmount(() => {
+  wsDisconnect()
 })
 
 async function loadData() {
