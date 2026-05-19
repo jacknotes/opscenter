@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: opscenter
+  namespace: opscenter
+  labels:
+    app: opscenter
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 18080
+    protocol: TCP
+    name: http
+  selector:
+    app: opscenter

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opscenter
+  namespace: opscenter
+  labels:
+    app: opscenter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: opscenter
+  template:
+    metadata:
+      labels:
+        app: opscenter
+    spec:
+      containers:
+      - name: opscenter
+        image: opscenter:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 18080
+          name: http
+          protocol: TCP
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: opscenter-secret
+              key: DB_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: opscenter-secret
+              key: JWT_SECRET
+        - name: CRYPTO_KEY
+          valueFrom:
+            secretKeyRef:
+              name: opscenter-secret
+              key: CRYPTO_KEY
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 18080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 18080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: config
+        configMap:
+          name: opscenter-config

@@ -26,7 +26,7 @@
           </el-select>
           <span class="filter-label">操作人:</span>
           <el-input v-model="username" style="width: 120px" placeholder="用户名" clearable @change="loadData" @clear="loadData" />
-          <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width: 180px" @change="onDateChange" @clear="onDateChange" clearable />
+          <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width: 45px" @change="onDateChange" @clear="onDateChange" clearable />
         </div>
       </template>
 

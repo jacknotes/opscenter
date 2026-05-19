@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  opscenter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opscenter-app
+    restart: unless-stopped
+    ports:
+      - "18080:18080"
+    environment:
+      - DB_PASSWORD=opscenter123
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - CRYPTO_KEY=dev-crypto-key-32bytes-long!!
+    volumes:
+      - ./config.yaml.example:/app/config/config.yaml:ro
+
+volumes:
+  mysql-data:

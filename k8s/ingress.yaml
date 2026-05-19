@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: opscenter
+  namespace: opscenter
+  labels:
+    app: opscenter
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: opscenter.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: opscenter
+            port:
+              number: 80
+  # 如需 TLS，取消注释以下配置
+  # tls:
+  # - hosts:
+  #   - opscenter.example.com
+  #   secretName: opscenter-tls

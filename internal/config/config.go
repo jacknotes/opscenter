@@ -49,6 +49,18 @@ func Load(path string) error {
 	if err := yaml.Unmarshal(data, &Global); err != nil {
 		return err
 	}
+
+	// 从环境变量覆盖敏感配置
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		Global.Database.Password = v
+	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		Global.JWT.Secret = v
+	}
+	if v := os.Getenv("CRYPTO_KEY"); v != "" {
+		Global.Crypto.Key = v
+	}
+
 	if Global.JWT.Expire == 0 {
 		Global.JWT.Expire = 24 * time.Hour
 	}

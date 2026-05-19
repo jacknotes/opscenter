@@ -45,6 +45,11 @@ func Setup(db *gorm.DB) *gin.Engine {
 	// Public routes
 	api := r.Group("/api")
 	{
+		// Health check
+		api.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
 		api.POST("/login", authHandler.Login)
 	}
 
