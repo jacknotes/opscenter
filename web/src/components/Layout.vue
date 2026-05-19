@@ -1,6 +1,6 @@
 <template>
   <el-container style="height: 100vh">
-    <el-aside :width="isCollapse ? '64px' : '220px'" style="background-color: #304156;">
+    <el-aside :width="isCollapse ? '64px' : '220px'" style="background-color: var(--sidebar-bg);">
       <div style="height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: bold; white-space: nowrap; overflow: hidden;">
         {{ isCollapse ? 'OC' : 'OpsCenter' }}
       </div>
@@ -9,9 +9,9 @@
         router
         :collapse="isCollapse"
         :collapse-transition="false"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
+        background-color="var(--sidebar-bg)"
+        text-color="var(--sidebar-text)"
+        active-text-color="var(--sidebar-active-text)"
       >
         <el-menu-item index="/dashboard">
           <el-icon><Monitor /></el-icon>
@@ -47,13 +47,13 @@
         </el-menu-item>
       </el-menu>
 
-      <div style="position: absolute; bottom: 0; width: 100%; display: flex; justify-content: center; padding: 10px 0; cursor: pointer; color: #bfcbd9;" @click="isCollapse = !isCollapse">
+      <div style="position: absolute; bottom: 0; width: 100%; display: flex; justify-content: center; padding: 10px 0; cursor: pointer; color: var(--sidebar-text);" @click="isCollapse = !isCollapse">
         <el-icon :size="20"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
       </div>
     </el-aside>
 
     <el-container>
-      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #eee; background: #fff;">
+      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--card-bg);">
         <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
         <div style="display: flex; align-items: center; gap: 16px;">
           <el-dropdown @command="handleCommand">
@@ -68,7 +68,7 @@
         </div>
       </el-header>
 
-      <el-main style="background-color: #f5f7fa; padding: 20px;">
+      <el-main style="background-color: var(--content-bg); padding: 20px;">
         <router-view />
       </el-main>
     </el-container>
@@ -157,5 +157,27 @@ async function submitChangePwd() {
 .el-aside {
   position: relative;
   overflow: hidden;
+}
+
+/* 侧边栏 active 状态增强 */
+:deep(.el-menu-item.is-active) {
+  background-color: var(--sidebar-active-bg) !important;
+  position: relative;
+}
+
+:deep(.el-menu-item.is-active::before) {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--sidebar-active-indicator);
+  border-radius: 0 2px 2px 0;
+}
+
+:deep(.el-menu-item:hover) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 </style>

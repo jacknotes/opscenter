@@ -1,7 +1,138 @@
+:root {
+  /* Primary Colors */
+  --color-primary: #409EFF;
+  --color-primary-light: #66b1ff;
+  --color-primary-dark: #3a8ee6;
+  --color-success: #67C23A;
+  --color-warning: #E6A23C;
+  --color-danger: #F56C6C;
+  --color-info: #909399;
+
+  /* Sidebar */
+  --sidebar-bg: #304156;
+  --sidebar-text: #bfcbd9;
+  --sidebar-active-text: #409EFF;
+  --sidebar-active-bg: rgba(64, 158, 255, 0.15);
+  --sidebar-active-indicator: #409EFF;
+
+  /* Content */
+  --content-bg: #f5f7fa;
+  --card-bg: #fff;
+  --card-border: none;
+  --card-radius: 12px;
+  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  /* Text */
+  --text-primary: #303133;
+  --text-regular: #606266;
+  --text-secondary: #909399;
+  --text-placeholder: #c0c4cc;
+
+  /* Border */
+  --border-color: #e4e7ed;
+  --border-color-light: #ebeef5;
+  --border-radius-sm: 6px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  /* Toolbar */
+  --toolbar-bg: #fff;
+  --toolbar-border: 1px solid #e4e7ed;
+
+  /* Terminal */
+  --terminal-bg: #1e1e1e;
+  --terminal-text: #d4d4d4;
+  --terminal-radius: 8px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+}
+
 .filter-label {
   white-space: nowrap;
   font-size: 15px;
-  color: #606266;
+  color: var(--text-regular);
   font-weight: 500;
   letter-spacing: 0.5px;
+}
+
+/* Main Card - 统一卡片样式 */
+.main-card {
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.main-card :deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* Toolbar - 统一工具栏样式 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  padding: 10px 14px;
+  background: var(--toolbar-bg);
+  border-radius: var(--border-radius-md);
+  border: var(--toolbar-border);
+  flex-wrap: wrap;
+}
+
+/* Empty State - 统一空状态样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  color: var(--text-placeholder);
+  margin-bottom: var(--spacing-lg);
+}
+
+.empty-state-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Terminal output */
+.terminal-pre {
+  background: var(--terminal-bg);
+  color: var(--terminal-text);
+  padding: 15px;
+  border-radius: var(--terminal-radius);
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Page transition */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }

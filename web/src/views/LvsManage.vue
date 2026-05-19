@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">服务器:</span>
@@ -55,7 +55,7 @@
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px;">
       <template #header>执行结果</template>
-      <pre style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; max-height: 400px; overflow-y: auto;">{{ output }}</pre>
+      <pre class="terminal-pre">{{ output }}</pre>
     </el-card>
   </div>
 </template>

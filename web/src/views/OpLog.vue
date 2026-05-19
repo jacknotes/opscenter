@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">模块:</span>

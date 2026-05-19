@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">服务器:</span>
@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+      <div class="toolbar" style="margin-bottom: 15px;">
         <el-button type="primary" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
@@ -70,7 +70,7 @@
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px;">
       <template #header>执行结果</template>
-      <pre style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; max-height: 50vh; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">{{ output }}</pre>
+      <pre class="terminal-pre" style="max-height: 50vh; white-space: pre-wrap; word-break: break-all;">{{ output }}</pre>
     </el-card>
   </div>
 </template>

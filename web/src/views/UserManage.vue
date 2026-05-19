@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-card>
+    <el-card class="main-card">
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
