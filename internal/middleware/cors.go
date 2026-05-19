@@ -8,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CORS 返回跨域资源共享中间件。
+// 若配置了 allowed_origins 白名单则按名单校验，否则允许所有来源（开发环境兼容）。
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origins := config.Global.Server.AllowedOrigins

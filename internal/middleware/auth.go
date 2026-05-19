@@ -1,3 +1,4 @@
+// Package middleware 提供 Gin 中间件，包括 JWT 认证、CORS、用户状态检查和管理员权限校验。
 package middleware
 
 import (
@@ -13,6 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Claims 是 JWT 的自定义声明，包含用户 ID、用户名和角色。
 type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
@@ -20,6 +22,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// Auth 返回 JWT 认证中间件。支持从 Authorization Header 或 URL query 参数 token 中提取令牌。
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString := ""
@@ -55,6 +58,7 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
+// UserEnabledCheck 返回用户启用状态检查中间件。已禁用的用户将被拒绝访问。
 func UserEnabledCheck(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("user_id")
@@ -81,6 +85,7 @@ func UserEnabledCheck(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// AdminRequired 返回管理员权限检查中间件。仅允许 role 为 admin 的用户通过。
 func AdminRequired(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("user_id")
@@ -109,6 +114,7 @@ func AdminRequired(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GenerateToken 生成 JWT 令牌，包含用户 ID、用户名、角色信息，过期时间由配置决定。
 func GenerateToken(userID uint, username, role string) (string, error) {
 	claims := Claims{
 		UserID:   userID,

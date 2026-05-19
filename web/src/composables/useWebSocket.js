@@ -1,5 +1,10 @@
 import { ref } from 'vue'
 
+/**
+ * WebSocket 组合式函数，用于流式命令执行输出。
+ * 状态流转：idle → connecting → streaming → done/error
+ * 消息类型：output（输出行）、done（完成）、error（错误）、lock_error（锁冲突）
+ */
 export function useWebSocket() {
   const outputLines = ref([])
   const status = ref('idle') // idle, connecting, streaming, done, error

@@ -27,19 +27,24 @@
 opscenter/
 ├── cmd/server/           # 程序入口
 ├── internal/             # 后端核心代码
-│   ├── config/           # 配置加载
-│   ├── middleware/       # JWT/CORS 中间件
-│   ├── model/            # 数据模型
-│   ├── handler/          # HTTP 处理器
-│   ├── service/          # 业务逻辑
+│   ├── config/           # YAML 配置加载
+│   ├── middleware/       # JWT 认证、CORS、权限检查中间件
+│   ├── model/            # GORM 数据模型（User、Server、OperationLog）
+│   ├── handler/          # HTTP 处理器（按业务域划分）
+│   ├── service/          # 业务逻辑（SSH、预览、锁、各业务服务）
 │   ├── router/           # 路由注册
-│   └── embed/            # 前端静态文件嵌入
-├── web/                  # Vue 前端项目
+│   └── pkg/crypto/       # AES-256-GCM 加解密工具
+├── web/                  # Vue 3 前端项目
 ├── shell/                # 运维脚本
 │   ├── lvs.sh            # LVS 管理脚本
 │   ├── rollouts-online-rollback.sh.example  # K8s 部署脚本示例
 │   └── specific-project-scale.sh.example    # 缩扩容脚本示例
+├── k8s/                  # Kubernetes 部署清单
+├── deploy/               # 部署文档
+├── docs/                 # Swagger API 文档（自动生成）
 ├── config.yaml.example   # 应用配置示例
+├── Dockerfile            # 多阶段构建（Node + Go + Alpine）
+├── docker-compose.yaml   # Docker Compose 部署配置
 └── Makefile              # 构建脚本
 ```
 
@@ -94,14 +99,42 @@ cp shell/specific-project-scale.sh.example shell/specific-project-scale.sh
 ### 运行
 
 ```bash
-# 开发模式
-make dev
+# 开发模式（前后端分离）
+make dev-frontend   # Vite 开发服务器 :3000，代理 /api 到 :18080
+make dev-backend    # Go 服务器 :18080
 
-# 构建生产版本（前端 + 后端，输出单个二进制文件）
+# 构建生产版本（前端嵌入 Go 二进制，输出单个可执行文件）
 make build
 
 # 运行
-./opscenter
+./opscenter -config config.yaml
+```
+
+### Docker 部署
+
+```bash
+# 使用 Docker Compose 一键启动
+docker-compose up -d
+```
+
+环境变量可通过 `docker-compose.yaml` 配置：`DB_HOST`、`DB_PORT`、`DB_PASSWORD`、`JWT_SECRET`、`CRYPTO_KEY`。
+
+### Kubernetes 部署
+
+`k8s/` 目录包含完整的 K8s 部署清单（Namespace、Secret、ConfigMap、Deployment、Service）：
+
+```bash
+kubectl apply -f k8s/
+```
+
+详细部署文档见 `deploy/README.md`。
+
+### API 文档
+
+项目集成了 Swagger API 文档，启动服务后访问：
+
+```
+http://localhost:18080/swagger/index.html
 ```
 
 ## Shell 脚本使用

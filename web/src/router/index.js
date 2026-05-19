@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+// 路由配置：Login 为公开页面，其余页面需 JWT 认证，
+// meta.admin 为 true 的路由仅管理员可访问。
 const routes = [
   {
     path: '/login',
@@ -68,6 +70,7 @@ const router = createRouter({
   routes
 })
 
+// 全局前置守卫：检查 token 存在性和管理员权限
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.path === '/login') {

@@ -1,3 +1,4 @@
+// Package router 负责注册所有 HTTP 路由和中间件，初始化业务服务和处理器。
 package router
 
 import (
@@ -22,6 +23,9 @@ type App struct {
 	LockManager *service.LockManager
 }
 
+// Setup 初始化路由引擎、注册所有中间件和路由，返回 App 实例。
+// 路由分三组：公开路由（健康检查、登录）、WebSocket（query token 认证）、受保护路由（JWT 认证）。
+// 管理员路由额外使用 AdminRequired 中间件。
 func Setup(db *gorm.DB) *App {
 	r := gin.Default()
 

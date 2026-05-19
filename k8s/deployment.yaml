@@ -58,12 +58,12 @@ spec:
             path: /api/health
             port: 18080
           initialDelaySeconds: 30
-          periodSeconds: 10
+          periodSeconds: 5
         readinessProbe:
           httpGet:
             path: /api/health
             port: 18080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 30
           periodSeconds: 5
         resources:
           requests:

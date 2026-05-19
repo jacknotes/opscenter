@@ -6,6 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// User 是系统用户模型，支持 admin/user 两级角色，使用软删除。
 type User struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	Username  string         `gorm:"uniqueIndex;size:50;not null" json:"username"`
@@ -19,6 +20,7 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// TableName 指定 GORM 使用的表名为 users。
 func (User) TableName() string {
 	return "users"
 }

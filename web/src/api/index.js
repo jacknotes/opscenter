@@ -2,11 +2,13 @@ import axios from 'axios'
 import { useUserStore } from '../stores/user'
 import router from '../router'
 
+// 创建 Axios 实例，所有 API 请求的基础配置
 const api = axios.create({
   baseURL: '/api',
   timeout: 30000
 })
 
+// 请求拦截器：自动注入 JWT token，GET 请求添加缓存破坏参数
 api.interceptors.request.use(config => {
   const userStore = useUserStore()
   if (userStore.token) {
@@ -19,6 +21,7 @@ api.interceptors.request.use(config => {
   return config
 })
 
+// 响应拦截器：提取 response.data，401 时自动登出并跳转登录页
 api.interceptors.response.use(
   response => response.data,
   error => {

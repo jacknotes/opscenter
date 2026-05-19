@@ -39,6 +39,8 @@ import (
 //	@name						Authorization
 //	@description				"Bearer {token}"
 
+// main 是程序入口，负责加载配置、连接数据库、自动迁移模型、启动 HTTP 服务器，
+// 并在收到 SIGINT/SIGTERM 信号时优雅停机，清理 SSH 连接和后台协程。
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	flag.Parse()

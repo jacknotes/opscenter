@@ -1,5 +1,7 @@
 version: "3.8"
 
+# OpsCenter Docker Compose 部署配置
+# 使用前请修改 environment 中的数据库连接信息和密钥
 services:
   opscenter:
     build:

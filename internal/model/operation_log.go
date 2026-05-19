@@ -1,7 +1,10 @@
+// Package model 定义 GORM 数据模型，包括用户、服务器和操作日志。
+// Server 模型通过 GORM 钩子自动对敏感字段进行 AES-256-GCM 加解密。
 package model
 
 import "time"
 
+// OperationLog 记录所有操作的审计日志，包括操作模块、动作、目标、状态和输出。
 type OperationLog struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	UserID     uint      `gorm:"index" json:"user_id"`
@@ -19,6 +22,7 @@ type OperationLog struct {
 	CreatedAt  time.Time `gorm:"index" json:"created_at"`
 }
 
+// TableName 指定 GORM 使用的表名为 operation_logs。
 func (OperationLog) TableName() string {
 	return "operation_logs"
 }

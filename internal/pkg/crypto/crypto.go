@@ -1,3 +1,5 @@
+// Package crypto 提供 AES-256-GCM 加解密工具，用于保护数据库中的敏感字段。
+// 密文格式为 base64(nonce + ciphertext + tag)，nonce 由加密时随机生成。
 package crypto
 
 import (
@@ -9,6 +11,8 @@ import (
 	"io"
 )
 
+// Encrypt 使用 AES-256-GCM 加密明文，返回 base64 编码的密文。
+// 若明文或密钥为空则原样返回。
 func Encrypt(plaintext, key string) (string, error) {
 	if plaintext == "" || key == "" {
 		return plaintext, nil
@@ -33,6 +37,8 @@ func Encrypt(plaintext, key string) (string, error) {
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
+// Decrypt 解密 AES-256-GCM 加密的 base64 密文，返回明文。
+// 若密文或密钥为空则原样返回。
 func Decrypt(ciphertext, key string) (string, error) {
 	if ciphertext == "" || key == "" {
 		return ciphertext, nil

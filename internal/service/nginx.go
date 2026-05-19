@@ -6,12 +6,14 @@ import (
 	"strings"
 )
 
+// NginxUpstream 表示 Nginx upstream 块，包含名称和后端服务器列表。
 type NginxUpstream struct {
 	Name    string        `json:"name"`
 	Servers []NginxServer `json:"servers"`
 	Config  string        `json:"config"`
 }
 
+// NginxServer 表示 upstream 中的一个后端服务器。
 type NginxServer struct {
 	IP     string `json:"ip"`
 	Port   string `json:"port"`
@@ -19,10 +21,12 @@ type NginxServer struct {
 	Weight string `json:"weight"`
 }
 
+// NginxService 提供 Nginx upstream 管理的业务逻辑，包括配置解析、diff 生成和 sed 命令构建。
 type NginxService struct {
 	sshManager *SSHManager
 }
 
+// NewNginxService 创建 Nginx 服务实例。
 func NewNginxService(sshManager *SSHManager) *NginxService {
 	return &NginxService{sshManager: sshManager}
 }
@@ -36,6 +40,8 @@ var (
 	commentedServerPattern = regexp.MustCompile(`#+server\s+([\d.]+)(?::(\d+))?(?:\s+weight=(\d+))?\s*;`)
 )
 
+// ParseConfig 解析 Nginx 配置文件内容，提取所有 upstream 块及其后端服务器。
+// 注释的 server 行（#server）状态为 down，未注释的为 up。
 func (s *NginxService) ParseConfig(configContent string) []NginxUpstream {
 	var upstreams []NginxUpstream
 
@@ -108,6 +114,8 @@ func matchLine(line, backendIP string) bool {
 	return false
 }
 
+// GenerateDiff 生成单个 server 上线/下线操作的配置 diff。
+// online 操作取消注释，offline 操作添加注释。
 func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, action string) (before, after string) {
 	before = config
 
@@ -147,10 +155,13 @@ func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, acti
 	return
 }
 
+// GenerateBackupCommand 生成配置文件备份命令，备份文件名带时间戳。
 func (s *NginxService) GenerateBackupCommand(configPath, backupPath, configFile string) string {
 	return fmt.Sprintf("cp %s/%s %s/%s.bak.$(date +%%Y%%m%%d%%H%%M%%S)", configPath, configFile, backupPath, configFile)
 }
 
+// GenerateModifyCommand 生成 sed 命令用于批量上线/下线多个后端 IP。
+// 支持 :80 端口的自动省略匹配。
 func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamName string, backendIPs []string, action string) string {
 	// 构建多个 IP 的 OR 匹配模式: IP1\|IP2\|IP3
 	// 对于带 :80 端口的 IP，只用 IP 部分匹配（兼容 upstream 中 server 未写端口的情况）

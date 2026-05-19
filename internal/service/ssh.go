@@ -1,3 +1,5 @@
+// Package service 提供业务逻辑层，包括 SSH 连接管理、操作预览、分布式锁、
+// 以及 LVS/K8s/Nginx/预生产等业务的服务实现。
 package service
 
 import (
@@ -20,17 +22,20 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
+// SSHManager 管理 SSH 连接池，按服务器 ID 复用连接，支持单次执行和流式输出。
 type SSHManager struct {
 	clients map[uint]*ssh.Client
 	mu      sync.RWMutex
 }
 
+// NewSSHManager 创建一个新的 SSH 连接管理器。
 func NewSSHManager() *SSHManager {
 	return &SSHManager{
 		clients: make(map[uint]*ssh.Client),
 	}
 }
 
+// GetClient 获取指定服务器的 SSH 客户端，优先从连接池中复用，不存在则新建连接。
 func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	m.mu.RLock()
 	client, ok := m.clients[server.ID]
@@ -43,6 +48,8 @@ func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	return m.connect(server)
 }
 
+// hostKeyCallback 根据配置返回 SSH 主机密钥验证回调。
+// 若配置了 known_hosts_path 则使用文件验证，否则跳过验证（不推荐生产环境）。
 func hostKeyCallback() ssh.HostKeyCallback {
 	knownHostsPath := config.Global.Server.KnownHostsPath
 	if knownHostsPath == "" {
@@ -68,6 +75,7 @@ func hostKeyCallback() ssh.HostKeyCallback {
 	return callback
 }
 
+// connect 建立 SSH 连接并加入连接池。使用 double-check 模式避免并发重复连接。
 func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -108,6 +116,8 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	return client, nil
 }
 
+// Execute 在远程服务器上执行命令并返回合并输出（stdout + stderr）。
+// 若会话创建失败会自动重连一次。
 func (m *SSHManager) Execute(server *model.Server, command string) (string, error) {
 	client, err := m.GetClient(server)
 	if err != nil {
@@ -140,6 +150,8 @@ func (m *SSHManager) Execute(server *model.Server, command string) (string, erro
 	return string(output), nil
 }
 
+// ExecuteWithPipe 通过 stdin 管道将密码传递给远程命令。
+// 密码使用 base64 编码避免 shell 元字符导致的注入问题。
 func (m *SSHManager) ExecuteWithPipe(server *model.Server, command, password string) (string, error) {
 	// 使用 base64 编码密码，避免单引号和 shell 元字符导致的命令注入
 	encoded := base64.StdEncoding.EncodeToString([]byte(password))
@@ -147,6 +159,7 @@ func (m *SSHManager) ExecuteWithPipe(server *model.Server, command, password str
 	return m.Execute(server, fullCommand)
 }
 
+// Close 关闭所有 SSH 连接并清空连接池。
 func (m *SSHManager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -168,11 +181,14 @@ func (m *SSHManager) CloseServer(serverID uint) {
 	}
 }
 
+// StreamChunk 表示流式命令输出的一个片段，Err 标记是否来自 stderr。
 type StreamChunk struct {
 	Line string
 	Err  bool
 }
 
+// ExecuteStream 在远程服务器上流式执行命令，通过 channel 返回实时输出。
+// 密码通过 stdin 管道传递。返回两个 channel：输出片段和最终错误。
 func (m *SSHManager) ExecuteStream(server *model.Server, command string, password string) (<-chan StreamChunk, <-chan error) {
 	ch := make(chan StreamChunk, 100)
 	errCh := make(chan error, 1)

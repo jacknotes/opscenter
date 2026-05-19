@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+// PreprodResource 表示预生产环境中的可伸缩资源（Rollout/Deployment/StatefulSet）。
 type PreprodResource struct {
 	Category       string `json:"category"`
 	Name           string `json:"name"`
@@ -15,10 +16,12 @@ type PreprodResource struct {
 	TargetReplicas int    `json:"target_replicas"`
 }
 
+// PreprodService 提供预生产缩扩容的业务逻辑。
 type PreprodService struct {
 	sshManager *SSHManager
 }
 
+// NewPreprodService 创建预生产服务实例。
 func NewPreprodService(sshManager *SSHManager) *PreprodService {
 	return &PreprodService{sshManager: sshManager}
 }
@@ -77,6 +80,8 @@ func hasColumn(ranges []columnRange, name string) bool {
 	return false
 }
 
+// ParseListOutput 解析 list 脚本输出，按类别（rollout/deployment/statefulset）提取资源状态。
+// 使用列位置解析而非固定字段分割，兼容不同列宽的输出格式。
 func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 	var resources []PreprodResource
 	currentCategory := ""
@@ -154,6 +159,7 @@ type TargetInfo struct {
 	Replicas int
 }
 
+// ParseTargetOutput 解析 list-targets 脚本输出，提取每个资源的目标副本数。
 func (s *PreprodService) ParseTargetOutput(output string) []TargetInfo {
 	var targets []TargetInfo
 	for _, line := range strings.Split(output, "\n") {
@@ -170,6 +176,7 @@ func (s *PreprodService) ParseTargetOutput(output string) []TargetInfo {
 	return targets
 }
 
+// MergeTargets 将目标副本数合并到资源列表中，用于展示扩容时的目标值。
 func (s *PreprodService) MergeTargets(resources []PreprodResource, targets []TargetInfo) []PreprodResource {
 	targetMap := make(map[string]int)
 	for _, t := range targets {
@@ -183,6 +190,7 @@ func (s *PreprodService) MergeTargets(resources []PreprodResource, targets []Tar
 	return resources
 }
 
+// GeneratePreview 生成缩扩容操作的命令和描述。resourceNames 为空时操作所有资源。
 func (s *PreprodService) GeneratePreview(scriptPath, action string, resourceNames []string) (command, description string) {
 	command = scriptPath + " " + action
 	if len(resourceNames) > 0 {
