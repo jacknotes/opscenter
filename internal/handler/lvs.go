@@ -12,10 +12,10 @@ import (
 )
 
 type LVSHandler struct {
-	db            *gorm.DB
-	sshManager    *service.SSHManager
-	previewMgr    *service.PreviewManager
-	lvsService    *service.LVSService
+	db         *gorm.DB
+	sshManager *service.SSHManager
+	previewMgr *service.PreviewManager
+	lvsService *service.LVSService
 }
 
 func NewLVSHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *service.PreviewManager) *LVSHandler {
@@ -45,6 +45,19 @@ type PreviewExecuteRequest struct {
 	PreviewID string `json:"preview_id" binding:"required"`
 }
 
+// List godoc
+//
+//	@Summary		获取 LVS 虚拟服务器列表
+//	@Description	获取指定 LVS 服务器的虚拟服务器和真实服务器列表
+//	@Tags			LVS
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{array}		service.VirtualServer
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/lvs/list [get]
 func (h *LVSHandler) List(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -68,6 +81,19 @@ func (h *LVSHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, servers)
 }
 
+// Status godoc
+//
+//	@Summary		获取 LVS 状态
+//	@Description	获取指定 LVS 服务器的详细状态信息
+//	@Tags			LVS
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{object}	object
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/lvs/status [get]
 func (h *LVSHandler) Status(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -90,6 +116,19 @@ func (h *LVSHandler) Status(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"output": output})
 }
 
+// OpPreview godoc
+//
+//	@Summary		LVS 上下线操作预览
+//	@Description	预览 LVS 真实服务器上下线操作的命令和影响
+//	@Tags			LVS
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		LVSOpRequest	true	"操作参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/lvs/op/preview [post]
 func (h *LVSHandler) OpPreview(c *gin.Context) {
 	var req LVSOpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -131,6 +170,20 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 	})
 }
 
+// OpExecute godoc
+//
+//	@Summary		执行 LVS 上下线操作
+//	@Description	根据预览 ID 执行 LVS 真实服务器上下线操作
+//	@Tags			LVS
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/lvs/op/execute [post]
 func (h *LVSHandler) OpExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -187,6 +240,19 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})
 }
 
+// SwapPreview godoc
+//
+//	@Summary		LVS 切换操作预览
+//	@Description	预览 LVS 真实服务器切换操作的命令和影响
+//	@Tags			LVS
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		LVSSwapRequest	true	"切换参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/lvs/swap/preview [post]
 func (h *LVSHandler) SwapPreview(c *gin.Context) {
 	var req LVSSwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -222,6 +288,20 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 	})
 }
 
+// SwapExecute godoc
+//
+//	@Summary		执行 LVS 切换操作
+//	@Description	根据预览 ID 执行 LVS 真实服务器切换操作
+//	@Tags			LVS
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/lvs/swap/execute [post]
 func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

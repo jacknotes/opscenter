@@ -45,6 +45,19 @@ type K8sFullRequest struct {
 	ServerID uint `json:"server_id" binding:"required"`
 }
 
+// Rollouts godoc
+//
+//	@Summary		获取 K8s Rollout 列表
+//	@Description	获取指定 K8s 服务器的 Argo Rollout 列表
+//	@Tags			K8s
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{array}		service.Rollout
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/k8s/rollouts [get]
 func (h *K8sHandler) Rollouts(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -71,6 +84,19 @@ func (h *K8sHandler) Rollouts(c *gin.Context) {
 	c.JSON(http.StatusOK, rollouts)
 }
 
+// OnlinePreview godoc
+//
+//	@Summary		K8s 上线预览
+//	@Description	预览 K8s 项目的 canary 上线操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sBatchRequest	true	"项目列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/online/preview [post]
 func (h *K8sHandler) OnlinePreview(c *gin.Context) {
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -100,6 +126,19 @@ func (h *K8sHandler) OnlinePreview(c *gin.Context) {
 	})
 }
 
+// OnlineExecute godoc
+//
+//	@Summary		执行 K8s 上线
+//	@Description	根据预览 ID 执行 K8s canary 上线操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/online/execute [post]
 func (h *K8sHandler) OnlineExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -110,6 +149,19 @@ func (h *K8sHandler) OnlineExecute(c *gin.Context) {
 	h.executeK8sAction(c, req.PreviewID, "online")
 }
 
+// SyncPreview godoc
+//
+//	@Summary		K8s 同步预览
+//	@Description	预览 K8s 项目的全量同步操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sBatchRequest	true	"项目列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/sync/preview [post]
 func (h *K8sHandler) SyncPreview(c *gin.Context) {
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -139,6 +191,19 @@ func (h *K8sHandler) SyncPreview(c *gin.Context) {
 	})
 }
 
+// SyncExecute godoc
+//
+//	@Summary		执行 K8s 同步
+//	@Description	根据预览 ID 执行 K8s 全量同步操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/sync/execute [post]
 func (h *K8sHandler) SyncExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -149,6 +214,19 @@ func (h *K8sHandler) SyncExecute(c *gin.Context) {
 	h.executeK8sAction(c, req.PreviewID, "sync")
 }
 
+// RollbackPreview godoc
+//
+//	@Summary		K8s 回滚预览
+//	@Description	预览 K8s 项目的回滚操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sBatchRequest	true	"项目列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/rollback/preview [post]
 func (h *K8sHandler) RollbackPreview(c *gin.Context) {
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -178,6 +256,19 @@ func (h *K8sHandler) RollbackPreview(c *gin.Context) {
 	})
 }
 
+// RollbackExecute godoc
+//
+//	@Summary		执行 K8s 回滚
+//	@Description	根据预览 ID 执行 K8s 回滚操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/rollback/execute [post]
 func (h *K8sHandler) RollbackExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -188,6 +279,19 @@ func (h *K8sHandler) RollbackExecute(c *gin.Context) {
 	h.executeK8sAction(c, req.PreviewID, "rollback")
 }
 
+// FullOnlinePreview godoc
+//
+//	@Summary		K8s 全量上线预览
+//	@Description	预览 K8s 全量上线操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sFullRequest	true	"服务器 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/full_online/preview [post]
 func (h *K8sHandler) FullOnlinePreview(c *gin.Context) {
 	var req K8sFullRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -198,6 +302,19 @@ func (h *K8sHandler) FullOnlinePreview(c *gin.Context) {
 	h.generateFullPreview(c, req.ServerID, "online")
 }
 
+// FullOnlineExecute godoc
+//
+//	@Summary		执行 K8s 全量上线
+//	@Description	根据预览 ID 执行 K8s 全量上线操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/full_online/execute [post]
 func (h *K8sHandler) FullOnlineExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -208,6 +325,19 @@ func (h *K8sHandler) FullOnlineExecute(c *gin.Context) {
 	h.executeK8sAction(c, req.PreviewID, "full_online")
 }
 
+// FullSyncPreview godoc
+//
+//	@Summary		K8s 全量同步预览
+//	@Description	预览 K8s 全量同步操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sFullRequest	true	"服务器 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/full_sync/preview [post]
 func (h *K8sHandler) FullSyncPreview(c *gin.Context) {
 	var req K8sFullRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -218,6 +348,19 @@ func (h *K8sHandler) FullSyncPreview(c *gin.Context) {
 	h.generateFullPreview(c, req.ServerID, "sync")
 }
 
+// FullSyncExecute godoc
+//
+//	@Summary		执行 K8s 全量同步
+//	@Description	根据预览 ID 执行 K8s 全量同步操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/full_sync/execute [post]
 func (h *K8sHandler) FullSyncExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -228,6 +371,19 @@ func (h *K8sHandler) FullSyncExecute(c *gin.Context) {
 	h.executeK8sAction(c, req.PreviewID, "full_sync")
 }
 
+// FullRollbackPreview godoc
+//
+//	@Summary		K8s 全量回滚预览
+//	@Description	预览 K8s 全量回滚操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		K8sFullRequest	true	"服务器 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/k8s/full_rollback/preview [post]
 func (h *K8sHandler) FullRollbackPreview(c *gin.Context) {
 	var req K8sFullRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -238,6 +394,19 @@ func (h *K8sHandler) FullRollbackPreview(c *gin.Context) {
 	h.generateFullPreview(c, req.ServerID, "rollback")
 }
 
+// FullRollbackExecute godoc
+//
+//	@Summary		执行 K8s 全量回滚
+//	@Description	根据预览 ID 执行 K8s 全量回滚操作
+//	@Tags			K8s
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/k8s/full_rollback/execute [post]
 func (h *K8sHandler) FullRollbackExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

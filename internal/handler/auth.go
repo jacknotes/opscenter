@@ -33,6 +33,18 @@ type LoginResponse struct {
 	User  model.User `json:"user"`
 }
 
+// Login godoc
+//
+//	@Summary		用户登录
+//	@Description	用户名密码登录，返回 JWT token
+//	@Tags			认证
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		LoginRequest	true	"登录参数"
+//	@Success		200		{object}	LoginResponse
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Router			/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -69,12 +81,32 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 }
 
+// Logout godoc
+//
+//	@Summary		用户登出
+//	@Description	登出当前用户，记录审计日志
+//	@Tags			认证
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	object
+//	@Router			/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	username, _ := c.Get("username")
 	createAuditLog(h.db, c, "auth", "logout", fmt.Sprintf("%v", username), "", "success", "登出成功", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }
 
+// GetUserInfo godoc
+//
+//	@Summary		获取当前用户信息
+//	@Description	获取当前登录用户的详细信息
+//	@Tags			用户
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	model.User
+//	@Failure		401	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/user/info [get]
 func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -141,6 +173,17 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required"`
 }
 
+// ListUsers godoc
+//
+//	@Summary		获取用户列表
+//	@Description	获取所有用户列表（管理员）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{array}		model.User
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Router			/users [get]
 func (h *AuthHandler) ListUsers(c *gin.Context) {
 	var users []model.User
 	if err := h.db.Order("id ASC").Find(&users).Error; err != nil {
@@ -150,6 +193,20 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, users)
 }
 
+// CreateUser godoc
+//
+//	@Summary		创建用户
+//	@Description	创建新用户（管理员）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		CreateUserRequest	true	"用户信息"
+//	@Success		201		{object}	model.User
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users [post]
 func (h *AuthHandler) CreateUser(c *gin.Context) {
 	var req CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -197,6 +254,22 @@ func getCurrentUserID(c *gin.Context) (uint, bool) {
 	return id, ok
 }
 
+// UpdateUser godoc
+//
+//	@Summary		更新用户
+//	@Description	更新用户信息（管理员）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int					true	"用户 ID"
+//	@Param			body	body		UpdateUserRequest	true	"用户信息"
+//	@Success		200		{object}	model.User
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/users/{id} [put]
 func (h *AuthHandler) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -278,6 +351,20 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// DeleteUser godoc
+//
+//	@Summary		删除用户
+//	@Description	删除用户（管理员，不能删除自己和admin）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id} [delete]
 func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -318,6 +405,22 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
+// ResetPassword godoc
+//
+//	@Summary		重置用户密码
+//	@Description	管理员重置指定用户的密码
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int						true	"用户 ID"
+//	@Param			body	body		ResetPasswordRequest	true	"新密码"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/users/{id}/reset-password [put]
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -354,6 +457,21 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "密码重置成功"})
 }
 
+// ChangePassword godoc
+//
+//	@Summary		修改密码
+//	@Description	用户修改自己的密码
+//	@Tags			用户
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int						true	"用户 ID"
+//	@Param			body	body		ChangePasswordRequest	true	"密码信息"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/{id}/password [put]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -406,6 +524,20 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "密码修改成功"})
 }
 
+// ToggleUserEnabled godoc
+//
+//	@Summary		启用/禁用用户
+//	@Description	切换用户启用状态（管理员）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id}/toggle [put]
 func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

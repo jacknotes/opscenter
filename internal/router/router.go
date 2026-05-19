@@ -4,8 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
 
+	_ "opscenter/docs"
 	"opscenter/internal/handler"
 	"opscenter/internal/middleware"
 	"opscenter/internal/service"
@@ -13,10 +16,10 @@ import (
 
 // App 持有应用的所有组件，用于优雅停机
 type App struct {
-	Engine       *gin.Engine
-	SSHManager   *service.SSHManager
-	PreviewMgr   *service.PreviewManager
-	LockManager  *service.LockManager
+	Engine      *gin.Engine
+	SSHManager  *service.SSHManager
+	PreviewMgr  *service.PreviewManager
+	LockManager *service.LockManager
 }
 
 func Setup(db *gorm.DB) *App {
@@ -49,6 +52,9 @@ func Setup(db *gorm.DB) *App {
 
 	// Initialize admin user
 	authHandler.InitAdmin()
+
+	// Swagger UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Public routes
 	api := r.Group("/api")

@@ -7,10 +7,10 @@ import (
 )
 
 type VirtualServer struct {
-	IP          string        `json:"ip"`
-	Port        string        `json:"port"`
-	Protocol    string        `json:"protocol"`
-	RealServers []RealServer  `json:"real_servers"`
+	IP          string       `json:"ip"`
+	Port        string       `json:"port"`
+	Protocol    string       `json:"protocol"`
+	RealServers []RealServer `json:"real_servers"`
 }
 
 type RealServer struct {

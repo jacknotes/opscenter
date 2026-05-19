@@ -12,6 +12,11 @@ import (
 	"opscenter/internal/service"
 )
 
+type PreprodScaleRequest struct {
+	ServerID      uint     `json:"server_id" binding:"required"`
+	ResourceNames []string `json:"resource_names"`
+}
+
 type PreprodHandler struct {
 	db             *gorm.DB
 	sshManager     *service.SSHManager
@@ -30,6 +35,19 @@ func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *
 	}
 }
 
+// Status godoc
+//
+//	@Summary		获取预生产环境状态
+//	@Description	获取指定服务器的预生产环境资源状态
+//	@Tags			预生产
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{array}		service.PreprodResource
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/preprod/status [get]
 func (h *PreprodHandler) Status(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -62,11 +80,21 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 	c.JSON(http.StatusOK, resources)
 }
 
+// ScaleDownPreview godoc
+//
+//	@Summary		预生产缩容预览
+//	@Description	预览预生产环境缩容操作的命令和影响
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreprodScaleRequest	true	"缩容参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/preprod/scaledown/preview [post]
 func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
-	var req struct {
-		ServerID      uint     `json:"server_id" binding:"required"`
-		ResourceNames []string `json:"resource_names"`
-	}
+	var req PreprodScaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
@@ -94,6 +122,19 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 	})
 }
 
+// ScaleDownExecute godoc
+//
+//	@Summary		执行预生产缩容
+//	@Description	根据预览 ID 执行预生产环境缩容操作
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/preprod/scaledown/execute [post]
 func (h *PreprodHandler) ScaleDownExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -104,11 +145,21 @@ func (h *PreprodHandler) ScaleDownExecute(c *gin.Context) {
 	h.executePreprodAction(c, req.PreviewID, "scaledown")
 }
 
+// ScaleUpPreview godoc
+//
+//	@Summary		预生产扩容预览
+//	@Description	预览预生产环境扩容操作的命令和影响
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreprodScaleRequest	true	"扩容参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Router			/preprod/scaleup/preview [post]
 func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
-	var req struct {
-		ServerID      uint     `json:"server_id" binding:"required"`
-		ResourceNames []string `json:"resource_names"`
-	}
+	var req PreprodScaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
@@ -136,6 +187,19 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 	})
 }
 
+// ScaleUpExecute godoc
+//
+//	@Summary		执行预生产扩容
+//	@Description	根据预览 ID 执行预生产环境扩容操作
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/preprod/scaleup/execute [post]
 func (h *PreprodHandler) ScaleUpExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

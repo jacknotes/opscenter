@@ -19,6 +19,25 @@ func NewLogHandler(db *gorm.DB) *LogHandler {
 	return &LogHandler{db: db}
 }
 
+// List godoc
+//
+//	@Summary		获取操作日志列表
+//	@Description	分页查询操作日志，支持按模块、服务器、用户、状态、时间等筛选
+//	@Tags			操作日志
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			page		query		int		false	"页码，默认 1"
+//	@Param			size		query		int		false	"每页数量，默认 20，最大 100"
+//	@Param			module		query		string	false	"模块 (lvs/k8s/nginx/preprod/server)"
+//	@Param			server_id	query		string	false	"服务器 ID"
+//	@Param			username	query		string	false	"用户名（模糊匹配）"
+//	@Param			status		query		string	false	"状态 (success/failed)"
+//	@Param			action		query		string	false	"操作类型"
+//	@Param			start_time	query		string	false	"开始时间 (2006-01-02)"
+//	@Param			end_time	query		string	false	"结束时间 (2006-01-02)"
+//	@Success		200			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/logs [get]
 func (h *LogHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))

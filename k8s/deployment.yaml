@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: opscenter
-  namespace: opscenter
+  namespace: ops
   labels:
     app: opscenter
 spec:
@@ -24,6 +24,16 @@ spec:
           name: http
           protocol: TCP
         env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: opscenter-secret
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: opscenter-secret
+              key: DB_PORT
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:

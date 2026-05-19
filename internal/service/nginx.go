@@ -7,9 +7,9 @@ import (
 )
 
 type NginxUpstream struct {
-	Name    string       `json:"name"`
+	Name    string        `json:"name"`
 	Servers []NginxServer `json:"servers"`
-	Config  string       `json:"config"`
+	Config  string        `json:"config"`
 }
 
 type NginxServer struct {

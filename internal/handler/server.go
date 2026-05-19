@@ -27,6 +27,18 @@ func NewServerHandler(db *gorm.DB) *ServerHandler {
 	return &ServerHandler{db: db}
 }
 
+// List godoc
+//
+//	@Summary		获取服务器列表
+//	@Description	获取服务器列表，可按类型和启用状态筛选
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			type	query		string	false	"服务器类型 (lvs/k8s/nginx/preprod)"
+//	@Param			all		query		string	false	"是否显示全部 (true/false)"
+//	@Success		200		{array}		model.ServerResponse
+//	@Failure		401		{object}	object
+//	@Router			/servers [get]
 func (h *ServerHandler) List(c *gin.Context) {
 	serverType := c.Query("type")
 	showAll := c.Query("all") == "true"
@@ -54,6 +66,18 @@ func (h *ServerHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, responses)
 }
 
+// Get godoc
+//
+//	@Summary		获取服务器详情
+//	@Description	根据 ID 获取服务器详情（脱敏）
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"服务器 ID"
+//	@Success		200	{object}	model.ServerResponse
+//	@Failure		400	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/servers/{id} [get]
 func (h *ServerHandler) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -70,6 +94,18 @@ func (h *ServerHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, server.ToResponse())
 }
 
+// GetForEdit godoc
+//
+//	@Summary		获取服务器编辑信息
+//	@Description	获取服务器完整信息（密码用掩码显示），仅管理员可用
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"服务器 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/servers/{id}/edit [get]
 func (h *ServerHandler) GetForEdit(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -85,29 +121,42 @@ func (h *ServerHandler) GetForEdit(c *gin.Context) {
 
 	// 返回完整信息（密码用掩码显示）
 	c.JSON(http.StatusOK, gin.H{
-		"id":              server.ID,
-		"name":            server.Name,
-		"host":            server.Host,
-		"port":            server.Port,
-		"username":        server.Username,
-		"auth_type":       server.AuthType,
-		"password":        "",
-		"private_key":     "",
-		"server_type":     server.ServerType,
-		"env":             server.Env,
-		"script_path":     server.ScriptPath,
-		"script_password": "",
-		"config_path":     server.ConfigPath,
-		"config_pattern":  server.ConfigPattern,
-		"backup_path":     server.BackupPath,
-		"description":     server.Description,
-		"enabled":         server.Enabled,
-		"has_password":    server.Password != "",
-		"has_private_key": server.PrivateKey != "",
-		"has_script_password":  server.ScriptPassword != "",
+		"id":                  server.ID,
+		"name":                server.Name,
+		"host":                server.Host,
+		"port":                server.Port,
+		"username":            server.Username,
+		"auth_type":           server.AuthType,
+		"password":            "",
+		"private_key":         "",
+		"server_type":         server.ServerType,
+		"env":                 server.Env,
+		"script_path":         server.ScriptPath,
+		"script_password":     "",
+		"config_path":         server.ConfigPath,
+		"config_pattern":      server.ConfigPattern,
+		"backup_path":         server.BackupPath,
+		"description":         server.Description,
+		"enabled":             server.Enabled,
+		"has_password":        server.Password != "",
+		"has_private_key":     server.PrivateKey != "",
+		"has_script_password": server.ScriptPassword != "",
 	})
 }
 
+// Create godoc
+//
+//	@Summary		创建服务器
+//	@Description	创建新服务器，仅管理员可用
+//	@Tags			服务器
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server	body		model.Server	true	"服务器信息"
+//	@Success		201		{object}	model.ServerResponse
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/servers [post]
 func (h *ServerHandler) Create(c *gin.Context) {
 	var server model.Server
 	if err := c.ShouldBindJSON(&server); err != nil {
@@ -131,6 +180,21 @@ func (h *ServerHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, server.ToResponse())
 }
 
+// Update godoc
+//
+//	@Summary		更新服务器
+//	@Description	更新服务器信息，仅管理员可用。密码字段传 __keep__ 表示保留原值
+//	@Tags			服务器
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int				true	"服务器 ID"
+//	@Param			server	body		model.Server	true	"服务器信息"
+//	@Success		200		{object}	model.ServerResponse
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/servers/{id} [put]
 func (h *ServerHandler) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -182,6 +246,18 @@ func (h *ServerHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, input.ToResponse())
 }
 
+// Delete godoc
+//
+//	@Summary		删除服务器
+//	@Description	删除指定服务器（软删除），仅管理员可用
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"服务器 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		500	{object}	object
+//	@Router			/servers/{id} [delete]
 func (h *ServerHandler) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -204,6 +280,19 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
+// ToggleEnabled godoc
+//
+//	@Summary		切换服务器启用状态
+//	@Description	启用或禁用服务器，仅管理员可用
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"服务器 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		404	{object}	object
+//	@Failure		500	{object}	object
+//	@Router			/servers/{id}/toggle [put]
 func (h *ServerHandler) ToggleEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -236,6 +325,18 @@ func (h *ServerHandler) ToggleEnabled(c *gin.Context) {
 	}
 }
 
+// TestConnection godoc
+//
+//	@Summary		测试服务器连接
+//	@Description	测试 SSH 连接到指定服务器，仅管理员可用
+//	@Tags			服务器
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"服务器 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/servers/{id}/test [post]
 func (h *ServerHandler) TestConnection(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

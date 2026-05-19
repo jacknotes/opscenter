@@ -13,10 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 	"opscenter/internal/config"
 	"opscenter/internal/model"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type SSHManager struct {

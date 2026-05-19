@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"opscenter/internal/config"
+	"opscenter/internal/model"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
-	"opscenter/internal/config"
-	"opscenter/internal/model"
 )
 
 type Claims struct {

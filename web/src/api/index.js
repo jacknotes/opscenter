@@ -25,7 +25,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const userStore = useUserStore()
       userStore.logout()
-      router.push('/login')
+      if (router.currentRoute.value.path !== '/login') {
+        router.push('/login').catch(() => {})
+      }
     }
     return Promise.reject(error)
   }

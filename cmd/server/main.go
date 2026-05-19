@@ -20,6 +20,25 @@ import (
 	"opscenter/internal/router"
 )
 
+//	@title			OpsCenter API
+//	@version		1.0
+//	@description	运维发布管理系统 API 文档
+//	@termsOfService	http://swagger.io/terms/
+
+//	@contact.name	API Support
+//	@contact.email	support@opscenter.local
+
+//	@license.name	Apache 2.0
+//	@license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+
+//	@host		localhost:18080
+//	@BasePath	/api
+
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				"Bearer {token}"
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	flag.Parse()

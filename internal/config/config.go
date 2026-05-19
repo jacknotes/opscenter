@@ -18,11 +18,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port            int      `yaml:"port"`
-	Host            string   `yaml:"host"`
-	AdminPassword   string   `yaml:"admin_password"`
-	AllowedOrigins  []string `yaml:"allowed_origins"`
-	KnownHostsPath  string   `yaml:"known_hosts_path"`
+	Port           int      `yaml:"port"`
+	Host           string   `yaml:"host"`
+	AdminPassword  string   `yaml:"admin_password"`
+	AllowedOrigins []string `yaml:"allowed_origins"`
+	KnownHostsPath string   `yaml:"known_hosts_path"`
 }
 
 type DatabaseConfig struct {

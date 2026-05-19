@@ -17,9 +17,9 @@ const nginxCmd = "PATH=$PATH:/usr/local/nginx/sbin:/usr/sbin:/opt/nginx/sbin ngi
 const maxBackups = 10
 
 type NginxHandler struct {
-	db          *gorm.DB
-	sshManager  *service.SSHManager
-	previewMgr  *service.PreviewManager
+	db           *gorm.DB
+	sshManager   *service.SSHManager
+	previewMgr   *service.PreviewManager
 	nginxService *service.NginxService
 }
 
@@ -33,10 +33,10 @@ func NewNginxHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *se
 }
 
 type NginxUpstreamRequest struct {
-	ServerID     uint     `json:"server_id" binding:"required"`
-	ConfigFile   string   `json:"config_file" binding:"required"`
+	ServerID      uint     `json:"server_id" binding:"required"`
+	ConfigFile    string   `json:"config_file" binding:"required"`
 	UpstreamNames []string `json:"upstream_names" binding:"required"`
-	BackendIP    string   `json:"backend_ip" binding:"required"`
+	BackendIP     string   `json:"backend_ip" binding:"required"`
 }
 
 type NginxConfigRequest struct {
@@ -69,8 +69,8 @@ type NginxToggleRequest struct {
 
 type NginxBatchItem struct {
 	UpstreamName string `json:"upstream_name"`
-	Action       string `json:"action"`                   // "online", "offline", "toggle"
-	BackendIP    string `json:"backend_ip,omitempty"`      // online/offline 时需要
+	Action       string `json:"action"`               // "online", "offline", "toggle"
+	BackendIP    string `json:"backend_ip,omitempty"` // online/offline 时需要
 }
 
 type NginxBatchRequestV2 struct {
@@ -87,6 +87,18 @@ func validateConfigFile(file string) error {
 	return nil
 }
 
+// Configs godoc
+//
+//	@Summary		获取 Nginx 配置文件列表
+//	@Description	获取指定 Nginx 服务器的配置文件列表
+//	@Tags			Nginx
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{array}		string
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Router			/nginx/configs [get]
 func (h *NginxHandler) Configs(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -170,6 +182,20 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 	c.JSON(http.StatusOK, fileNames)
 }
 
+// Upstreams godoc
+//
+//	@Summary		获取 Nginx upstream 列表
+//	@Description	获取指定配置文件中的 upstream 及其服务器列表
+//	@Tags			Nginx
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Param			config_file	query		string	true	"配置文件名"
+//	@Success		200			{object}	object
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/nginx/upstreams [get]
 func (h *NginxHandler) Upstreams(c *gin.Context) {
 	serverID := c.Query("server_id")
 	configFile := c.Query("config_file")
@@ -210,6 +236,20 @@ func (h *NginxHandler) Upstreams(c *gin.Context) {
 	})
 }
 
+// OnlinePreview godoc
+//
+//	@Summary		Nginx 上线预览
+//	@Description	预览 Nginx upstream 后端服务器上线操作（去掉注释）
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxUpstreamRequest	true	"操作参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/online/preview [post]
 func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -269,6 +309,19 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 	})
 }
 
+// OnlineExecute godoc
+//
+//	@Summary		执行 Nginx 上线
+//	@Description	根据预览 ID 执行 Nginx upstream 后端服务器上线操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/online/execute [post]
 func (h *NginxHandler) OnlineExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -279,6 +332,20 @@ func (h *NginxHandler) OnlineExecute(c *gin.Context) {
 	h.executeNginxAction(c, req.PreviewID, "online")
 }
 
+// OfflinePreview godoc
+//
+//	@Summary		Nginx 下线预览
+//	@Description	预览 Nginx upstream 后端服务器下线操作（添加注释）
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxUpstreamRequest	true	"操作参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/offline/preview [post]
 func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -377,6 +444,19 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 	})
 }
 
+// OfflineExecute godoc
+//
+//	@Summary		执行 Nginx 下线
+//	@Description	根据预览 ID 执行 Nginx upstream 后端服务器下线操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/offline/execute [post]
 func (h *NginxHandler) OfflineExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -387,6 +467,20 @@ func (h *NginxHandler) OfflineExecute(c *gin.Context) {
 	h.executeNginxAction(c, req.PreviewID, "offline")
 }
 
+// SwapPreview godoc
+//
+//	@Summary		Nginx 切换预览
+//	@Description	预览 Nginx upstream 后端服务器切换操作（一上一下）
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxSwapRequest	true	"切换参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/swap/preview [post]
 func (h *NginxHandler) SwapPreview(c *gin.Context) {
 	var req NginxSwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -486,6 +580,19 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 	})
 }
 
+// SwapExecute godoc
+//
+//	@Summary		执行 Nginx 切换
+//	@Description	根据预览 ID 执行 Nginx upstream 后端服务器切换操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/swap/execute [post]
 func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -585,6 +692,20 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
 }
 
+// TogglePreview godoc
+//
+//	@Summary		Nginx 状态切换预览
+//	@Description	预览 Nginx upstream 中所有服务器状态反转操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxToggleRequest	true	"操作参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/toggle/preview [post]
 func (h *NginxHandler) TogglePreview(c *gin.Context) {
 	var req NginxToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -661,6 +782,19 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 	})
 }
 
+// ToggleExecute godoc
+//
+//	@Summary		执行 Nginx 状态切换
+//	@Description	根据预览 ID 执行 Nginx upstream 服务器状态反转操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/toggle/execute [post]
 func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -771,6 +905,20 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "切换成功", "output": logOutput})
 }
 
+// BatchPreview godoc
+//
+//	@Summary		Nginx 批量操作预览
+//	@Description	预览 Nginx upstream 的批量操作（上线/下线/切换混合）
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxBatchRequestV2	true	"批量操作参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/batch/preview [post]
 func (h *NginxHandler) BatchPreview(c *gin.Context) {
 	var req NginxBatchRequestV2
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -904,6 +1052,19 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 	})
 }
 
+// BatchExecute godoc
+//
+//	@Summary		执行 Nginx 批量操作
+//	@Description	根据预览 ID 执行 Nginx upstream 的批量操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/upstream/batch/execute [post]
 func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1068,6 +1229,20 @@ func validateServerStatus(upstream *service.NginxUpstream, ip, expectedStatus st
 	return false
 }
 
+// Reload godoc
+//
+//	@Summary		重载 Nginx 配置
+//	@Description	测试并重载指定 Nginx 服务器的配置
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxReloadRequest	true	"服务器 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/reload [post]
 func (h *NginxHandler) Reload(c *gin.Context) {
 	var req NginxReloadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1105,6 +1280,20 @@ func (h *NginxHandler) Reload(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "reload成功"})
 }
 
+// RollbackPreview godoc
+//
+//	@Summary		Nginx 回滚预览
+//	@Description	预览 Nginx 配置文件回滚操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		NginxRollbackRequest	true	"回滚参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		404		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/rollback/preview [post]
 func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 	var req NginxRollbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1155,6 +1344,19 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 	})
 }
 
+// RollbackExecute godoc
+//
+//	@Summary		执行 Nginx 回滚
+//	@Description	根据预览 ID 执行 Nginx 配置文件回滚操作
+//	@Tags			Nginx
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		PreviewExecuteRequest	true	"预览 ID"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/nginx/rollback/execute [post]
 func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -1224,6 +1426,19 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "回滚成功"})
 }
 
+// Backups godoc
+//
+//	@Summary		获取 Nginx 备份列表
+//	@Description	获取指定 Nginx 服务器的配置备份文件列表
+//	@Tags			Nginx
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		string	true	"服务器 ID"
+//	@Success		200			{array}		string
+//	@Failure		400			{object}	object
+//	@Failure		404			{object}	object
+//	@Failure		500			{object}	object
+//	@Router			/nginx/backups [get]
 func (h *NginxHandler) Backups(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -1329,7 +1544,7 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	}
 
 	// Test and reload
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd + " -t")
+	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
 		return
