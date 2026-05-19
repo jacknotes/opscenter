@@ -61,8 +61,8 @@ const featureCards = [
   { title: '预生产扩缩容', desc: '预生产环境资源扩缩容', route: '/preprod', icon: markRaw(ZoomOut), iconColor: '#F56C6C', iconBg: 'rgba(245, 108, 108, 0.1)' },
 ]
 
-const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' }
-const moduleTagTypes = { lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' }
+const moduleLabels = markRaw({ lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' })
+const moduleTagTypes = markRaw({ lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' })
 
 function moduleLabel(m) { return moduleLabels[m] || m }
 function moduleTagType(m) { return moduleTagTypes[m] || '' }

@@ -1,12 +1,12 @@
 :root {
-  /* Primary Colors */
-  --color-primary: #409EFF;
-  --color-primary-light: #66b1ff;
-  --color-primary-dark: #3a8ee6;
-  --color-success: #67C23A;
-  --color-warning: #E6A23C;
-  --color-danger: #F56C6C;
-  --color-info: #909399;
+  /* Primary Colors - 引用 Element Plus 变量保持一致 */
+  --color-primary: var(--el-color-primary, #409EFF);
+  --color-primary-light: var(--el-color-primary-light-3, #66b1ff);
+  --color-primary-dark: var(--el-color-primary-dark-2, #3a8ee6);
+  --color-success: var(--el-color-success, #67C23A);
+  --color-warning: var(--el-color-warning, #E6A23C);
+  --color-danger: var(--el-color-danger, #F56C6C);
+  --color-info: var(--el-color-info, #909399);
 
   /* Sidebar */
   --sidebar-bg: #304156;

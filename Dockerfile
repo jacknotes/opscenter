@@ -4,7 +4,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /app/web
 
 COPY web/package*.json ./
-RUN npm ci
+RUN npm config set registry https://registry.npmmirror.com && npm ci
 
 COPY web/ .
 RUN npm run build
@@ -13,6 +13,8 @@ RUN npm run build
 FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /app
+
+ENV GOPROXY=https://goproxy.cn,direct
 
 COPY go.mod go.sum ./
 RUN go mod download
