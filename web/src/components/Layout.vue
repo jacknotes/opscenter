@@ -35,7 +35,7 @@
         </el-menu-item>
         <el-menu-item index="/logs">
           <el-icon><List /></el-icon>
-          <template #title>操作日志</template>
+          <template #title>日志审计</template>
         </el-menu-item>
         <el-menu-item v-if="userStore.isAdmin" index="/servers">
           <el-icon><Setting /></el-icon>

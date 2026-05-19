@@ -4,10 +4,10 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span style="white-space: nowrap;">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 280px" @change="loadData">
+          <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 250px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 220px;" />
+          <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
         </div>
       </template>
 

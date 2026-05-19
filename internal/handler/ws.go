@@ -226,7 +226,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		PreviewID:  msg.PreviewID,
 		ServerID:   server.ID,
 		ServerName: server.Name,
-		IP:         c.ClientIP(),
+		IP:         getClientIP(c),
 	}
 
 	// Stream execution

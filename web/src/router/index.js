@@ -45,7 +45,7 @@ const routes = [
         path: 'logs',
         name: 'OpLog',
         component: () => import('../views/OpLog.vue'),
-        meta: { title: '操作日志' }
+        meta: { title: '日志审计' }
       },
       {
         path: 'servers',

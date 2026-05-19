@@ -11,9 +11,7 @@
           <el-select v-model="configFile" placeholder="选择配置文件" style="width: 250px" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
-          <el-input v-model="filterKeyword" placeholder="过滤 upstream、IP 或端口" clearable style="width: 250px;">
-            <template #prefix><span style="opacity: 0.5;">&#128269;</span></template>
-          </el-input>
+          <el-input v-model="filterKeyword" placeholder="搜索upstream/ip/port" clearable style="width: 250px;" />
         </div>
       </template>
 
