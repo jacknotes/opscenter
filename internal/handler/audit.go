@@ -2,7 +2,6 @@ package handler
 
 import (
 	"log"
-	"net"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -11,36 +10,22 @@ import (
 	"opscenter/internal/model"
 )
 
-// getClientIP 从请求头中提取真实客户端 IP。
-// 优先从 X-Forwarded-For 取第一个非私网 IP，其次从 X-Real-IP 取，兜底使用 Gin 的 ClientIP。
+// getClientIP 从请求头中提取客户端 IP 链。
+// 优先返回 X-Forwarded-For 完整链（保留所有代理节点，便于排查）；
+// 其次从 X-Real-IP 取；兜底使用 Gin 的 ClientIP。
 func getClientIP(c *gin.Context) string {
-	// 优先从 X-Forwarded-For 取第一个非私网 IP
 	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
-		for _, ip := range strings.Split(xff, ",") {
-			ip = strings.TrimSpace(ip)
-			if ip != "" && !isPrivateIP(ip) {
-				return ip
-			}
+		// 去除每个 IP 的前后空格后原样返回完整链
+		parts := strings.Split(xff, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
 		}
+		return strings.Join(parts, ", ")
 	}
-	// 其次从 X-Real-IP 取
 	if xri := c.GetHeader("X-Real-IP"); xri != "" {
-		xri = strings.TrimSpace(xri)
-		if !isPrivateIP(xri) {
-			return xri
-		}
+		return strings.TrimSpace(xri)
 	}
-	// 兜底用 Gin 的 ClientIP
 	return c.ClientIP()
-}
-
-// isPrivateIP 判断 IP 是否为私网地址或回环地址。
-func isPrivateIP(ipStr string) bool {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return false
-	}
-	return ip.IsLoopback() || ip.IsPrivate()
 }
 
 // createAuditLog 将操作审计日志写入数据库。写入失败时仅打印警告，不影响主流程。
