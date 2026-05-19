@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pro-opscenter-hs-com-virtualservice
+  namespace: ops
+spec:
+  hosts:
+  - "opscenter.hs.com"
+  gateways:
+  - istio-system/general-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: opscenter.ops.svc.cluster.local
+        port:
+          number: 80

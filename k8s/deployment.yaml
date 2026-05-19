@@ -23,32 +23,6 @@ spec:
         - containerPort: 18080
           name: http
           protocol: TCP
-        env:
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: opscenter-secret
-              key: DB_HOST
-        - name: DB_PORT
-          valueFrom:
-            secretKeyRef:
-              name: opscenter-secret
-              key: DB_PORT
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: opscenter-secret
-              key: DB_PASSWORD
-        - name: JWT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: opscenter-secret
-              key: JWT_SECRET
-        - name: CRYPTO_KEY
-          valueFrom:
-            secretKeyRef:
-              name: opscenter-secret
-              key: CRYPTO_KEY
         volumeMounts:
         - name: config
           mountPath: /app/config

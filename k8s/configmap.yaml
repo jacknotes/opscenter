@@ -10,15 +10,16 @@ data:
       host: 0.0.0.0
 
     database:
-      host: localhost  # 通过环境变量 DB_HOST 覆盖
-      port: 3306       # 通过环境变量 DB_PORT 覆盖
+      host: localhost
+      port: 3306
       username: opscenter
+      password: your-db-password
       dbname: opscenter
       charset: utf8mb4
 
     jwt:
-      secret: ""  # 从 Secret 注入
+      secret: "your-secret-key-change-in-production"
       expire: 24h
 
     crypto:
-      key: ""  # 从 Secret 注入
+      key: ""
