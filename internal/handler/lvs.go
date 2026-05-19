@@ -156,7 +156,14 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	command, _ := h.lvsService.GenerateOpPreview(server.ScriptPath, params["vs_ip"].(string), params["rs_ip"].(string), params["state"].(string))
+	vsIP, _ := params["vs_ip"].(string)
+	rsIP, _ := params["rs_ip"].(string)
+	state, _ := params["state"].(string)
+	if vsIP == "" || rsIP == "" || state == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
+	command, _ := h.lvsService.GenerateOpPreview(server.ScriptPath, vsIP, rsIP, state)
 
 	output, err := h.sshManager.Execute(&server, command)
 
@@ -240,7 +247,14 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	command, _ := h.lvsService.GenerateSwapPreview(server.ScriptPath, params["vs_ip"].(string), params["rs_ip1"].(string), params["rs_ip2"].(string))
+	vsIP, _ := params["vs_ip"].(string)
+	rsIP1, _ := params["rs_ip1"].(string)
+	rsIP2, _ := params["rs_ip2"].(string)
+	if vsIP == "" || rsIP1 == "" || rsIP2 == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
+	command, _ := h.lvsService.GenerateSwapPreview(server.ScriptPath, vsIP, rsIP1, rsIP2)
 
 	output, err := h.sshManager.Execute(&server, command)
 

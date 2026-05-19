@@ -79,6 +79,14 @@ type NginxBatchRequestV2 struct {
 	Items      []NginxBatchItem `json:"items" binding:"required"`
 }
 
+// validateConfigFile 校验配置文件名，防止路径穿越和命令注入
+func validateConfigFile(file string) error {
+	if !service.ValidateFilePath(file) {
+		return fmt.Errorf("非法的配置文件名: %s", file)
+	}
+	return nil
+}
+
 func (h *NginxHandler) Configs(c *gin.Context) {
 	serverID := c.Query("server_id")
 	if serverID == "" {
@@ -171,6 +179,11 @@ func (h *NginxHandler) Upstreams(c *gin.Context) {
 		return
 	}
 
+	if err := validateConfigFile(configFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	var server model.Server
 	if err := h.db.First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
@@ -201,6 +214,10 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -266,6 +283,10 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -370,6 +391,10 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 	var req NginxSwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -486,9 +511,13 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	configFile := params["config_file"].(string)
-	offlineIP := params["offline_ip"].(string)
-	onlineIP := params["online_ip"].(string)
+	configFile, _ := params["config_file"].(string)
+	offlineIP, _ := params["offline_ip"].(string)
+	onlineIP, _ := params["online_ip"].(string)
+	if configFile == "" || offlineIP == "" || onlineIP == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 
 	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string
 	var upstreamNames []string
@@ -555,6 +584,10 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 	var req NginxToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -648,7 +681,11 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	configFile := params["config_file"].(string)
+	configFile, _ := params["config_file"].(string)
+	if configFile == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 
 	var upstreamNames []string
 	switch v := params["upstream_names"].(type) {
@@ -656,7 +693,9 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 		upstreamNames = v
 	case []interface{}:
 		for _, item := range v {
-			upstreamNames = append(upstreamNames, item.(string))
+			if s, ok := item.(string); ok {
+				upstreamNames = append(upstreamNames, s)
+			}
 		}
 	}
 
@@ -731,6 +770,10 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 	var req NginxBatchRequestV2
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -881,7 +924,11 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	configFile := params["config_file"].(string)
+	configFile, _ := params["config_file"].(string)
+	if configFile == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 
 	// 解析 items
 	var items []NginxBatchItem
@@ -899,9 +946,11 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 			if !ok {
 				continue
 			}
+			upstreamName, _ := m["upstream_name"].(string)
+			action, _ := m["action"].(string)
 			bi := NginxBatchItem{
-				UpstreamName: m["upstream_name"].(string),
-				Action:       m["action"].(string),
+				UpstreamName: upstreamName,
+				Action:       action,
 			}
 			if ip, ok := m["backend_ip"].(string); ok {
 				bi.BackendIP = normalizeIP(ip)
@@ -1057,6 +1106,14 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateConfigFile(req.BackupFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法的备份文件名"})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -1118,7 +1175,11 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 	}
 
 	params := preview.Params
-	configFile := params["config_file"].(string)
+	configFile, _ := params["config_file"].(string)
+	if configFile == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 	backupFile := params["backup_file"].(string)
 
 	// Copy backup to config
@@ -1197,7 +1258,11 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	}
 
 	params := preview.Params
-	configFile := params["config_file"].(string)
+	configFile, _ := params["config_file"].(string)
+	if configFile == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览参数不完整"})
+		return
+	}
 	backendIP := params["backend_ip"].(string)
 
 	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net"
 	"strings"
 
@@ -60,5 +61,7 @@ func createAuditLog(db *gorm.DB, c *gin.Context, module, action, target, detail,
 		ServerID:   serverID,
 		ServerName: serverName,
 	}
-	db.Create(&logEntry)
+	if err := db.Create(&logEntry).Error; err != nil {
+		log.Printf("[WARN] 审计日志写入失败: %v (module=%s, action=%s, target=%s)", err, module, action, target)
+	}
 }

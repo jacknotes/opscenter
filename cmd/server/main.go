@@ -1,9 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -37,12 +43,41 @@ func main() {
 	}
 
 	// Setup router
-	r := router.Setup(db)
+	app := router.Setup(db)
 
-	// Start server
+	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", config.Global.Server.Host, config.Global.Server.Port)
-	log.Printf("服务启动在 %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("启动服务失败: %v", err)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: app.Engine,
 	}
+
+	// Start server in goroutine
+	go func() {
+		log.Printf("服务启动在 %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("启动服务失败: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("收到停机信号，正在优雅关闭...")
+
+	// Shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("HTTP 服务关闭失败: %v", err)
+	}
+
+	// Cleanup resources
+	app.SSHManager.Close()
+	app.LockManager.Stop()
+	app.PreviewMgr.Stop()
+
+	log.Println("服务已停止")
 }

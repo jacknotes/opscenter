@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -17,8 +18,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port int    `yaml:"port"`
-	Host string `yaml:"host"`
+	Port            int      `yaml:"port"`
+	Host            string   `yaml:"host"`
+	AdminPassword   string   `yaml:"admin_password"`
+	AllowedOrigins  []string `yaml:"allowed_origins"`
+	KnownHostsPath  string   `yaml:"known_hosts_path"`
 }
 
 type DatabaseConfig struct {
@@ -50,7 +54,15 @@ func Load(path string) error {
 		return err
 	}
 
-	// 从环境变量覆盖敏感配置
+	// 从环境变量覆盖配置
+	if v := os.Getenv("DB_HOST"); v != "" {
+		Global.Database.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			Global.Database.Port = port
+		}
+	}
 	if v := os.Getenv("DB_PASSWORD"); v != "" {
 		Global.Database.Password = v
 	}
@@ -59,6 +71,9 @@ func Load(path string) error {
 	}
 	if v := os.Getenv("CRYPTO_KEY"); v != "" {
 		Global.Crypto.Key = v
+	}
+	if v := os.Getenv("ADMIN_PASSWORD"); v != "" {
+		Global.Server.AdminPassword = v
 	}
 
 	if Global.JWT.Expire == 0 {
@@ -74,9 +89,5 @@ func Load(path string) error {
 }
 
 func (d DatabaseConfig) DSN() string {
-	return d.Username + ":" + d.Password + "@tcp(" + d.Host + ":" + itoa(d.Port) + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=Local"
-}
-
-func itoa(i int) string {
-	return strconv.Itoa(i)
+	return d.Username + ":" + url.QueryEscape(d.Password) + "@tcp(" + d.Host + ":" + strconv.Itoa(d.Port) + ")/" + d.DBName + "?charset=" + d.Charset + "&parseTime=True&loc=Local"
 }

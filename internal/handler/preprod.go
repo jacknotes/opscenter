@@ -175,7 +175,11 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 	}
 	defer h.lockManager.Unlock(preview.ServerID, username)
 
-	command := preview.Params["command"].(string)
+	command, _ := preview.Params["command"].(string)
+	if command == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览命令为空"})
+		return
+	}
 	output, err := h.sshManager.ExecuteWithPipe(&server, command, server.ScriptPassword)
 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接

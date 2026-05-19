@@ -15,10 +15,13 @@ type LockInfo struct {
 
 type LockManager struct {
 	locks sync.Map
+	stop  chan struct{}
 }
 
 func NewLockManager() *LockManager {
-	lm := &LockManager{}
+	lm := &LockManager{
+		stop: make(chan struct{}),
+	}
 	go lm.cleanup()
 	return lm
 }
@@ -86,18 +89,27 @@ func (lm *LockManager) IsLocked(serverID uint) (bool, *LockInfo) {
 	return true, info
 }
 
+func (lm *LockManager) Stop() {
+	close(lm.stop)
+}
+
 func (lm *LockManager) cleanup() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		now := time.Now()
-		lm.locks.Range(func(key, value interface{}) bool {
-			info := value.(*LockInfo)
-			if now.After(info.ExpiresAt) {
-				lm.locks.Delete(key)
-			}
-			return true
-		})
+	for {
+		select {
+		case <-lm.stop:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			lm.locks.Range(func(key, value interface{}) bool {
+				info := value.(*LockInfo)
+				if now.After(info.ExpiresAt) {
+					lm.locks.Delete(key)
+				}
+				return true
+			})
+		}
 	}
 }

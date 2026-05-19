@@ -109,7 +109,7 @@ const isCollapse = ref(false)
 
 const changePwdVisible = ref(false)
 const changePwdLoading = ref(false)
-const changePwdForm = ref({ old_password: '', new_password: '' })
+const changePwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
 
 onMounted(async () => {
   try {
@@ -142,7 +142,8 @@ async function submitChangePwd() {
   }
   changePwdLoading.value = true
   try {
-    await changePassword(userStore.userInfo.id, changePwdForm.value)
+    const { old_password, new_password } = changePwdForm.value
+    await changePassword(userStore.userInfo.id, { old_password, new_password })
     ElMessage.success('密码修改成功')
     changePwdVisible.value = false
   } catch (e) {

@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"opscenter/internal/model"
+	"opscenter/internal/service"
 )
 
 func (h *ServerHandler) auditLog(c *gin.Context, action, target, detail, status, output string) {
@@ -267,7 +268,7 @@ func (h *ServerHandler) TestConnection(c *gin.Context) {
 	config := &ssh.ClientConfig{
 		User:            server.Username,
 		Auth:            []ssh.AuthMethod{auth},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: service.GetHostKeyCallback(),
 		Timeout:         10 * time.Second,
 	}
 

@@ -171,6 +171,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl } from '../api'
 import { useWebSocket } from '../composables/useWebSocket'
+import { useUserStore } from '../stores/user'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage } from 'element-plus'
 
@@ -188,6 +189,7 @@ const executing = ref(false)
 const currentAction = ref('')
 
 // Streaming state
+const userStore = useUserStore()
 const { outputLines, status: streamStatus, connect: wsConnect } = useWebSocket()
 const search = ref('')
 const currentPage = ref(1)
@@ -319,8 +321,12 @@ function toggleSelectAll() {
 }
 
 async function handleRefresh() {
-  await loadData()
-  ElMessage.success('刷新成功')
+  try {
+    await loadData()
+    ElMessage.success('刷新成功')
+  } catch (e) {
+    // loadData 已处理错误提示
+  }
 }
 
 onMounted(async () => {
@@ -483,6 +489,7 @@ function executePreview() {
 
   const url = getWebSocketUrl('/api/ws/exec')
   wsConnect(url, previewId.value, {
+    token: userStore.token,
     onDone: async () => {
       executing.value = false
       ElMessage.success('执行成功')

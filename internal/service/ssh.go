@@ -2,13 +2,20 @@ package service
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
+	"opscenter/internal/config"
 	"opscenter/internal/model"
 )
 
@@ -33,6 +40,31 @@ func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	}
 
 	return m.connect(server)
+}
+
+func hostKeyCallback() ssh.HostKeyCallback {
+	knownHostsPath := config.Global.Server.KnownHostsPath
+	if knownHostsPath == "" {
+		log.Println("警告: 未配置 known_hosts_path，跳过 SSH 主机密钥验证（不推荐生产环境）")
+		return ssh.InsecureIgnoreHostKey()
+	}
+
+	// 展开 ~ 路径
+	if strings.HasPrefix(knownHostsPath, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("警告: 获取用户主目录失败: %v，跳过主机密钥验证", err)
+			return ssh.InsecureIgnoreHostKey()
+		}
+		knownHostsPath = filepath.Join(home, knownHostsPath[2:])
+	}
+
+	callback, err := knownhosts.New(knownHostsPath)
+	if err != nil {
+		log.Printf("警告: 加载 known_hosts 文件失败 (%s): %v，跳过主机密钥验证", knownHostsPath, err)
+		return ssh.InsecureIgnoreHostKey()
+	}
+	return callback
 }
 
 func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
@@ -61,7 +93,7 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	config := &ssh.ClientConfig{
 		User:            server.Username,
 		Auth:            []ssh.AuthMethod{auth},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: hostKeyCallback(),
 		Timeout:         10 * time.Second,
 	}
 
@@ -108,7 +140,9 @@ func (m *SSHManager) Execute(server *model.Server, command string) (string, erro
 }
 
 func (m *SSHManager) ExecuteWithPipe(server *model.Server, command, password string) (string, error) {
-	fullCommand := fmt.Sprintf("echo '%s' | %s", password, command)
+	// 使用 base64 编码密码，避免单引号和 shell 元字符导致的命令注入
+	encoded := base64.StdEncoding.EncodeToString([]byte(password))
+	fullCommand := fmt.Sprintf("echo '%s' | base64 -d | %s", encoded, command)
 	return m.Execute(server, fullCommand)
 }
 
@@ -236,6 +270,12 @@ var (
 	lvsCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|status|op\s+\d{1,3}\s+\d{1,3}\s+(on|off)|swap\s+\d{1,3}\s+\d{1,3}\s+\d{1,3})$`)
 	k8sCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|single_(online|sync|rollback)\s+[\w.-]+\s+[\w-]+|full_(online|sync|rollback)|scale(down|up)(\s+[\w.-]+)*)$`)
 	nginxCommandPattern = regexp.MustCompile(`^(cat|cp|sed\s+-i|nginx\s+(-t|-s\s+reload)|ls)\s+[\w/.%*-]+$`)
+
+	validateProjectNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	validateNamespacePattern   = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+
+	// 文件路径中不允许的字符（防注入）
+	unsafePathChars = regexp.MustCompile(`[;&|$\x60]`)
 )
 
 func ValidateCommand(serverType, command string) bool {
@@ -261,17 +301,44 @@ func ValidateIP(ip string) bool {
 			return false
 		}
 	}
-	return true
+	// 不能以 0 开头（除非就是 "0"），且范围 1-254
+	if ip[0] == '0' && len(ip) > 1 {
+		return false
+	}
+	n := 0
+	for _, c := range ip {
+		n = n*10 + int(c-'0')
+	}
+	return n >= 1 && n <= 254
 }
 
 // ValidateProjectName validates K8s project name
 func ValidateProjectName(name string) bool {
-	pattern := regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-	return pattern.MatchString(name)
+	return validateProjectNamePattern.MatchString(name)
 }
 
 // ValidateNamespace validates K8s namespace
 func ValidateNamespace(ns string) bool {
-	pattern := regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
-	return pattern.MatchString(ns)
+	return validateNamespacePattern.MatchString(ns)
+}
+
+// ValidateFilePath 校验文件路径不含 shell 元字符和路径穿越
+func ValidateFilePath(path string) bool {
+	if path == "" {
+		return false
+	}
+	// 禁止路径穿越
+	if strings.Contains(path, "..") {
+		return false
+	}
+	// 禁止 shell 元字符
+	if unsafePathChars.MatchString(path) {
+		return false
+	}
+	return true
+}
+
+// getHostKeyCallback 供 handler/server.go 的 TestConnection 使用
+func GetHostKeyCallback() ssh.HostKeyCallback {
+	return hostKeyCallback()
 }

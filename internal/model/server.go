@@ -31,6 +31,9 @@ type Server struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// 标记敏感字段是否已解密（防止 BeforeSave 重复加密）
+	decrypted bool `gorm:"-"`
 }
 
 // ServerResponse 用于返回给前端（不包含敏感信息）
@@ -89,24 +92,35 @@ func (s *Server) BeforeSave(tx *gorm.DB) error {
 	if key == "" {
 		return nil
 	}
+
+	// 如果字段已由 AfterFind 解密，直接加密
+	// 如果字段未解密（如直接 GORM Create），尝试检测是否已加密
+	encryptField := func(value string) (string, error) {
+		if value == "" {
+			return value, nil
+		}
+		if s.decrypted {
+			// 已解密，需要重新加密
+			return crypto.Encrypt(value, key)
+		}
+		// 未经过 AfterFind（如 Create），尝试解密判断是否已加密
+		if _, err := crypto.Decrypt(value, key); err == nil {
+			// 能解密，说明已加密，保持原值
+			return value, nil
+		}
+		// 不能解密，说明是明文，需要加密
+		return crypto.Encrypt(value, key)
+	}
+
 	var err error
-	if s.Password != "" {
-		s.Password, err = crypto.Encrypt(s.Password, key)
-		if err != nil {
-			return err
-		}
+	if s.Password, err = encryptField(s.Password); err != nil {
+		return err
 	}
-	if s.PrivateKey != "" {
-		s.PrivateKey, err = crypto.Encrypt(s.PrivateKey, key)
-		if err != nil {
-			return err
-		}
+	if s.PrivateKey, err = encryptField(s.PrivateKey); err != nil {
+		return err
 	}
-	if s.ScriptPassword != "" {
-		s.ScriptPassword, err = crypto.Encrypt(s.ScriptPassword, key)
-		if err != nil {
-			return err
-		}
+	if s.ScriptPassword, err = encryptField(s.ScriptPassword); err != nil {
+		return err
 	}
 	return nil
 }
@@ -140,5 +154,6 @@ func (s *Server) AfterFind(tx *gorm.DB) error {
 			s.ScriptPassword = decrypted
 		}
 	}
+	s.decrypted = true
 	return nil
 }

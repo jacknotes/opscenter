@@ -11,7 +11,15 @@ import (
 	"opscenter/internal/service"
 )
 
-func Setup(db *gorm.DB) *gin.Engine {
+// App 持有应用的所有组件，用于优雅停机
+type App struct {
+	Engine       *gin.Engine
+	SSHManager   *service.SSHManager
+	PreviewMgr   *service.PreviewManager
+	LockManager  *service.LockManager
+}
+
+func Setup(db *gorm.DB) *App {
 	r := gin.Default()
 
 	// Middleware
@@ -45,7 +53,6 @@ func Setup(db *gorm.DB) *gin.Engine {
 	// Public routes
 	api := r.Group("/api")
 	{
-		// Health check
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
@@ -53,13 +60,13 @@ func Setup(db *gorm.DB) *gin.Engine {
 		api.POST("/login", authHandler.Login)
 	}
 
+	// WebSocket (token verified in first message, not via middleware)
+	api.GET("/ws/exec", wsHandler.Handle)
+
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.Auth(), middleware.UserEnabledCheck(db))
 	{
-		// WebSocket
-		protected.GET("/ws/exec", wsHandler.Handle)
-
 		// User info
 		protected.GET("/user/info", authHandler.GetUserInfo)
 		protected.POST("/logout", authHandler.Logout)
@@ -159,5 +166,10 @@ func Setup(db *gorm.DB) *gin.Engine {
 		protected.PUT("/users/:id/password", authHandler.ChangePassword)
 	}
 
-	return r
+	return &App{
+		Engine:      r,
+		SSHManager:  sshManager,
+		PreviewMgr:  previewMgr,
+		LockManager: lockManager,
+	}
 }

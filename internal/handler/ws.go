@@ -5,21 +5,35 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
+	"opscenter/internal/middleware"
 	"opscenter/internal/model"
 	"opscenter/internal/service"
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		origins := config.Global.Server.AllowedOrigins
+		if len(origins) == 0 {
+			return true
+		}
+		origin := r.Header.Get("Origin")
+		for _, allowed := range origins {
+			if origin == allowed {
+				return true
+			}
+		}
+		return false
 	},
 }
 
@@ -48,6 +62,7 @@ func NewWSHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *servi
 
 type WSMessage struct {
 	Type      string `json:"type"`
+	Token     string `json:"token,omitempty"`
 	PreviewID string `json:"preview_id,omitempty"`
 	Data      string `json:"data,omitempty"`
 	Stream    string `json:"stream,omitempty"`
@@ -89,16 +104,33 @@ func (sc *safeConn) Close() error {
 	return sc.conn.Close()
 }
 
-func (h *WSHandler) Handle(c *gin.Context) {
-	username, _ := c.Get("username")
-	log.Printf("[WS] Connection from user: %v", username)
+// verifyWSToken 从消息中的 token 或 URL query 中验证 JWT
+func verifyWSToken(c *gin.Context, msgToken string) (*middleware.Claims, error) {
+	tokenString := msgToken
+	if tokenString == "" {
+		// 兼容：从 URL query 中取 token
+		tokenString = c.Query("token")
+	}
+	if tokenString == "" {
+		return nil, fmt.Errorf("未提供认证令牌")
+	}
 
+	claims := &middleware.Claims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.Global.JWT.Secret), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("无效的认证令牌")
+	}
+	return claims, nil
+}
+
+func (h *WSHandler) Handle(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[WS] Upgrade failed: %v", err)
 		return
 	}
-	log.Printf("[WS] Upgrade success for user: %v", username)
 
 	sc := &safeConn{conn: conn}
 
@@ -109,17 +141,6 @@ func (h *WSHandler) Handle(c *gin.Context) {
 			sc.WriteJSON(WSMessage{Type: "error", Message: fmt.Sprintf("服务内部错误: %v", r)})
 			sc.Close()
 		}
-	}()
-
-	connID := uuid.New().String()
-	usernameStr, _ := username.(string)
-	h.clients.Store(connID, &ConnInfo{
-		Username: usernameStr,
-		Conn:     conn,
-	})
-	defer func() {
-		h.clients.Delete(connID)
-		sc.Close()
 	}()
 
 	// Ping/pong heartbeat
@@ -146,31 +167,46 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		}
 	}()
 
-	// Read start message
+	// Read first message: must contain type="start", token, and preview_id
 	_, message, err := sc.ReadMessage()
 	if err != nil {
 		log.Printf("[WS] Read start message failed: %v", err)
 		sc.WriteJSON(WSMessage{Type: "error", Message: "读取请求超时或连接已断开"})
 		return
 	}
-	log.Printf("[WS] Received message: %s", string(message))
 
 	var msg WSMessage
 	if err := json.Unmarshal(message, &msg); err != nil || msg.Type != "start" || msg.PreviewID == "" {
-		log.Printf("[WS] Invalid message: type=%s, previewID=%s, err=%v", msg.Type, msg.PreviewID, err)
 		sc.WriteJSON(WSMessage{Type: "error", Message: "无效的请求"})
 		return
 	}
-	log.Printf("[WS] Start execution, previewID: %s", msg.PreviewID)
+
+	// 验证 JWT token（从消息中或 URL query 中）
+	claims, err := verifyWSToken(c, msg.Token)
+	if err != nil {
+		sc.WriteJSON(WSMessage{Type: "error", Message: err.Error()})
+		return
+	}
+
+	usernameStr := claims.Username
+	log.Printf("[WS] Authenticated user: %s", usernameStr)
+
+	connID := uuid.New().String()
+	h.clients.Store(connID, &ConnInfo{
+		Username: usernameStr,
+		Conn:     conn,
+	})
+	defer func() {
+		h.clients.Delete(connID)
+		sc.Close()
+	}()
 
 	// Get preview
 	preview, ok := h.previewMgr.Get(msg.PreviewID)
 	if !ok {
-		log.Printf("[WS] Preview not found or expired: %s", msg.PreviewID)
 		sc.WriteJSON(WSMessage{Type: "error", Message: "预览已过期或不存在，请重新预览"})
 		return
 	}
-	log.Printf("[WS] Preview found, module: %s, action: %s, serverID: %d", preview.Module, preview.Action, preview.ServerID)
 
 	if preview.Module != "preprod" {
 		sc.WriteJSON(WSMessage{Type: "error", Message: "预览类型不匹配"})
@@ -185,10 +221,8 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}
 
 	// Acquire lock
-	log.Printf("[WS] Trying lock for server %d, user %s", preview.ServerID, usernameStr)
 	locked, holder := h.lockManager.TryLock(preview.ServerID, usernameStr, 10*time.Minute)
 	if !locked {
-		log.Printf("[WS] Lock denied, held by: %s", holder.Username)
 		sc.WriteJSON(WSMessage{
 			Type:    "lock_error",
 			Message: fmt.Sprintf("操作正在进行中，请等待 (当前操作人: %s)", holder.Username),
@@ -196,7 +230,6 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		})
 		return
 	}
-	log.Printf("[WS] Lock acquired for server %d", preview.ServerID)
 
 	h.clients.Store(connID, &ConnInfo{
 		Username: usernameStr,
@@ -207,17 +240,12 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	command, _ := preview.Params["command"].(string)
 	if command == "" {
 		sc.WriteJSON(WSMessage{Type: "error", Message: "预览命令为空"})
+		h.lockManager.Unlock(preview.ServerID, usernameStr)
 		return
 	}
 
-	var userID uint
-	if uid, exists := c.Get("user_id"); exists {
-		if id, ok := uid.(uint); ok {
-			userID = id
-		}
-	}
 	logEntry := model.OperationLog{
-		UserID:     userID,
+		UserID:     claims.UserID,
 		Username:   usernameStr,
 		Module:     "preprod",
 		Action:     preview.Action,
@@ -230,7 +258,6 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}
 
 	// Stream execution
-	log.Printf("[WS] Starting stream execution: %s", command)
 	outputCh, errCh := h.sshManager.ExecuteStream(&server, command, server.ScriptPassword)
 
 	var allOutput []string
@@ -267,20 +294,15 @@ func (h *WSHandler) Handle(c *gin.Context) {
 
 	// Send completion status
 	if execErr != nil {
-		log.Printf("[WS] Execution failed: %v, output lines: %d", execErr, len(allOutput))
 		sc.WriteJSON(WSMessage{Type: "error", Message: execErr.Error()})
 		logEntry.Status = "failed"
 	} else {
-		log.Printf("[WS] Execution success, output lines: %d", len(allOutput))
 		sc.WriteJSON(WSMessage{Type: "done", Status: "success"})
 		logEntry.Status = "success"
 	}
 
 	// Write log and cleanup
-	outputStr := ""
-	for _, line := range allOutput {
-		outputStr += line + "\n"
-	}
+	outputStr := strings.Join(allOutput, "\n")
 	logEntry.Output = outputStr
 	h.db.Create(&logEntry)
 	h.previewMgr.Delete(msg.PreviewID)

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/middleware"
 	"opscenter/internal/model"
 )
@@ -74,7 +76,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 func (h *AuthHandler) GetUserInfo(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
 
 	var user model.User
 	if err := h.db.First(&user, userID).Error; err != nil {
@@ -89,7 +95,16 @@ func (h *AuthHandler) InitAdmin() {
 	var count int64
 	h.db.Model(&model.User{}).Count(&count)
 	if count == 0 {
-		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		adminPwd := config.Global.Server.AdminPassword
+		if adminPwd == "" {
+			adminPwd = "admin123"
+			log.Println("警告: 未配置 admin_password，使用默认密码 admin123，请尽快修改")
+		}
+		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(adminPwd), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("初始化管理员密码失败: %v", err)
+			return
+		}
 		h.db.Create(&model.User{
 			Username: "admin",
 			Password: string(hashedPwd),
@@ -97,6 +112,7 @@ func (h *AuthHandler) InitAdmin() {
 			Email:    "admin@example.com",
 			Role:     "admin",
 		})
+		log.Println("管理员账户已初始化")
 	}
 }
 
@@ -171,6 +187,16 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
+// getCurrentUserID 安全获取当前用户 ID
+func getCurrentUserID(c *gin.Context) (uint, bool) {
+	uid, exists := c.Get("user_id")
+	if !exists {
+		return 0, false
+	}
+	id, ok := uid.(uint)
+	return id, ok
+}
+
 func (h *AuthHandler) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -201,16 +227,22 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
 	// 不能修改自己的角色
-	currentUserID, _ := c.Get("user_id")
-	if currentUserID.(uint) == uint(id) && req.Role != user.Role {
+	if currentUserID == uint(id) && req.Role != user.Role {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能修改自己的角色"})
 		return
 	}
 
 	// 只有 admin 用户可以更改其他管理员的角色
 	currentUsername, _ := c.Get("username")
-	if user.Role == "admin" && currentUsername.(string) != "admin" && currentUserID.(uint) != uint(id) && req.Role != user.Role {
+	currentUsernameStr, _ := currentUsername.(string)
+	if user.Role == "admin" && currentUsernameStr != "admin" && currentUserID != uint(id) && req.Role != user.Role {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "只有 admin 用户可以更改其他管理员的角色"})
 		return
 	}
@@ -228,7 +260,7 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 			return
 		}
 		// 不能禁用自己
-		if currentUserID.(uint) == uint(id) && !*req.Enabled {
+		if currentUserID == uint(id) && !*req.Enabled {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用自己的账户"})
 			return
 		}
@@ -254,8 +286,12 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	}
 
 	// 不能删除自己
-	currentUserID, _ := c.Get("user_id")
-	if currentUserID.(uint) == uint(id) {
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+	if currentUserID == uint(id) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能删除自己"})
 		return
 	}
@@ -326,8 +362,12 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	}
 
 	// 只能改自己的密码
-	currentUserID, _ := c.Get("user_id")
-	if currentUserID.(uint) != uint(id) {
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+	if currentUserID != uint(id) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "只能修改自己的密码"})
 		return
 	}
@@ -374,8 +414,12 @@ func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	}
 
 	// 不能禁用自己
-	currentUserID, _ := c.Get("user_id")
-	if currentUserID.(uint) == uint(id) {
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+	if currentUserID == uint(id) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能禁用自己的账户"})
 		return
 	}

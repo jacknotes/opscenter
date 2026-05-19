@@ -292,8 +292,18 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	var commands []string
 	if cmds, ok := params["commands"].([]string); ok {
 		commands = cmds
+	} else if cmdsI, ok := params["commands"].([]interface{}); ok {
+		for _, c := range cmdsI {
+			if s, ok := c.(string); ok {
+				commands = append(commands, s)
+			}
+		}
 	} else if cmd, ok := params["command"].(string); ok {
 		commands = []string{cmd}
+	}
+	if len(commands) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "预览命令为空"})
+		return
 	}
 
 	var outputs []string

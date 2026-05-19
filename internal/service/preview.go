@@ -19,10 +19,13 @@ type PreviewData struct {
 
 type PreviewManager struct {
 	previews sync.Map
+	stop     chan struct{}
 }
 
 func NewPreviewManager() *PreviewManager {
-	pm := &PreviewManager{}
+	pm := &PreviewManager{
+		stop: make(chan struct{}),
+	}
 	go pm.cleanup()
 	return pm
 }
@@ -64,18 +67,27 @@ func (pm *PreviewManager) Delete(id string) {
 	pm.previews.Delete(id)
 }
 
+func (pm *PreviewManager) Stop() {
+	close(pm.stop)
+}
+
 func (pm *PreviewManager) cleanup() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		now := time.Now()
-		pm.previews.Range(func(key, value interface{}) bool {
-			data := value.(*PreviewData)
-			if now.After(data.ExpiresAt) {
-				pm.previews.Delete(key)
-			}
-			return true
-		})
+	for {
+		select {
+		case <-pm.stop:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			pm.previews.Range(func(key, value interface{}) bool {
+				data := value.(*PreviewData)
+				if now.After(data.ExpiresAt) {
+					pm.previews.Delete(key)
+				}
+				return true
+			})
+		}
 	}
 }

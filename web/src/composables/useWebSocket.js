@@ -6,7 +6,7 @@ export function useWebSocket() {
   const wsRef = ref(null)
   let connectTimer = null
 
-  function connect(url, previewId, { onDone, onError, onLockError } = {}) {
+  function connect(url, previewId, { token, onDone, onError, onLockError } = {}) {
     cleanup()
     outputLines.value = []
     status.value = 'connecting'
@@ -38,7 +38,7 @@ export function useWebSocket() {
     ws.onopen = () => {
       clearTimeout(connectTimer)
       status.value = 'streaming'
-      ws.send(JSON.stringify({ type: 'start', preview_id: previewId }))
+      ws.send(JSON.stringify({ type: 'start', preview_id: previewId, token: token || '' }))
     }
 
     ws.onmessage = (event) => {

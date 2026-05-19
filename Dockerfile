@@ -32,6 +32,7 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=backend-builder /app/opscenter .
+COPY --from=frontend-builder /app/web/dist ./web/dist
 
 EXPOSE 18080
 

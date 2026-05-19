@@ -73,6 +73,7 @@ const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
+const currentAction = ref('')
 
 onMounted(async () => {
   try {
@@ -106,6 +107,7 @@ async function handleOp(vsIp, rsIp, state) {
     const res = await lvsOpPreview({ server_id: serverId.value, vs_ip: vsIp, rs_ip: rsIp, state })
     previewData.value = res
     previewId.value = res.preview_id
+    currentAction.value = 'op'
     previewVisible.value = true
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '预览失败')
@@ -120,6 +122,7 @@ async function handleSwap(row) {
     const res = await lvsSwapPreview({ server_id: serverId.value, vs_ip: row.ip, rs_ip1: rs1.ip, rs_ip2: rs2.ip })
     previewData.value = res
     previewId.value = res.preview_id
+    currentAction.value = 'swap'
     previewVisible.value = true
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '预览失败')
@@ -129,7 +132,8 @@ async function handleSwap(row) {
 async function executePreview() {
   executing.value = true
   try {
-    const res = await lvsOpExecute({ preview_id: previewId.value })
+    const executeFn = currentAction.value === 'swap' ? lvsSwapExecute : lvsOpExecute
+    const res = await executeFn({ preview_id: previewId.value })
     output.value = res.output
     ElMessage.success('执行成功')
     previewVisible.value = false
