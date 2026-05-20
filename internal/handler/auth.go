@@ -124,14 +124,15 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 }
 
 func (h *AuthHandler) InitAdmin() {
-	var count int64
-	h.db.Model(&model.User{}).Count(&count)
-	if count == 0 {
-		adminPwd := config.Global.Server.AdminPassword
-		if adminPwd == "" {
-			adminPwd = "admin123"
-			log.Println("警告: 未配置 admin_password，使用默认密码 admin123，请尽快修改")
-		}
+	adminPwd := config.Global.Server.AdminPassword
+	if adminPwd == "" {
+		adminPwd = "admin123"
+		log.Println("警告: 未配置 admin_password，使用默认密码 admin123，请尽快修改")
+	}
+
+	var admin model.User
+	if err := h.db.Where("username = ?", "admin").First(&admin).Error; err != nil {
+		// admin 不存在，创建
 		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(adminPwd), bcrypt.DefaultCost)
 		if err != nil {
 			log.Printf("初始化管理员密码失败: %v", err)
@@ -145,6 +146,15 @@ func (h *AuthHandler) InitAdmin() {
 			Role:     "admin",
 		})
 		log.Println("管理员账户已初始化")
+	} else if adminPwd != "admin123" {
+		// admin 已存在且配置了自定义密码，同步更新
+		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(adminPwd), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("同步管理员密码失败: %v", err)
+			return
+		}
+		h.db.Model(&admin).Update("password", string(hashedPwd))
+		log.Println("管理员密码已从配置文件同步")
 	}
 }
 
