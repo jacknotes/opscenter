@@ -1234,9 +1234,9 @@ async function executePreview() {
 
 @media (max-width: 768px) {
   .server-table {
-    display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
   }
 
   :deep(.server-table .el-table__inner-wrapper) {
@@ -1244,9 +1244,9 @@ async function executePreview() {
   }
 
   .batch-table {
-    display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
   }
 
   :deep(.batch-table .el-table__inner-wrapper) {

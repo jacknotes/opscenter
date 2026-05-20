@@ -216,17 +216,18 @@
     padding: 0 10px !important;
   }
 
-  /* 表格允许水平滚动（兼容 Android） */
+  /* 表格允许水平滚动（兼容 Android 和 iOS） */
   .el-table {
-    display: block;
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
   }
 
   .el-table__inner-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
     min-width: 600px;
   }
 
