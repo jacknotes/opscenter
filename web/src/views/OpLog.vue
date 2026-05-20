@@ -33,7 +33,9 @@
       </template>
 
       <el-table :data="logs" stripe border>
-        <el-table-column prop="created_at" label="时间" width="180" />
+        <el-table-column prop="created_at" label="时间" width="180">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column prop="username" label="操作人" width="100" />
         <el-table-column prop="module" label="模块" width="100">
           <template #default="{ row }">
@@ -114,6 +116,11 @@ function moduleLabel(m) {
 
 function moduleTagType(m) {
   return moduleTagTypes[m] || ''
+}
+
+function formatTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
 }
 
 function onDateChange() {
