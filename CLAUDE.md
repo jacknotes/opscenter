@@ -83,6 +83,13 @@ MySQL + GORM 自动迁移。三张表：`users`、`servers`、`operation_logs`�
 
 `config.yaml`（已 gitignore）— 从 `config.yaml.example` 复制。主要配置项：`server`（host/port/admin_password/allowed_origins/known_hosts_path）、`database`（MySQL 连接信息）、`jwt`（密钥/过期时间）、`crypto`（AES 密钥）。
 
+### Admin 密码管理
+
+- admin 用户受保护，不能通过 UI 删除、禁用或重置密码
+- 重置 admin 密码：修改 `config.yaml` 的 `server.admin_password` 后重启服务，密码自动同步
+- 支持环境变量 `ADMIN_PASSWORD` 覆盖
+- 首次启动未配置时默认密码为 `admin123`
+
 ## 部署
 
 - **Docker**: `Dockerfile` 为多阶段构建（Node 20 前端 → Go 1.25 后端 → Alpine 3.19 运行时）。`docker-compose.yaml` 提供一键部署。

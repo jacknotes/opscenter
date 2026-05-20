@@ -167,9 +167,23 @@ crypto:
 首次启动时会自动创建管理员账号：
 
 - 用户名：`admin`
-- 密码：`admin123`
+- 密码：`admin123`（未配置 `admin_password` 时的默认值）
 
-**请在生产环境中立即修改默认密码！**
+**请在生产环境中通过 `config.yaml` 的 `server.admin_password` 配置强密码！**
+
+### 重置 Admin 密码
+
+admin 用户受保护，不能通过 Web 界面删除、禁用或重置密码。如需重置：
+
+1. 编辑 `config.yaml`，设置新的 `admin_password`
+2. 重启 OpsCenter 服务，密码自动同步
+
+```yaml
+server:
+  admin_password: your-new-password
+```
+
+Docker/K8s 环境可通过环境变量 `ADMIN_PASSWORD` 覆盖。
 
 ## 生产环境建议
 

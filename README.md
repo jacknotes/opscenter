@@ -191,6 +191,22 @@ http://localhost:18080/swagger/index.html
 - 操作日志完整记录所有变更
 - 敏感配置文件（`config.yaml`、含密码的 Shell 脚本）已加入 `.gitignore`，不会提交到仓库
 
+### Admin 账户保护
+
+admin 用户具有以下保护机制：
+
+- **禁止删除/禁用**：UI 和 API 均不允许删除或禁用 admin 用户
+- **禁止 UI 重置密码**：admin 密码不能通过 Web 界面重置，防止误操作或越权
+
+**重置 admin 密码**：修改 `config.yaml` 中的 `server.admin_password`，重启服务即可自动同步。
+
+```yaml
+server:
+  admin_password: your-new-password
+```
+
+也可通过环境变量 `ADMIN_PASSWORD` 覆盖。首次启动未配置时默认密码为 `admin123`。
+
 ### 密码加密存储
 
 数据库中的敏感字段（SSH 密码、私钥、脚本密码）采用 **AES-256-GCM** 认证加密，密钥通过 `config.yaml` 的 `crypto.key` 配置。
