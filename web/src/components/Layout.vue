@@ -123,9 +123,10 @@ onMounted(async () => {
 
 function handleCommand(cmd) {
   if (cmd === 'logout') {
-    userStore.logout()
-    router.push('/login').catch(() => {})
-    logout().catch(() => {})
+    logout().catch(() => {}).finally(() => {
+      userStore.logout()
+      router.push('/login').catch(() => {})
+    })
   } else if (cmd === 'changePwd') {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true

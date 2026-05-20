@@ -508,7 +508,7 @@ function getLinePrefix(type) {
 
 onMounted(async () => {
   try {
-    servers.value = await getServers('nginx')
+    servers.value = (await getServers('nginx')) || []
     if (servers.value.length > 0) {
       const saved = localStorage.getItem('nginx_server')
       if (saved && servers.value.some(s => s.id === Number(saved))) {

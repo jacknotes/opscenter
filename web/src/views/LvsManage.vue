@@ -77,7 +77,7 @@ const currentAction = ref('')
 
 onMounted(async () => {
   try {
-    servers.value = await getServers('lvs')
+    servers.value = (await getServers('lvs')) || []
     if (servers.value.length > 0) {
       const saved = localStorage.getItem('lvs_server')
       if (saved && servers.value.some(s => s.id === Number(saved))) {

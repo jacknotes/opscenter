@@ -25,7 +25,7 @@
         <el-table-column prop="username" label="用户名" min-width="100" />
         <el-table-column prop="server_type" label="类型" min-width="140">
           <template #default="{ row }">
-            <el-tag :type="row.server_type === 'lvs' ? '' : row.server_type === 'nginx' ? 'success' : row.server_type === 'preprod' ? 'warning' : 'info'">{{ row.server_type === 'kubernetes' ? 'Kubernetes' : row.server_type === 'preprod' ? 'Kubernetes-PrePro' : row.server_type }}</el-tag>
+            <el-tag :type="row.server_type === 'lvs' ? 'primary' : row.server_type === 'nginx' ? 'success' : row.server_type === 'preprod' ? 'warning' : 'info'">{{ row.server_type === 'kubernetes' ? 'Kubernetes' : row.server_type === 'preprod' ? 'Kubernetes-PrePro' : row.server_type }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="env" label="环境" width="80" />

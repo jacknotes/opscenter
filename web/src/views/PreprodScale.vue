@@ -37,7 +37,7 @@
         <el-table-column type="selection" width="45" />
         <el-table-column prop="category" label="类型" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.category === 'rollout' ? '' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
+            <el-tag :type="row.category === 'rollout' ? 'primary' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="300" />
@@ -331,7 +331,7 @@ async function handleRefresh() {
 
 onMounted(async () => {
   try {
-    servers.value = await getServers('preprod')
+    servers.value = (await getServers('preprod')) || []
     if (servers.value.length > 0) {
       const saved = localStorage.getItem('preprod_server')
       if (saved && servers.value.some(s => s.id === Number(saved))) {

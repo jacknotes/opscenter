@@ -179,7 +179,7 @@ async function handleRefresh() {
 
 onMounted(async () => {
   try {
-    servers.value = await getServers('kubernetes')
+    servers.value = (await getServers('kubernetes')) || []
     if (servers.value.length > 0) {
       const saved = localStorage.getItem('k8s_server')
       if (saved && servers.value.some(s => s.id === Number(saved))) {
