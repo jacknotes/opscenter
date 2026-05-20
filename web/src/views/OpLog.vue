@@ -19,14 +19,16 @@
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <span class="filter-label">状态:</span>
-          <el-select v-model="status" style="width: 100px" @change="loadData">
+          <el-select v-model="status" style="width: 150px" @change="loadData">
             <el-option label="全部" value="all" />
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
           </el-select>
           <span class="filter-label">操作人:</span>
-          <el-input v-model="username" style="width: 120px" placeholder="用户名" clearable @change="loadData" @clear="loadData" />
-          <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始" end-placeholder="结束" value-format="YYYY-MM-DD" style="width: 260px" @change="onDateChange" @clear="onDateChange" clearable />
+          <el-input v-model="username" style="width: 150px" placeholder="用户名" clearable @change="loadData" @clear="loadData" />
+          <div style="flex-shrink: 0; width: 240px;">
+            <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 100%" :shortcuts="dateShortcuts" @change="onDateChange" @clear="onDateChange" clearable />
+          </div>
         </div>
       </template>
 
@@ -88,6 +90,11 @@ const servers = ref([])
 const username = ref('')
 const status = ref('all')
 const dateRange = ref(null)
+const dateShortcuts = [
+  { text: '近一周', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return [s, e] } },
+  { text: '近一个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 1); return [s, e] } },
+  { text: '近三个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 3); return [s, e] } },
+]
 
 onMounted(async () => {
   try {
