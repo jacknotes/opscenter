@@ -31,6 +31,8 @@
             <el-tag :type="moduleTagType(row.module)" size="small">{{ moduleLabel(row.module) }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="ip" label="IP" width="130" show-overflow-tooltip />
+        <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
         <el-table-column prop="action" label="动作" width="100" />
         <el-table-column prop="target" label="目标" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="100">
