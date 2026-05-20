@@ -1232,6 +1232,28 @@ async function executePreview() {
   border-radius: 0;
 }
 
+@media (max-width: 768px) {
+  .server-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :deep(.server-table .el-table__inner-wrapper) {
+    min-width: 460px;
+  }
+
+  .batch-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :deep(.batch-table .el-table__inner-wrapper) {
+    min-width: 600px;
+  }
+}
+
 :deep(.server-table .el-table__header th) {
   background: #f5f7fa !important;
   color: #606266;
@@ -1559,7 +1581,8 @@ async function executePreview() {
 /* ===== Batch Dialog ===== */
 .batch-dialog-body {
   max-height: 550px;
-  overflow-y: auto;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .batch-hint {

@@ -191,6 +191,21 @@
     margin: 5vh auto !important;
   }
 
+  /* 弹窗内代码块可横向滚动 */
+  .el-dialog pre {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* 表单输入框自适应 */
+  .el-dialog .el-input,
+  .el-dialog .el-select,
+  .el-dialog .el-textarea {
+    width: 100% !important;
+  }
+
   /* 主内容区减少 padding */
   .el-main {
     padding: 10px !important;
@@ -201,10 +216,18 @@
     padding: 0 10px !important;
   }
 
-  /* 表格允许水平滚动 */
+  /* 表格允许水平滚动（兼容 Android） */
   .el-table {
+    display: block;
     width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .el-table__inner-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 600px;
   }
 
   /* 分页器紧凑 */
