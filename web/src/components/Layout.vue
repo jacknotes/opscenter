@@ -1,13 +1,13 @@
 <template>
   <el-container style="height: 100vh">
-    <el-aside :width="isCollapse ? '64px' : '220px'" style="background-color: var(--sidebar-bg);">
+    <el-aside :width="appStore.isCollapse ? '64px' : '220px'" style="background-color: var(--sidebar-bg);">
       <div style="height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: bold; white-space: nowrap; overflow: hidden;">
-        {{ isCollapse ? 'OC' : 'OpsCenter' }}
+        {{ appStore.isCollapse ? 'OC' : 'OpsCenter' }}
       </div>
       <el-menu
         :default-active="route.path"
         router
-        :collapse="isCollapse"
+        :collapse="appStore.isCollapse"
         :collapse-transition="false"
         background-color="var(--sidebar-bg)"
         text-color="var(--sidebar-text)"
@@ -47,8 +47,8 @@
         </el-menu-item>
       </el-menu>
 
-      <div style="position: absolute; bottom: 0; width: 100%; display: flex; justify-content: center; padding: 10px 0; cursor: pointer; color: var(--sidebar-text);" @click="isCollapse = !isCollapse">
-        <el-icon :size="20"><Fold v-if="!isCollapse" /><Expand v-else /></el-icon>
+      <div style="position: absolute; bottom: 0; width: 100%; display: flex; justify-content: center; padding: 10px 0; cursor: pointer; color: var(--sidebar-text);" @click="appStore.toggleCollapse()">
+        <el-icon :size="20"><Fold v-if="!appStore.isCollapse" /><Expand v-else /></el-icon>
       </div>
     </el-aside>
 
@@ -98,6 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
+import { useAppStore } from '../stores/app'
 import { getUserInfo, changePassword, logout } from '../api'
 import { ElMessage } from 'element-plus'
 import { Monitor, Connection, Document, Box, ZoomOut, List, Setting, Fold, Expand, UserFilled, ArrowDown } from '@element-plus/icons-vue'
@@ -105,7 +106,7 @@ import { Monitor, Connection, Document, Box, ZoomOut, List, Setting, Fold, Expan
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const isCollapse = ref(false)
+const appStore = useAppStore()
 
 const changePwdVisible = ref(false)
 const changePwdLoading = ref(false)
