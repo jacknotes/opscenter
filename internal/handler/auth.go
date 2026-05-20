@@ -440,6 +440,11 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	if user.Username == "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "不允许重置 admin 用户密码"})
+		return
+	}
+
 	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
