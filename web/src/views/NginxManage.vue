@@ -68,7 +68,7 @@
                 >切换</el-button>
               </div>
             </template>
-            <el-table :data="upstream.servers" size="small" :row-class-name="({ row }) => isServerSelected(upstream.name, row) ? 'selected-row' : ''" class="server-table">
+            <el-table :data="upstream.servers" size="small" :row-class-name="({ row }) => isServerSelected(upstream.name, row) ? 'selected-row' : ''" class="server-table" v-force-reflow>
               <el-table-column width="50">
                 <template #header>
                   <el-checkbox :model-value="isUpstreamAllSelected(upstream)" @change="val => toggleUpstreamAll(upstream, val)" />
@@ -109,7 +109,7 @@
 
     <!-- Backup Dialog -->
     <el-dialog v-model="backupDialogVisible" title="备份列表" width="700px" class="cool-dialog">
-      <el-table :data="backupList" size="small" max-height="400" v-loading="loadingBackups" class="backup-table">
+      <el-table :data="backupList" size="small" max-height="400" v-loading="loadingBackups" class="backup-table" v-force-reflow>
         <el-table-column label="文件名" min-width="200">
           <template #default="{ row }">{{ row.name }}</template>
         </el-table-column>
@@ -193,7 +193,7 @@
             {{ isBatchAllSelected ? '取消全选' : '全选' }}
           </el-button>
         </div>
-        <el-table :data="batchItems" size="small" max-height="500" class="batch-table">
+        <el-table :data="batchItems" size="small" max-height="500" class="batch-table" v-force-reflow>
           <el-table-column label="启用" width="60" align="center">
             <template #default="{ row }">
               <el-checkbox v-model="row.enabled" :disabled="!row.hasBoth && !row.hasMultipleUp" />

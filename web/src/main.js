@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import './assets/global.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import { forceReflow } from './directives/forceReflow'
 
 import App from './App.vue'
 import router from './router'
@@ -13,5 +14,6 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
+app.directive('force-reflow', forceReflow)
 
 app.mount('#app')

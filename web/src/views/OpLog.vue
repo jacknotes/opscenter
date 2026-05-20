@@ -32,7 +32,7 @@
         </div>
       </template>
 
-      <el-table :data="logs" stripe border>
+      <el-table :data="logs" stripe border v-force-reflow>
         <el-table-column prop="created_at" label="时间" width="180">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>

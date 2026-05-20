@@ -10,7 +10,7 @@
         </div>
       </template>
 
-      <el-table :data="lvsData" stripe border>
+      <el-table :data="lvsData" stripe border v-force-reflow>
         <el-table-column prop="ip" label="Virtual Server" width="150">
           <template #default="{ row }">{{ row.ip }}:{{ row.port }}</template>
         </el-table-column>

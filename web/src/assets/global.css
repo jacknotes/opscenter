@@ -209,6 +209,7 @@
   /* 主内容区减少 padding */
   .el-main {
     padding: 10px !important;
+    overflow-x: hidden;
   }
 
   /* Header 缩小 */

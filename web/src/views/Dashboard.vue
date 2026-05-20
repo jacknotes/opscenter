@@ -23,7 +23,7 @@
           <el-button text type="primary" @click="$router.push('/logs')">查看全部</el-button>
         </div>
       </template>
-      <el-table :data="logs" stripe v-if="logs.length > 0">
+      <el-table :data="logs" stripe v-if="logs.length > 0" v-force-reflow>
         <el-table-column prop="created_at" label="时间" width="180" />
         <el-table-column prop="username" label="操作人" width="100" />
         <el-table-column prop="module" label="模块" width="100">

@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <el-table :data="users" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''" @selection-change="handleSelectionChange" ref="tableRef">
+      <el-table :data="users" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow>
         <el-table-column type="selection" width="45" />
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="状态" width="80" align="center">
