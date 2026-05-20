@@ -121,6 +121,22 @@
   margin: 0;
 }
 
+/* Cyan Button - 青色辅助按钮 */
+.el-button--cyan {
+  --el-button-bg-color: #009688;
+  --el-button-border-color: #009688;
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: #26a69a;
+  --el-button-hover-border-color: #26a69a;
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #00796b;
+  --el-button-active-border-color: #00796b;
+  --el-button-active-text-color: #fff;
+  --el-button-disabled-bg-color: #80cbc4;
+  --el-button-disabled-border-color: #80cbc4;
+  --el-button-disabled-text-color: #fff;
+}
+
 /* Page transition */
 .page-fade-enter-active,
 .page-fade-leave-active {

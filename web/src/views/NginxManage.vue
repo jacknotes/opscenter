@@ -37,14 +37,14 @@
 
       <!-- Toolbar -->
       <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-        <el-button type="danger" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
-        <el-button :type="isAllSelected ? 'warning' : 'primary'" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
         <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
         <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
         <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
         <el-button type="success" @click="handleViewConfig">查看配置</el-button>
-        <el-button type="success" @click="handleRefresh">刷新</el-button>
+        <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
       </div>
 
       <!-- Upstream Groups -->
@@ -118,7 +118,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button type="warning" size="small" @click="handleRollbackFromDialog(row.name)">回滚</el-button>
+            <el-button type="danger" size="small" @click="handleRollbackFromDialog(row.name)">回滚</el-button>
           </template>
         </el-table-column>
       </el-table>

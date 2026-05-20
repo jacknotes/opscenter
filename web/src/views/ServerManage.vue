@@ -6,7 +6,7 @@
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
           <el-button type="success" @click="handleTest" :disabled="!selectedRow">测试连接</el-button>
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
-          <el-button type="warning" @click="handleCopySelected" :disabled="!selectedRow">复制</el-button>
+          <el-button type="info" class="el-button--cyan" @click="handleCopySelected" :disabled="!selectedRow">复制</el-button>
           <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow">删除</el-button>
         </div>
       </template>
