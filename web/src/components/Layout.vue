@@ -1,6 +1,7 @@
 <template>
   <el-container style="height: 100vh">
-    <el-aside :width="appStore.isCollapse ? '64px' : '220px'" style="background-color: var(--sidebar-bg);">
+    <!-- 桌面端侧边栏 -->
+    <el-aside class="desktop-sidebar" :width="appStore.isCollapse ? '64px' : '220px'" style="background-color: var(--sidebar-bg);">
       <div style="height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: bold; white-space: nowrap; overflow: hidden;">
         {{ appStore.isCollapse ? 'OC' : 'OpsCenter' }}
       </div>
@@ -52,9 +53,62 @@
       </div>
     </el-aside>
 
+    <!-- 手机端抽屉侧边栏 -->
+    <el-drawer v-model="drawerVisible" direction="ltr" :size="220" :show-close="false" class="mobile-drawer">
+      <template #header>
+        <div style="color: #fff; font-size: 18px; font-weight: bold;">OpsCenter</div>
+      </template>
+      <el-menu
+        :default-active="route.path"
+        router
+        :collapse="false"
+        :collapse-transition="false"
+        background-color="var(--sidebar-bg)"
+        text-color="var(--sidebar-text)"
+        active-text-color="var(--sidebar-active-text)"
+        @select="drawerVisible = false"
+      >
+        <el-menu-item index="/dashboard">
+          <el-icon><Monitor /></el-icon>
+          <template #title>总览</template>
+        </el-menu-item>
+        <el-menu-item index="/lvs">
+          <el-icon><Connection /></el-icon>
+          <template #title>LVS管理</template>
+        </el-menu-item>
+        <el-menu-item index="/nginx">
+          <el-icon><Document /></el-icon>
+          <template #title>Nginx管理</template>
+        </el-menu-item>
+        <el-menu-item index="/k8s">
+          <el-icon><Box /></el-icon>
+          <template #title>K8S发布</template>
+        </el-menu-item>
+        <el-menu-item index="/preprod">
+          <el-icon><ZoomOut /></el-icon>
+          <template #title>预生产扩缩容</template>
+        </el-menu-item>
+        <el-menu-item index="/logs">
+          <el-icon><List /></el-icon>
+          <template #title>日志审计</template>
+        </el-menu-item>
+        <el-menu-item v-if="userStore.isAdmin" index="/servers">
+          <el-icon><Setting /></el-icon>
+          <template #title>服务器管理</template>
+        </el-menu-item>
+        <el-menu-item v-if="userStore.isAdmin" index="/users">
+          <el-icon><UserFilled /></el-icon>
+          <template #title>用户管理</template>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
+
     <el-container>
       <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--card-bg);">
-        <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <el-icon class="mobile-menu-btn" :size="22" @click="drawerVisible = true"><Fold /></el-icon>
+          <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
+        </div>
         <div style="display: flex; align-items: center; gap: 16px;">
           <el-dropdown @command="handleCommand">
             <span style="cursor: pointer;">{{ userStore.userInfo?.username }} <el-icon><ArrowDown /></el-icon></span>
@@ -108,6 +162,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const appStore = useAppStore()
 
+const drawerVisible = ref(false)
 const changePwdVisible = ref(false)
 const changePwdLoading = ref(false)
 const changePwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
@@ -182,5 +237,25 @@ async function submitChangePwd() {
 
 :deep(.el-menu-item:hover) {
   background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 手机端：隐藏桌面侧边栏，显示汉堡按钮 */
+.mobile-menu-btn { display: none; }
+
+@media (max-width: 768px) {
+  .desktop-sidebar { display: none !important; }
+  .mobile-menu-btn { display: block; cursor: pointer; }
+}
+
+:deep(.mobile-drawer .el-drawer__header) {
+  background: var(--sidebar-bg);
+  color: #fff;
+  margin-bottom: 0;
+  padding: 16px 20px;
+}
+
+:deep(.mobile-drawer .el-drawer__body) {
+  padding: 0;
+  background: var(--sidebar-bg);
 }
 </style>

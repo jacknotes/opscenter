@@ -152,3 +152,64 @@
 .page-fade-leave-to {
   opacity: 0;
 }
+
+/* ===== 手机端响应式 (max-width: 768px) ===== */
+@media (max-width: 768px) {
+  /* 筛选栏：允许换行，隐藏文字标签，输入框自适应 */
+  .el-card__header > div {
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    display: none;
+  }
+
+  .el-card__header .el-select,
+  .el-card__header .el-input {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .el-card__header .el-date-editor {
+    width: 100% !important;
+  }
+
+  /* OpLog 日期选择器包裹层 */
+  .el-card__header > div > div {
+    width: 100% !important;
+    flex-shrink: 1 !important;
+  }
+
+  /* 工具栏按钮换行 */
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  /* 弹窗：手机端宽屏 */
+  .el-dialog {
+    width: 95% !important;
+    margin: 5vh auto !important;
+  }
+
+  /* 主内容区减少 padding */
+  .el-main {
+    padding: 10px !important;
+  }
+
+  /* Header 缩小 */
+  .el-header {
+    padding: 0 10px !important;
+  }
+
+  /* 表格允许水平滚动 */
+  .el-table {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  /* 分页器紧凑 */
+  .el-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
