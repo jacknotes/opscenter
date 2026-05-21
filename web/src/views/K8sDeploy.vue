@@ -12,6 +12,11 @@
       </template>
 
       <div class="toolbar" style="margin-bottom: 15px;">
+        <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
+          <el-option label="全部" value="all" />
+          <el-option label="待发布" value="pending" />
+          <el-option label="已上线" value="online" />
+        </el-select>
         <el-button type="info" class="el-button--cyan" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
@@ -100,6 +105,7 @@ const executing = ref(false)
 const output = ref('')
 const currentAction = ref('')
 const search = ref('')
+const statusFilter = ref('all')
 const tableRef = ref(null)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -107,6 +113,11 @@ const skipSelectionSync = ref(false)
 
 const filteredRollouts = computed(() => {
   let list = rollouts.value.filter(r => r.status === 'Paused')
+  if (statusFilter.value === 'pending') {
+    list = list.filter(r => r.step === '1/5')
+  } else if (statusFilter.value === 'online') {
+    list = list.filter(r => r.step === '3/5')
+  }
   if (search.value) {
     const q = search.value.toLowerCase()
     list = list.filter(r =>
