@@ -155,9 +155,9 @@ func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, acti
 	return
 }
 
-// GenerateBackupCommand 生成配置文件备份命令，备份文件名带时间戳。
+// GenerateBackupCommand 生成配置文件备份命令，备份文件名带时间戳。自动创建备份目录。
 func (s *NginxService) GenerateBackupCommand(configPath, backupPath, configFile string) string {
-	return fmt.Sprintf("cp %s/%s %s/%s.bak.$(date +%%Y%%m%%d%%H%%M%%S)", configPath, configFile, backupPath, configFile)
+	return fmt.Sprintf("mkdir -p %s && cp %s/%s %s/%s.bak.$(date +%%Y%%m%%d%%H%%M%%S)", backupPath, configPath, configFile, backupPath, configFile)
 }
 
 // GenerateModifyCommand 生成 sed 命令用于批量上线/下线多个后端 IP。

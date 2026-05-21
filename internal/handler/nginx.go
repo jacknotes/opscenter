@@ -1452,12 +1452,8 @@ func (h *NginxHandler) Backups(c *gin.Context) {
 		return
 	}
 
-	cmd := fmt.Sprintf("ls -t %s", server.BackupPath)
-	output, err := h.sshManager.Execute(&server, cmd)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("获取备份列表失败: %v", err)})
-		return
-	}
+	cmd := fmt.Sprintf("ls -t %s 2>/dev/null", server.BackupPath)
+	output, _ := h.sshManager.Execute(&server, cmd)
 
 	files := splitLines(output)
 	c.JSON(http.StatusOK, files)
