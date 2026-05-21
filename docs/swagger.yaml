@@ -128,13 +128,6 @@ definitions:
     - items
     - server_id
     type: object
-  handler.NginxReloadRequest:
-    properties:
-      server_id:
-        type: integer
-    required:
-    - server_id
-    type: object
   handler.NginxRollbackRequest:
     properties:
       backup_file:
@@ -897,7 +890,7 @@ paths:
       - 认证
   /logs:
     get:
-      description: 分页查询操作日志，支持按模块、服务器、用户、状态、时间等筛选
+      description: 分页查询操作日志，支持按模块、服务器、用户、状态、时间、关键字等筛选
       parameters:
       - description: 页码，默认 1
         in: query
@@ -926,6 +919,10 @@ paths:
       - description: 操作类型
         in: query
         name: action
+        type: string
+      - description: 关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP）
+        in: query
+        name: keyword
         type: string
       - description: 开始时间 (2006-01-02)
         in: query
@@ -1219,42 +1216,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取 Nginx 配置文件列表
-      tags:
-      - Nginx
-  /nginx/reload:
-    post:
-      consumes:
-      - application/json
-      description: 测试并重载指定 Nginx 服务器的配置
-      parameters:
-      - description: 服务器 ID
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/handler.NginxReloadRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            type: object
-      security:
-      - BearerAuth: []
-      summary: 重载 Nginx 配置
       tags:
       - Nginx
   /nginx/rollback/execute:

@@ -163,6 +163,9 @@ func (s *NginxService) GenerateCleanupCommand(backupPath, configFile string, max
 // GenerateModifyCommand 生成 sed 命令用于批量上线/下线多个后端 IP。
 // 支持 :80 端口的自动省略匹配。
 func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamName string, backendIPs []string, action string) string {
+	if !ValidateUpstreamName(upstreamName) {
+		return ""
+	}
 	var ipParts []string
 	for _, ip := range backendIPs {
 		if idx := strings.LastIndex(ip, ":"); idx > 0 {
@@ -225,6 +228,9 @@ func (s *NginxService) GenerateSwapDiff(config, upstreamName, offlineIP, onlineI
 
 // GenerateSwapModifyCommands 生成切换操作的 sed 命令列表
 func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP string) []string {
+	if !ValidateUpstreamName(upstreamName) {
+		return nil
+	}
 	offlinePattern := offlineIP
 	if idx := strings.LastIndex(offlineIP, ":"); idx > 0 {
 		if offlineIP[idx+1:] == "80" {
@@ -280,6 +286,9 @@ func (s *NginxService) GenerateToggleDiff(config, upstreamName string) (before, 
 
 // GenerateToggleModifyCommands 生成组切换操作的 sed 命令列表（按 IP 精确匹配，避免相互干扰）
 func (s *NginxService) GenerateToggleModifyCommands(configPath, configFile, upstreamName string, servers []NginxServer) []string {
+	if !ValidateUpstreamName(upstreamName) {
+		return nil
+	}
 	var commands []string
 	for _, srv := range servers {
 		ipPattern := srv.IP

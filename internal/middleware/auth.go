@@ -4,6 +4,7 @@ package middleware
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"opscenter/internal/config"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -20,6 +22,27 @@ type Claims struct {
 	Username string `json:"username"`
 	Role     string `json:"role"`
 	jwt.RegisteredClaims
+}
+
+// tokenBlacklist 内存 token 黑名单，用于撤销已签发的 token
+var (
+	tokenBlacklist = make(map[string]struct{})
+	blacklistMu    sync.RWMutex
+)
+
+// BlacklistToken 将 token 的 jti 加入黑名单
+func BlacklistToken(jti string) {
+	blacklistMu.Lock()
+	defer blacklistMu.Unlock()
+	tokenBlacklist[jti] = struct{}{}
+}
+
+// IsBlacklisted 检查 jti 是否在黑名单中
+func IsBlacklisted(jti string) bool {
+	blacklistMu.RLock()
+	defer blacklistMu.RUnlock()
+	_, ok := tokenBlacklist[jti]
+	return ok
 }
 
 // Auth 返回 JWT 认证中间件。支持从 Authorization Header 或 URL query 参数 token 中提取令牌。
@@ -51,9 +74,17 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
+		// 检查 token 是否已被撤销
+		if claims.ID != "" && IsBlacklisted(claims.ID) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "认证令牌已被撤销"})
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
+		c.Set("jti", claims.ID)
 		c.Next()
 	}
 }
@@ -114,13 +145,14 @@ func AdminRequired(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GenerateToken 生成 JWT 令牌，包含用户 ID、用户名、角色信息，过期时间由配置决定。
+// GenerateToken 生成 JWT 令牌，包含用户 ID、用户名、角色信息和唯一标识 jti，过期时间由配置决定。
 func GenerateToken(userID uint, username, role string) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(config.Global.JWT.Expire)),
 		},
 	}

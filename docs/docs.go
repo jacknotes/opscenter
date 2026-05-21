@@ -768,7 +768,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询操作日志，支持按模块、服务器、用户、状态、时间等筛选",
+                "description": "分页查询操作日志，支持按模块、服务器、用户、状态、时间、关键字等筛选",
                 "produces": [
                     "application/json"
                 ],
@@ -817,6 +817,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "操作类型",
                         "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP）",
+                        "name": "keyword",
                         "in": "query"
                     },
                     {
@@ -1268,63 +1274,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "type": "object"
-                        }
-                    }
-                }
-            }
-        },
-        "/nginx/reload": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "测试并重载指定 Nginx 服务器的配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Nginx"
-                ],
-                "summary": "重载 Nginx 配置",
-                "parameters": [
-                    {
-                        "description": "服务器 ID",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handler.NginxReloadRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object"
                         }
@@ -3327,17 +3276,6 @@ const docTemplate = `{
                         "$ref": "#/definitions/handler.NginxBatchItem"
                     }
                 },
-                "server_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "handler.NginxReloadRequest": {
-            "type": "object",
-            "required": [
-                "server_id"
-            ],
-            "properties": {
                 "server_id": {
                     "type": "integer"
                 }

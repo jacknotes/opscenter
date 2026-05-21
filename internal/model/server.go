@@ -2,6 +2,7 @@ package model
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -36,6 +37,9 @@ type Server struct {
 
 	// 标记敏感字段是否已解密（防止 BeforeSave 重复加密）
 	decrypted bool `gorm:"-"`
+
+	// 保护加解密操作的互斥锁，防止并发场景下双重加密
+	encMu sync.Mutex `gorm:"-"`
 }
 
 // ServerResponse 用于返回给前端（不包含敏感信息）
@@ -87,13 +91,15 @@ func (s *Server) ToResponse() ServerResponse {
 }
 
 // TableName 指定 GORM 使用的表名为 servers。
-func (Server) TableName() string {
+func (*Server) TableName() string {
 	return "servers"
 }
 
 // BeforeSave 是 GORM 钩子，在保存前对敏感字段进行 AES-256-GCM 加密。
 // 若字段已解密则重新加密；若未经过解密流程（如新建记录），则尝试检测是否已加密。
 func (s *Server) BeforeSave(tx *gorm.DB) error {
+	s.encMu.Lock()
+	defer s.encMu.Unlock()
 	key := config.Global.Crypto.Key
 	if key == "" {
 		return nil
@@ -134,6 +140,8 @@ func (s *Server) BeforeSave(tx *gorm.DB) error {
 // AfterFind 是 GORM 钩子，在查询后对敏感字段进行 AES-256-GCM 解密。
 // 解密失败时降级为明文处理并打印警告日志。
 func (s *Server) AfterFind(tx *gorm.DB) error {
+	s.encMu.Lock()
+	defer s.encMu.Unlock()
 	key := config.Global.Crypto.Key
 	if key == "" {
 		return nil

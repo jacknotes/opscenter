@@ -99,6 +99,10 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if err := validateResourceNames(req.ResourceNames); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -162,6 +166,10 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 	var req PreprodScaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateResourceNames(req.ResourceNames); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -263,4 +271,14 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 	h.previewMgr.Delete(previewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})
+}
+
+// validateResourceNames 校验资源名称列表，防止命令注入
+func validateResourceNames(names []string) error {
+	for _, name := range names {
+		if !service.ValidateProjectName(name) {
+			return fmt.Errorf("资源名称 [%s] 包含非法字符", name)
+		}
+	}
+	return nil
 }

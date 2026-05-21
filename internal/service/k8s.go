@@ -102,6 +102,9 @@ func (s *K8sService) GenerateBatchPreview(scriptPath, action string, projects []
 }) []string {
 	var commands []string
 	for _, p := range projects {
+		if !ValidateProjectName(p.Name) || !ValidateNamespace(p.Namespace) {
+			continue
+		}
 		cmd := fmt.Sprintf("%s single_%s %s %s", scriptPath, action, p.Name, p.Namespace)
 		commands = append(commands, cmd)
 	}

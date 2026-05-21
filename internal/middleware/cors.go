@@ -9,25 +9,22 @@ import (
 )
 
 // CORS 返回跨域资源共享中间件。
-// 若配置了 allowed_origins 白名单则按名单校验，否则允许所有来源（开发环境兼容）。
+// 若配置了 allowed_origins 白名单则按名单精确校验并启用 credentials；否则不设置 Allow-Origin（安全默认）。
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origins := config.Global.Server.AllowedOrigins
 		origin := c.GetHeader("Origin")
 
 		if len(origins) == 0 {
-			// 无白名单配置，允许所有来源（开发环境兼容）
-			c.Header("Access-Control-Allow-Origin", "*")
+			// 无白名单配置，不设置 Allow-Origin，仅允许同源请求
+			// 如需跨域，请在 config.yaml 中配置 allowed_origins
 		} else {
-			allowed := false
 			for _, o := range origins {
 				if origin == o {
-					allowed = true
+					c.Header("Access-Control-Allow-Origin", origin)
+					c.Header("Access-Control-Allow-Credentials", "true")
 					break
 				}
-			}
-			if allowed {
-				c.Header("Access-Control-Allow-Origin", origin)
 			}
 		}
 

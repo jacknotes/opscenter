@@ -70,13 +70,12 @@ func Setup(db *gorm.DB) *App {
 		api.POST("/login", authHandler.Login)
 	}
 
-	// WebSocket (token verified in first message, not via middleware)
-	api.GET("/ws/exec", wsHandler.Handle)
-
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(middleware.Auth(), middleware.UserEnabledCheck(db))
 	{
+	// WebSocket (token from URL query param, verified by Auth middleware)
+	protected.GET("/ws/exec", wsHandler.Handle)
 		// User info
 		protected.GET("/user/info", authHandler.GetUserInfo)
 		protected.POST("/logout", authHandler.Logout)
@@ -138,7 +137,6 @@ func Setup(db *gorm.DB) *App {
 			nginx.POST("/upstream/toggle/execute", nginxHandler.ToggleExecute)
 			nginx.POST("/upstream/batch/preview", nginxHandler.BatchPreview)
 			nginx.POST("/upstream/batch/execute", nginxHandler.BatchExecute)
-			nginx.POST("/reload", nginxHandler.Reload)
 			nginx.POST("/rollback/preview", nginxHandler.RollbackPreview)
 			nginx.POST("/rollback/execute", nginxHandler.RollbackExecute)
 			nginx.GET("/backups", nginxHandler.Backups)

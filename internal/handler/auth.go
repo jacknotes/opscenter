@@ -91,6 +91,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 //	@Success		200	{object}	object
 //	@Router			/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
+	// 将当前 token 加入黑名单
+	if jti, exists := c.Get("jti"); exists {
+		if jtiStr, ok := jti.(string); ok {
+			middleware.BlacklistToken(jtiStr)
+		}
+	}
 	username, _ := c.Get("username")
 	createAuditLog(h.db, c, "auth", "logout", fmt.Sprintf("%v", username), "", "success", "登出成功", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
@@ -147,14 +153,17 @@ func (h *AuthHandler) InitAdmin() {
 		})
 		log.Println("管理员账户已初始化")
 	} else if adminPwd != "admin123" {
-		// admin 已存在且配置了自定义密码，同步更新
-		hashedPwd, err := bcrypt.GenerateFromPassword([]byte(adminPwd), bcrypt.DefaultCost)
-		if err != nil {
-			log.Printf("同步管理员密码失败: %v", err)
-			return
+		// admin 已存在且配置了非默认密码，检查是否需要同步
+		if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(adminPwd)); err != nil {
+			// 密码不一致，同步更新
+			hashedPwd, err := bcrypt.GenerateFromPassword([]byte(adminPwd), bcrypt.DefaultCost)
+			if err != nil {
+				log.Printf("同步管理员密码失败: %v", err)
+				return
+			}
+			h.db.Model(&admin).Update("password", string(hashedPwd))
+			log.Println("警告: 管理员密码已从配置文件同步，请确保这是预期操作")
 		}
-		h.db.Model(&admin).Update("password", string(hashedPwd))
-		log.Println("管理员密码已从配置文件同步")
 	}
 }
 

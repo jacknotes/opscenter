@@ -105,7 +105,7 @@ func (sc *safeConn) Close() error {
 }
 
 // verifyWSToken 从消息中的 token 或 URL query 中验证 JWT
-func verifyWSToken(c *gin.Context, msgToken string) (*middleware.Claims, error) {
+func verifyWSToken(c *gin.Context, msgToken string, db *gorm.DB) (*middleware.Claims, error) {
 	tokenString := msgToken
 	if tokenString == "" {
 		// 兼容：从 URL query 中取 token
@@ -122,6 +122,21 @@ func verifyWSToken(c *gin.Context, msgToken string) (*middleware.Claims, error) 
 	if err != nil || !token.Valid {
 		return nil, fmt.Errorf("无效的认证令牌")
 	}
+
+	// 检查 token 是否已被撤销
+	if claims.ID != "" && middleware.IsBlacklisted(claims.ID) {
+		return nil, fmt.Errorf("认证令牌已被撤销")
+	}
+
+	// 检查用户是否存在且启用
+	var user model.User
+	if err := db.First(&user, claims.UserID).Error; err != nil {
+		return nil, fmt.Errorf("用户不存在")
+	}
+	if !user.Enabled {
+		return nil, fmt.Errorf("账户已被禁用")
+	}
+
 	return claims, nil
 }
 
@@ -182,7 +197,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}
 
 	// 验证 JWT token（从消息中或 URL query 中）
-	claims, err := verifyWSToken(c, msg.Token)
+	claims, err := verifyWSToken(c, msg.Token, h.db)
 	if err != nil {
 		sc.WriteJSON(WSMessage{Type: "error", Message: err.Error()})
 		return

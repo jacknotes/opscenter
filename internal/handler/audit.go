@@ -2,6 +2,7 @@ package handler
 
 import (
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -9,6 +10,42 @@ import (
 
 	"opscenter/internal/model"
 )
+
+// 敏感字段匹配模式（键值类型，保留关键字替换值）
+var sensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(password|passwd|pwd)\s*[=:]\s*\S+`),
+	regexp.MustCompile(`(?i)--password[= ]\S+`),
+	regexp.MustCompile(`(?i)\-p\S+`), // MySQL -pPassword 格式
+	regexp.MustCompile(`(?i)(private_key|privkey)\s*[=:]\s*\S+`),
+	regexp.MustCompile(`(?i)(secret|token)\s*[=:]\s*\S+`),
+}
+
+// 全文替换模式（匹配的整体都是敏感的，直接替换为 ***）
+var fullMatchPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)echo\s+'[A-Za-z0-9+/=]+'\s*\|\s*base64\s`),
+	regexp.MustCompile(`(?i)echo\s+"[^"]*"\s*\|\s*sudo\s+-S`),
+}
+
+// sanitizeCommand 对命令中的敏感信息进行脱敏处理
+func sanitizeCommand(cmd string) string {
+	result := cmd
+	// 先处理全文替换模式
+	for _, pattern := range fullMatchPatterns {
+		result = pattern.ReplaceAllString(result, "*** ")
+	}
+	// 再处理键值替换模式（保留关键字，替换值）
+	for _, pattern := range sensitivePatterns {
+		result = pattern.ReplaceAllStringFunc(result, func(match string) string {
+			for _, sep := range []string{"=", ":", " "} {
+				if idx := strings.LastIndex(match, sep); idx > 0 {
+					return match[:idx+len(sep)] + "***"
+				}
+			}
+			return "***"
+		})
+	}
+	return result
+}
 
 // getClientIP 从请求头中提取客户端 IP 链。
 // 优先返回 X-Forwarded-For 完整链（保留所有代理节点，便于排查）；
@@ -43,7 +80,7 @@ func createAuditLog(db *gorm.DB, c *gin.Context, module, action, target, detail,
 		Module:     module,
 		Action:     action,
 		Target:     target,
-		Detail:     detail,
+		Detail:     sanitizeCommand(detail),
 		Status:     status,
 		Output:     output,
 		IP:         getClientIP(c),

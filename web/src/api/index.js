@@ -101,7 +101,6 @@ export const nginxTogglePreview = (data) => api.post('/nginx/upstream/toggle/pre
 export const nginxToggleExecute = (data) => api.post('/nginx/upstream/toggle/execute', data)
 export const nginxBatchPreview = (data) => api.post('/nginx/upstream/batch/preview', data)
 export const nginxBatchExecute = (data) => api.post('/nginx/upstream/batch/execute', data)
-export const nginxReload = (data) => api.post('/nginx/reload', data)
 export const nginxRollbackPreview = (data) => api.post('/nginx/rollback/preview', data)
 export const nginxRollbackExecute = (data) => api.post('/nginx/rollback/execute', data)
 export const getNginxBackups = (serverId, opts) => api.get('/nginx/backups', { params: { server_id: serverId }, ...opts })

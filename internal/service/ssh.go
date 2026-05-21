@@ -22,27 +22,47 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// SSHManager 管理 SSH 连接池，按服务器 ID 复用连接，支持单次执行和流式输出。
-type SSHManager struct {
-	clients map[uint]*ssh.Client
-	mu      sync.RWMutex
+// sshClient 包装 SSH 客户端，记录创建时间和最后使用时间
+type sshClient struct {
+	client    *ssh.Client
+	createdAt time.Time
+	lastUsed  time.Time
 }
 
-// NewSSHManager 创建一个新的 SSH 连接管理器。
+// SSHManager 管理 SSH 连接池，按服务器 ID 复用连接，支持单次执行和流式输出。
+type SSHManager struct {
+	clients     map[uint]*sshClient
+	mu          sync.RWMutex
+	maxIdle     time.Duration // 空闲超时
+	maxLifetime time.Duration // 最大生命周期
+}
+
+// NewSSHManager 创建一个新的 SSH 连接管理器，并启动定期清理。
 func NewSSHManager() *SSHManager {
-	return &SSHManager{
-		clients: make(map[uint]*ssh.Client),
+	m := &SSHManager{
+		clients:     make(map[uint]*sshClient),
+		maxIdle:     10 * time.Minute,
+		maxLifetime: 1 * time.Hour,
 	}
+	go m.cleanupStale()
+	return m
 }
 
 // GetClient 获取指定服务器的 SSH 客户端，优先从连接池中复用，不存在则新建连接。
+// 复用前检查连接是否过期（TTL 和空闲超时）。
 func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	m.mu.RLock()
-	client, ok := m.clients[server.ID]
+	sc, ok := m.clients[server.ID]
 	m.mu.RUnlock()
 
 	if ok {
-		return client, nil
+		now := time.Now()
+		if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(sc.lastUsed) > m.maxIdle {
+			m.CloseServer(server.ID)
+		} else {
+			sc.lastUsed = now
+			return sc.client, nil
+		}
 	}
 
 	return m.connect(server)
@@ -81,8 +101,14 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	defer m.mu.Unlock()
 
 	// Double check
-	if client, ok := m.clients[server.ID]; ok {
-		return client, nil
+	if sc, ok := m.clients[server.ID]; ok {
+		now := time.Now()
+		if now.Sub(sc.createdAt) <= m.maxLifetime && now.Sub(sc.lastUsed) <= m.maxIdle {
+			return sc.client, nil
+		}
+		// 过期，关闭旧连接
+		sc.client.Close()
+		delete(m.clients, server.ID)
 	}
 
 	var auth ssh.AuthMethod
@@ -99,7 +125,7 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 		return nil, fmt.Errorf("不支持的认证类型: %s", server.AuthType)
 	}
 
-	config := &ssh.ClientConfig{
+	sshCfg := &ssh.ClientConfig{
 		User:            server.Username,
 		Auth:            []ssh.AuthMethod{auth},
 		HostKeyCallback: hostKeyCallback(),
@@ -107,12 +133,17 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	}
 
 	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
-	client, err := ssh.Dial("tcp", addr, config)
+	client, err := ssh.Dial("tcp", addr, sshCfg)
 	if err != nil {
 		return nil, fmt.Errorf("SSH连接失败: %v", err)
 	}
 
-	m.clients[server.ID] = client
+	now := time.Now()
+	m.clients[server.ID] = &sshClient{
+		client:    client,
+		createdAt: now,
+		lastUsed:  now,
+	}
 	return client, nil
 }
 
@@ -164,10 +195,10 @@ func (m *SSHManager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, client := range m.clients {
-		client.Close()
+	for _, sc := range m.clients {
+		sc.client.Close()
 	}
-	m.clients = make(map[uint]*ssh.Client)
+	m.clients = make(map[uint]*sshClient)
 }
 
 // CloseServer 关闭指定服务器的SSH连接，强制下次请求重新连接
@@ -175,9 +206,26 @@ func (m *SSHManager) CloseServer(serverID uint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if client, ok := m.clients[serverID]; ok {
-		client.Close()
+	if sc, ok := m.clients[serverID]; ok {
+		sc.client.Close()
 		delete(m.clients, serverID)
+	}
+}
+
+// cleanupStale 定期清理过期的 SSH 连接
+func (m *SSHManager) cleanupStale() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		m.mu.Lock()
+		now := time.Now()
+		for id, sc := range m.clients {
+			if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(sc.lastUsed) > m.maxIdle {
+				sc.client.Close()
+				delete(m.clients, id)
+			}
+		}
+		m.mu.Unlock()
 	}
 }
 
@@ -290,6 +338,8 @@ var (
 
 	validateProjectNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 	validateNamespacePattern   = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+	validateUpstreamNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	validateConfigPatternPattern = regexp.MustCompile(`^[a-zA-Z0-9._*?-]+$`)
 
 	// 文件路径中不允许的字符（防注入）
 	unsafePathChars = regexp.MustCompile(`[;&|$\x60\n\r]`)
@@ -353,6 +403,28 @@ func ValidateFilePath(path string) bool {
 		return false
 	}
 	return true
+}
+
+// ValidateUpstreamName validates Nginx upstream name (alphanumeric, underscore, hyphen)
+func ValidateUpstreamName(name string) bool {
+	return validateUpstreamNamePattern.MatchString(name)
+}
+
+// ValidateConfigPattern validates config file pattern (alphanumeric, dots, underscores, wildcards, hyphens)
+func ValidateConfigPattern(pattern string) bool {
+	return validateConfigPatternPattern.MatchString(pattern)
+}
+
+// ValidateDirectoryPath validates directory path (alphanumeric, slashes, dots, underscores, hyphens)
+func ValidateDirectoryPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	if strings.Contains(path, "..") {
+		return false
+	}
+	validateDirPattern := regexp.MustCompile(`^[a-zA-Z0-9/_.-]+$`)
+	return validateDirPattern.MatchString(path)
 }
 
 // getHostKeyCallback 供 handler/server.go 的 TestConnection 使用

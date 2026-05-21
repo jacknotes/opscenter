@@ -27,6 +27,20 @@ func NewServerHandler(db *gorm.DB) *ServerHandler {
 	return &ServerHandler{db: db}
 }
 
+// validateServerFields 校验服务器的路径和配置模式字段，防止注入
+func validateServerFields(s *model.Server) error {
+	if s.ConfigPath != "" && !service.ValidateDirectoryPath(s.ConfigPath) {
+		return fmt.Errorf("配置路径 [%s] 包含非法字符", s.ConfigPath)
+	}
+	if s.BackupPath != "" && !service.ValidateDirectoryPath(s.BackupPath) {
+		return fmt.Errorf("备份路径 [%s] 包含非法字符", s.BackupPath)
+	}
+	if s.ConfigPattern != "" && !service.ValidateConfigPattern(s.ConfigPattern) {
+		return fmt.Errorf("配置模式 [%s] 包含非法字符", s.ConfigPattern)
+	}
+	return nil
+}
+
 // List godoc
 //
 //	@Summary		获取服务器列表
@@ -59,8 +73,8 @@ func (h *ServerHandler) List(c *gin.Context) {
 
 	// 转换为响应格式（不包含敏感信息）
 	var responses []model.ServerResponse
-	for _, s := range servers {
-		responses = append(responses, s.ToResponse())
+	for i := range servers {
+		responses = append(responses, servers[i].ToResponse())
 	}
 
 	c.JSON(http.StatusOK, responses)
@@ -164,6 +178,12 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// 校验路径和配置模式，防止注入
+	if err := validateServerFields(&server); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// 使用 Select 明确指定要保存的字段，确保空字符串也能保存
 	if err := h.db.Select(
 		"name", "host", "port", "username", "auth_type",
@@ -211,6 +231,12 @@ func (h *ServerHandler) Update(c *gin.Context) {
 	var input model.Server
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	// 校验路径和配置模式，防止注入
+	if err := validateServerFields(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

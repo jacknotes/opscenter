@@ -43,10 +43,6 @@ type NginxConfigRequest struct {
 	ServerID uint `json:"server_id" binding:"required"`
 }
 
-type NginxReloadRequest struct {
-	ServerID uint `json:"server_id" binding:"required"`
-}
-
 type NginxRollbackRequest struct {
 	ServerID   uint   `json:"server_id" binding:"required"`
 	ConfigFile string `json:"config_file" binding:"required"`
@@ -84,6 +80,16 @@ func ensureTrailingSlash(path string) string {
 		return path + "/"
 	}
 	return path
+}
+
+// validateUpstreamNames 校验 upstream 名称列表，防止命令注入
+func validateUpstreamNames(names []string) error {
+	for _, name := range names {
+		if !service.ValidateUpstreamName(name) {
+			return fmt.Errorf("upstream 名称 [%s] 包含非法字符", name)
+		}
+	}
+	return nil
 }
 
 func extractStringSlice(params map[string]interface{}, key string) ([]string, error) {
@@ -279,6 +285,10 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := validateUpstreamNames(req.UpstreamNames); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -366,6 +376,10 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 		return
 	}
 	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateUpstreamNames(req.UpstreamNames); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -494,6 +508,10 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 		return
 	}
 	if err := validateConfigFile(req.ConfigFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateUpstreamNames(req.UpstreamNames); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -696,6 +714,10 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := validateUpstreamNames(req.UpstreamNames); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -895,6 +917,13 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 	if len(req.Items) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请至少选择一个操作"})
 		return
+	}
+
+	for _, item := range req.Items {
+		if !service.ValidateUpstreamName(item.UpstreamName) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("upstream 名称 [%s] 包含非法字符", item.UpstreamName)})
+			return
+		}
 	}
 
 	var server model.Server
@@ -1177,57 +1206,6 @@ func validateServerStatus(upstream *service.NginxUpstream, ip, expectedStatus st
 		}
 	}
 	return false
-}
-
-// Reload godoc
-//
-//	@Summary		重载 Nginx 配置
-//	@Description	测试并重载指定 Nginx 服务器的配置
-//	@Tags			Nginx
-//	@Accept			json
-//	@Produce		json
-//	@Security		BearerAuth
-//	@Param			request	body		NginxReloadRequest	true	"服务器 ID"
-//	@Success		200		{object}	object
-//	@Failure		400		{object}	object
-//	@Failure		404		{object}	object
-//	@Failure		500		{object}	object
-//	@Router			/nginx/reload [post]
-func (h *NginxHandler) Reload(c *gin.Context) {
-	var req NginxReloadRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
-		return
-	}
-
-	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
-		return
-	}
-
-	// Test config first
-	testCmd := nginxCmd + " -t"
-	testOutput, err := h.sshManager.Execute(&server, testCmd)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误: %s", testOutput)})
-		return
-	}
-
-	// Reload
-	reloadCmd := "systemctl reload nginx"
-	_, err = h.sshManager.Execute(&server, reloadCmd)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("reload失败: %v", err)})
-		return
-	}
-
-	createAuditLog(h.db, c, "nginx", "reload",
-		server.Name,
-		fmt.Sprintf("%s && %s", testCmd, reloadCmd), "success",
-		fmt.Sprintf("%s\nnginx reload 成功", testOutput), server.ID, server.Name)
-
-	c.JSON(http.StatusOK, gin.H{"message": "reload成功"})
 }
 
 // RollbackPreview godoc

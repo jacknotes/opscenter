@@ -103,6 +103,10 @@ func (h *K8sHandler) OnlinePreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if err := validateK8sProjects(req.Projects); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -168,6 +172,10 @@ func (h *K8sHandler) SyncPreview(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
+	if err := validateK8sProjects(req.Projects); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
@@ -231,6 +239,10 @@ func (h *K8sHandler) RollbackPreview(c *gin.Context) {
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if err := validateK8sProjects(req.Projects); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -504,4 +516,20 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	h.previewMgr.Delete(previewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": outputs, "status": "success"})
+}
+
+// validateK8sProjects 校验 K8s 项目的 name 和 namespace，防止命令注入
+func validateK8sProjects(projects []struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}) error {
+	for _, p := range projects {
+		if !service.ValidateProjectName(p.Name) {
+			return fmt.Errorf("项目名称 [%s] 包含非法字符", p.Name)
+		}
+		if !service.ValidateNamespace(p.Namespace) {
+			return fmt.Errorf("命名空间 [%s] 包含非法字符", p.Namespace)
+		}
+	}
+	return nil
 }
