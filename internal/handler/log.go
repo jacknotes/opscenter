@@ -22,7 +22,7 @@ func NewLogHandler(db *gorm.DB) *LogHandler {
 // List godoc
 //
 //	@Summary		获取操作日志列表
-//	@Description	分页查询操作日志，支持按模块、服务器、用户、状态、时间等筛选
+//	@Description	分页查询操作日志，支持按模块、服务器、用户、状态、时间、关键字等筛选
 //	@Tags			操作日志
 //	@Produce		json
 //	@Security		BearerAuth
@@ -33,6 +33,7 @@ func NewLogHandler(db *gorm.DB) *LogHandler {
 //	@Param			username	query		string	false	"用户名（模糊匹配）"
 //	@Param			status		query		string	false	"状态 (success/failed)"
 //	@Param			action		query		string	false	"操作类型"
+//	@Param			keyword		query		string	false	"关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP）"
 //	@Param			start_time	query		string	false	"开始时间 (2006-01-02)"
 //	@Param			end_time	query		string	false	"结束时间 (2006-01-02)"
 //	@Success		200			{object}	object
@@ -46,6 +47,7 @@ func (h *LogHandler) List(c *gin.Context) {
 	username := c.Query("username")
 	status := c.Query("status")
 	action := c.Query("action")
+	keyword := c.Query("keyword")
 	startTime := c.Query("start_time")
 	endTime := c.Query("end_time")
 
@@ -74,6 +76,10 @@ func (h *LogHandler) List(c *gin.Context) {
 	}
 	if action != "" {
 		query = query.Where("action = ?", action)
+	}
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		query = query.Where("username LIKE ? OR action LIKE ? OR target LIKE ? OR server_name LIKE ? OR ip LIKE ?", like, like, like, like, like)
 	}
 	if startTime != "" {
 		if t, err := time.Parse("2006-01-02", startTime); err == nil {

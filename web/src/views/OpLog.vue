@@ -4,7 +4,7 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">模块:</span>
-          <el-select v-model="module" style="width: 150px" @change="loadData">
+          <el-select v-model="module" style="width: 150px" @change="onModuleChange">
             <el-option label="全部" value="all" />
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
@@ -13,22 +13,16 @@
             <el-option label="认证" value="auth" />
             <el-option label="服务器" value="server" />
           </el-select>
-          <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" style="width: 150px" @change="loadData">
-            <el-option label="全部" :value="0" />
-            <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
           <span class="filter-label">状态:</span>
           <el-select v-model="status" style="width: 150px" @change="loadData">
             <el-option label="全部" value="all" />
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
           </el-select>
-          <span class="filter-label">操作人:</span>
-          <el-input v-model="username" style="width: 150px" placeholder="用户名" clearable @change="loadData" @clear="loadData" />
           <div style="flex-shrink: 0; width: 240px;">
             <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 100%" :shortcuts="dateShortcuts" @change="onDateChange" @clear="onDateChange" clearable />
           </div>
+          <el-input v-model="keyword" style="width: 250px; margin-left: 20px;" placeholder="搜索操作人/动作/目标/服务器/IP" clearable @change="onSearch" @clear="onSearch" />
         </div>
       </template>
 
@@ -79,7 +73,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getLogs, getServers } from '../api'
+import { getLogs } from '../api'
 import { ElMessage } from 'element-plus'
 
 const logs = ref([])
@@ -87,9 +81,7 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const module = ref('all')
-const serverId = ref(0)
-const servers = ref([])
-const username = ref('')
+const keyword = ref('')
 const status = ref('all')
 const dateRange = ref(null)
 const dateShortcuts = [
@@ -98,14 +90,19 @@ const dateShortcuts = [
   { text: '近三个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 3); return [s, e] } },
 ]
 
-onMounted(async () => {
-  try {
-    servers.value = await getServers()
-  } catch (e) {
-    console.error('Failed to load servers:', e)
-  }
+onMounted(() => {
   loadData()
 })
+
+function onModuleChange() {
+  page.value = 1
+  loadData()
+}
+
+function onSearch() {
+  page.value = 1
+  loadData()
+}
 
 const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' }
 const moduleTagTypes = { lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' }
@@ -132,8 +129,7 @@ async function loadData() {
   try {
     const params = { page: page.value, size: pageSize.value }
     if (module.value && module.value !== 'all') params.module = module.value
-    if (serverId.value && serverId.value !== 0) params.server_id = serverId.value
-    if (username.value) params.username = username.value
+    if (keyword.value) params.keyword = keyword.value
     if (status.value && status.value !== 'all') params.status = status.value
     if (dateRange.value && dateRange.value.length === 2) {
       params.start_time = dateRange.value[0]
