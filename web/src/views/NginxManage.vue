@@ -56,11 +56,11 @@
                 <span class="upstream-name">{{ upstream.name }}</span>
                 <div class="upstream-badges">
                   <span class="badge badge-info">{{ upstream.servers.length }} 台</span>
-                  <span class="badge badge-success">{{ upstream.servers.filter(s => s.status === 'up').length }} up</span>
-                  <span class="badge badge-danger">{{ upstream.servers.filter(s => s.status === 'down').length }} down</span>
+                  <span class="badge badge-success">{{ upstream.upCount }} up</span>
+                  <span class="badge badge-danger">{{ upstream.downCount }} down</span>
                 </div>
                 <el-button
-                  v-if="upstream.servers.some(s => s.status === 'up') && upstream.servers.some(s => s.status === 'down')"
+                  v-if="upstream.hasBoth"
                   type="warning"
                   size="small"
                   class="upstream-toggle-btn"
@@ -377,10 +377,8 @@ const backupList = computed(() => {
 // ===== Nginx config syntax highlighting =====
 const highlightedConfig = computed(() => {
   if (!rawConfig.value) return ''
-  return rawConfig.value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  const escapeHtml = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+  return escapeHtml(rawConfig.value)
     .replace(/(#.*)$/gm, '<span class="hl-comment">$1</span>')
     .replace(/^(\s*)([\w_]+(?:\s+[\w_]+)*)(?=\s)/gm, (match, indent, directive) => {
       if (directive.startsWith('#') || directive.startsWith('server')) return match
@@ -445,19 +443,25 @@ const selectedServers = computed(() => {
 
 const filteredUpstreams = computed(() => {
   const kw = filterKeyword.value.trim().toLowerCase()
-  if (!kw) return upstreams.value
-  return upstreams.value.filter(u => {
-    if (u.name.toLowerCase().includes(kw)) return true
-    return u.servers.some(s => s.ip.toLowerCase().includes(kw) || (s.port && s.port.includes(kw)))
+  const list = kw
+    ? upstreams.value.filter(u => {
+        if (u.name.toLowerCase().includes(kw)) return true
+        return u.servers.some(s => s.ip.toLowerCase().includes(kw) || (s.port && s.port.includes(kw)))
+      })
+    : upstreams.value
+  return list.map(u => {
+    const upCount = u.servers.filter(s => s.status === 'up').length
+    const downCount = u.servers.length - upCount
+    return { ...u, upCount, downCount, hasBoth: upCount > 0 && downCount > 0 }
   })
 })
 
 const totalUpCount = computed(() => {
-  return filteredUpstreams.value.reduce((sum, u) => sum + u.servers.filter(s => s.status === 'up').length, 0)
+  return filteredUpstreams.value.reduce((sum, u) => sum + u.upCount, 0)
 })
 
 const totalDownCount = computed(() => {
-  return filteredUpstreams.value.reduce((sum, u) => sum + u.servers.filter(s => s.status === 'down').length, 0)
+  return filteredUpstreams.value.reduce((sum, u) => sum + u.downCount, 0)
 })
 
 const isAllSelected = computed(() => {

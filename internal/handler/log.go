@@ -92,7 +92,7 @@ func (h *LogHandler) List(c *gin.Context) {
 		}
 	}
 
-	query.Count(&total)
+	query.Session(&gorm.Session{}).Count(&total)
 
 	if err := query.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&logs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})

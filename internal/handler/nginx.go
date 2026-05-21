@@ -79,6 +79,36 @@ type NginxBatchRequestV2 struct {
 	Items      []NginxBatchItem `json:"items" binding:"required"`
 }
 
+func ensureTrailingSlash(path string) string {
+	if path != "" && path[len(path)-1] != '/' {
+		return path + "/"
+	}
+	return path
+}
+
+func extractStringSlice(params map[string]interface{}, key string) ([]string, error) {
+	val, ok := params[key]
+	if !ok {
+		return nil, nil
+	}
+	switch v := val.(type) {
+	case []string:
+		return v, nil
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("%s 元素类型错误", key)
+			}
+			result = append(result, s)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("%s 类型异常: %T", key, val)
+	}
+}
+
 // validateConfigFile 校验配置文件名，防止路径穿越和命令注入
 func validateConfigFile(file string) error {
 	if !service.ValidateFilePath(file) {
@@ -112,19 +142,13 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 		return
 	}
 
-	// 确保路径以 / 结尾
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
-	// 如果没有配置模式，使用默认的 *.conf
 	configPattern := server.ConfigPattern
 	if configPattern == "" {
 		configPattern = "*.conf"
 	}
 
-	// 分离正向模式和排除模式（! 前缀）
 	var includePatterns, excludePatterns []string
 	for _, p := range strings.Split(configPattern, ",") {
 		p = strings.TrimSpace(p)
@@ -138,7 +162,6 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 		}
 	}
 
-	// 对每个正向模式执行 ls，合并结果
 	fileNames := make([]string, 0)
 	seen := make(map[string]bool)
 	for _, pattern := range includePatterns {
@@ -151,7 +174,7 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 			if f == "" {
 				continue
 			}
-			if idx := lastIndexOf(f, '/'); idx >= 0 {
+			if idx := strings.LastIndexByte(f, '/'); idx >= 0 {
 				f = f[idx+1:]
 			}
 			if !seen[f] {
@@ -161,7 +184,6 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 		}
 	}
 
-	// 过滤排除模式
 	if len(excludePatterns) > 0 {
 		filtered := make([]string, 0)
 		for _, f := range fileNames {
@@ -217,10 +239,7 @@ func (h *NginxHandler) Upstreams(c *gin.Context) {
 	}
 
 	// 确保路径以 / 结尾
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, configFile)
 	output, err := h.sshManager.Execute(&server, cmd)
@@ -267,10 +286,7 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	config, err := h.sshManager.Execute(&server, cmd)
@@ -279,10 +295,8 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 		return
 	}
 
-	// 支持多个 IP，用逗号分隔
 	backendIPs := splitIPs(req.BackendIP)
 
-	// 生成整个文件的 diff
 	currentConfig := config
 	for _, upstreamName := range req.UpstreamNames {
 		for _, ip := range backendIPs {
@@ -291,7 +305,6 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 		}
 	}
 
-	// 生成逐行 diff
 	lineDiffs := h.nginxService.GenerateLineDiffs(config, currentConfig)
 
 	previewID := h.previewMgr.Create("nginx", "online", req.ServerID, map[string]interface{}{
@@ -363,10 +376,7 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	config, err := h.sshManager.Execute(&server, cmd)
@@ -375,24 +385,20 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 		return
 	}
 
-	// 支持多个 IP，用逗号分隔
 	backendIPs := splitIPs(req.BackendIP)
 
-	// 校验：不允许整个 upstream 组的所有服务器都被下线
 	upstreams := h.nginxService.ParseConfig(config)
 	for _, upstreamName := range req.UpstreamNames {
 		for _, u := range upstreams {
 			if u.Name != upstreamName {
 				continue
 			}
-			// 统计当前在线的服务器数量
 			upCount := 0
 			for _, s := range u.Servers {
 				if s.Status == "up" {
 					upCount++
 				}
 			}
-			// 统计本次要下线的、属于该 upstream 且当前在线的服务器数量
 			willDown := 0
 			for _, s := range u.Servers {
 				if s.Status == "up" {
@@ -498,10 +504,7 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	config, err := h.sshManager.Execute(&server, cmd)
@@ -510,11 +513,9 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 		return
 	}
 
-	// 规范化 IP：去掉默认端口 :80
 	offlineIP := normalizeIP(req.OfflineIP)
 	onlineIP := normalizeIP(req.OnlineIP)
 
-	// 校验每个 upstream
 	upstreams := h.nginxService.ParseConfig(config)
 	for _, upstreamName := range req.UpstreamNames {
 		var targetUpstream *service.NginxUpstream
@@ -557,7 +558,6 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 		}
 	}
 
-	// 生成整个文件的 diff（依次对每个 upstream 执行切换）
 	currentConfig := config
 	for _, upstreamName := range req.UpstreamNames {
 		_, currentConfig = h.nginxService.GenerateSwapDiff(currentConfig, upstreamName, offlineIP, onlineIP)
@@ -626,37 +626,17 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 		return
 	}
 
-	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string
-	var upstreamNames []string
-	switch v := params["upstream_names"].(type) {
-	case []string:
-		upstreamNames = v
-	case []interface{}:
-		for _, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "upstream_names 元素类型错误"})
-				return
-			}
-			upstreamNames = append(upstreamNames, s)
-		}
+	upstreamNames, err := extractStringSlice(params, "upstream_names")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
-
-	// 备份
-	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	configPath := ensureTrailingSlash(server.ConfigPath)
+	backupPath := ensureTrailingSlash(server.BackupPath)
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
 	h.sshManager.Execute(&server, backupCmd)
-
-	// 清理旧备份
-	backupPath := server.BackupPath
-	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
-		backupPath += "/"
-	}
-	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
 	h.sshManager.Execute(&server, cleanupCmd)
 
 	// 对每个 upstream 执行切换
@@ -723,10 +703,7 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	config, err := h.sshManager.Execute(&server, cmd)
@@ -826,32 +803,17 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 		return
 	}
 
-	var upstreamNames []string
-	switch v := params["upstream_names"].(type) {
-	case []string:
-		upstreamNames = v
-	case []interface{}:
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				upstreamNames = append(upstreamNames, s)
-			}
-		}
+	upstreamNames, err := extractStringSlice(params, "upstream_names")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
-
-	// 备份
-	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	configPath := ensureTrailingSlash(server.ConfigPath)
+	backupPath := ensureTrailingSlash(server.BackupPath)
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
 	h.sshManager.Execute(&server, backupCmd)
-
-	backupPath := server.BackupPath
-	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
-		backupPath += "/"
-	}
-	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
 	h.sshManager.Execute(&server, cleanupCmd)
 
 	// 读取配置并解析 upstream 的 server 列表
@@ -941,10 +903,7 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
+	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	config, err := h.sshManager.Execute(&server, cmd)
@@ -1128,20 +1087,11 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
-
-	// 备份
-	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	configPath := ensureTrailingSlash(server.ConfigPath)
+	backupPath := ensureTrailingSlash(server.BackupPath)
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
 	h.sshManager.Execute(&server, backupCmd)
-
-	backupPath := server.BackupPath
-	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
-		backupPath += "/"
-	}
-	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
 	h.sshManager.Execute(&server, cleanupCmd)
 
 	// 读取配置用于 toggle 操作获取 server 列表
@@ -1315,16 +1265,16 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 		return
 	}
 
-	// Read current config
-	currentCmd := fmt.Sprintf("cat %s/%s", server.ConfigPath, req.ConfigFile)
+	configPath := ensureTrailingSlash(server.ConfigPath)
+	currentCmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
 	currentConfig, err := h.sshManager.Execute(&server, currentCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取当前配置失败: %v", err)})
 		return
 	}
 
-	// Read backup config
-	backupCmd := fmt.Sprintf("cat %s/%s", server.BackupPath, req.BackupFile)
+	backupPath := ensureTrailingSlash(server.BackupPath)
+	backupCmd := fmt.Sprintf("cat %s%s", backupPath, req.BackupFile)
 	backupConfig, err := h.sshManager.Execute(&server, backupCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取备份配置失败: %v", err)})
@@ -1485,37 +1435,17 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	}
 	backendIP, _ := params["backend_ip"].(string)
 
-	// upstream_names 可能是 []string 或 []interface{}，统一转为 []string
-	var upstreamNames []string
-	switch v := params["upstream_names"].(type) {
-	case []string:
-		upstreamNames = v
-	case []interface{}:
-		for _, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "upstream_names 元素类型错误"})
-				return
-			}
-			upstreamNames = append(upstreamNames, s)
-		}
+	upstreamNames, err := extractStringSlice(params, "upstream_names")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 
-	configPath := server.ConfigPath
-	if configPath != "" && configPath[len(configPath)-1] != '/' {
-		configPath += "/"
-	}
-
-	// Backup first
-	backupCmd := h.nginxService.GenerateBackupCommand(configPath, server.BackupPath, configFile)
+	configPath := ensureTrailingSlash(server.ConfigPath)
+	backupPath := ensureTrailingSlash(server.BackupPath)
+	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
 	h.sshManager.Execute(&server, backupCmd)
-
-	// 清理旧备份，保留最近 maxBackups 个
-	backupPath := server.BackupPath
-	if backupPath != "" && backupPath[len(backupPath)-1] != '/' {
-		backupPath += "/"
-	}
-	cleanupCmd := fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
 	h.sshManager.Execute(&server, cleanupCmd)
 
 	// 支持多个 IP，用逗号分隔
@@ -1539,7 +1469,6 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 		return
 	}
 
-	// Test and reload
 	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
@@ -1548,10 +1477,8 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 
 	h.sshManager.Execute(&server, "systemctl reload nginx")
 
-	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
 
-	// sed -i 无输出，生成有意义的操作摘要
 	actionDesc := "上线"
 	if action == "offline" {
 		actionDesc = "下线"
@@ -1586,30 +1513,12 @@ func normalizeIP(ip string) string {
 	return ip
 }
 
-func lastIndexOf(s string, c byte) int {
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
-}
-
 func splitLines(s string) []string {
 	var lines []string
-	current := ""
-	for _, c := range s {
-		if c == '\n' {
-			if current != "" {
-				lines = append(lines, current)
-			}
-			current = ""
-		} else {
-			current += string(c)
+	for _, line := range strings.Split(strings.TrimSpace(s), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
 		}
-	}
-	if current != "" {
-		lines = append(lines, current)
 	}
 	return lines
 }

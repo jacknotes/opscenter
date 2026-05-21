@@ -32,11 +32,8 @@ func NewNginxService(sshManager *SSHManager) *NginxService {
 }
 
 var (
-	// 匹配 upstream 块，支持名称中的下划线和连字符
-	upstreamPattern = regexp.MustCompile(`(?s)upstream\s+([\w-]+)\s*\{([^}]*)\}`)
-	// 匹配未注释的 server 行
-	serverPattern = regexp.MustCompile(`server\s+([\d.]+)(?::(\d+))?(?:\s+weight=(\d+))?\s*;`)
-	// 匹配被注释的 server 行（支持多个 #，如 #server、##server、###server）
+	upstreamPattern        = regexp.MustCompile(`(?s)upstream\s+([\w-]+)\s*\{([^}]*)\}`)
+	serverPattern          = regexp.MustCompile(`server\s+([\d.]+)(?::(\d+))?(?:\s+weight=(\d+))?\s*;`)
 	commentedServerPattern = regexp.MustCompile(`#+server\s+([\d.]+)(?::(\d+))?(?:\s+weight=(\d+))?\s*;`)
 )
 
@@ -55,7 +52,6 @@ func (s *NginxService) ParseConfig(configContent string) []NginxUpstream {
 			Config: match[0],
 		}
 
-		// 解析每一行
 		lines := strings.Split(body, "\n")
 		for _, line := range lines {
 			trimmedLine := strings.TrimSpace(line)
@@ -63,7 +59,7 @@ func (s *NginxService) ParseConfig(configContent string) []NginxUpstream {
 				continue
 			}
 
-			// 检查是否是被注释的 server 行（必须在未注释之前检查）
+			// 必须先检查注释行，否则 #server 会被 serverPattern 匹配
 			if sm := commentedServerPattern.FindStringSubmatch(trimmedLine); sm != nil {
 				port := sm[2]
 				if port == "" {
@@ -124,7 +120,6 @@ func (s *NginxService) GenerateDiff(config string, upstreamName, backendIP, acti
 	inTargetUpstream := false
 
 	for _, line := range lines {
-		// 检测进入目标 upstream 块，重置其他 upstream 的状态
 		if strings.Contains(line, "upstream") {
 			inTargetUpstream = strings.Contains(line, upstreamName)
 		}
@@ -160,11 +155,14 @@ func (s *NginxService) GenerateBackupCommand(configPath, backupPath, configFile 
 	return fmt.Sprintf("mkdir -p %s && cp %s/%s %s/%s.bak.$(date +%%Y%%m%%d%%H%%M%%S)", backupPath, configPath, configFile, backupPath, configFile)
 }
 
+// GenerateCleanupCommand 生成清理旧备份命令，保留最近 maxBackups 个备份文件。
+func (s *NginxService) GenerateCleanupCommand(backupPath, configFile string, maxBackups int) string {
+	return fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
+}
+
 // GenerateModifyCommand 生成 sed 命令用于批量上线/下线多个后端 IP。
 // 支持 :80 端口的自动省略匹配。
 func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamName string, backendIPs []string, action string) string {
-	// 构建多个 IP 的 OR 匹配模式: IP1\|IP2\|IP3
-	// 对于带 :80 端口的 IP，只用 IP 部分匹配（兼容 upstream 中 server 未写端口的情况）
 	var ipParts []string
 	for _, ip := range backendIPs {
 		if idx := strings.LastIndex(ip, ":"); idx > 0 {
@@ -181,10 +179,8 @@ func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamNam
 	var sedPattern string
 	switch action {
 	case "online":
-		// 去掉 server 前面所有 #（支持 #server、##server、###server 等）
 		sedPattern = fmt.Sprintf("sed -i '/%s/,/}/{s/#\\+server\\(.*\\(%s\\)\\)/server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile)
 	case "offline":
-		// 在 server 前面加 #，变成 #server
 		sedPattern = fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile)
 	}
 	return sedPattern
@@ -199,7 +195,6 @@ func (s *NginxService) GenerateSwapDiff(config, upstreamName, offlineIP, onlineI
 	inTargetUpstream := false
 
 	for _, line := range lines {
-		// 检测进入目标 upstream 块，重置其他 upstream 的状态
 		if strings.Contains(line, "upstream") {
 			inTargetUpstream = strings.Contains(line, upstreamName)
 		}
@@ -230,7 +225,6 @@ func (s *NginxService) GenerateSwapDiff(config, upstreamName, offlineIP, onlineI
 
 // GenerateSwapModifyCommands 生成切换操作的 sed 命令列表
 func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP string) []string {
-	// 处理 :80 端口，只用 IP 部分匹配
 	offlinePattern := offlineIP
 	if idx := strings.LastIndex(offlineIP, ":"); idx > 0 {
 		if offlineIP[idx+1:] == "80" {
@@ -244,7 +238,6 @@ func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstre
 		}
 	}
 
-	// 先下线（加 #），再上线（去 #）
 	offlineCmd := fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, offlinePattern, configPath, configFile)
 	onlineCmd := fmt.Sprintf("sed -i '/%s/,/}/{s/#\\+server\\(.*\\(%s\\)\\)/server\\1/}' %s/%s", upstreamName, onlinePattern, configPath, configFile)
 
@@ -289,18 +282,13 @@ func (s *NginxService) GenerateToggleDiff(config, upstreamName string) (before, 
 func (s *NginxService) GenerateToggleModifyCommands(configPath, configFile, upstreamName string, servers []NginxServer) []string {
 	var commands []string
 	for _, srv := range servers {
-		// 处理 :80 端口，只用 IP 部分匹配
 		ipPattern := srv.IP
-		if srv.Port == "80" {
-			// 不需要端口，直接用 IP
-		} else if srv.Port != "" {
+		if srv.Port != "" && srv.Port != "80" {
 			ipPattern = srv.IP + ":" + srv.Port
 		}
 		if srv.Status == "up" {
-			// 当前在线 → 注释掉（下线）
 			commands = append(commands, fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile))
 		} else {
-			// 当前离线 → 取消注释（上线）
 			commands = append(commands, fmt.Sprintf("sed -i '/%s/,/}/{s/#\\+server\\(.*\\(%s\\)\\)/server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile))
 		}
 	}
@@ -332,7 +320,6 @@ func (s *NginxService) GenerateLineDiffs(before, after string) []LineDiff {
 			aTrimmed := strings.TrimSpace(aLine)
 
 			if bTrimmed == aTrimmed {
-				// 相同行
 				diffs = append(diffs, LineDiff{
 					LineNum: afterIdx + 1,
 					Type:    "same",
@@ -341,7 +328,6 @@ func (s *NginxService) GenerateLineDiffs(before, after string) []LineDiff {
 				beforeIdx++
 				afterIdx++
 			} else if strings.HasPrefix(aTrimmed, "#") && strings.TrimLeft(aTrimmed, "#") == strings.TrimLeft(bTrimmed, "#") && strings.HasPrefix(strings.TrimLeft(aTrimmed, "#"), "server") {
-				// 注释变更（上线/下线）：##server -> #server 或 server -> #server 等
 				diffs = append(diffs, LineDiff{
 					LineNum: afterIdx + 1,
 					Type:    "removed",
@@ -355,7 +341,6 @@ func (s *NginxService) GenerateLineDiffs(before, after string) []LineDiff {
 				beforeIdx++
 				afterIdx++
 			} else if strings.HasPrefix(bTrimmed, "#") && strings.TrimLeft(bTrimmed, "#") == strings.TrimLeft(aTrimmed, "#") && strings.HasPrefix(strings.TrimLeft(bTrimmed, "#"), "server") {
-				// 注释变更（上线/下线）：#server -> server 或 ##server -> server 等
 				diffs = append(diffs, LineDiff{
 					LineNum: afterIdx + 1,
 					Type:    "removed",
@@ -369,7 +354,6 @@ func (s *NginxService) GenerateLineDiffs(before, after string) []LineDiff {
 				beforeIdx++
 				afterIdx++
 			} else {
-				// 不同行（非注释变更）
 				diffs = append(diffs, LineDiff{
 					LineNum: afterIdx + 1,
 					Type:    "same",
