@@ -26,7 +26,7 @@
       </div>
       </template>
 
-      <el-table ref="tableRef" :data="paginatedRollouts" :row-key="row => row.namespace + '/' + row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow>
+      <el-table ref="tableRef" :data="paginatedRollouts" :row-key="row => row.namespace + '/' + row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow max-height="calc(100vh - 240px)">
         <el-table-column type="selection" width="55" />
         <el-table-column prop="namespace" label="命名空间" width="150" />
         <el-table-column prop="name" label="名称" min-width="250" />

@@ -91,6 +91,8 @@
   flex-wrap: wrap;
 }
 
+/* 表格固定表头通过 el-table 的 max-height prop 实现 */
+
 /* Empty State - 统一空状态样式 */
 .empty-state {
   display: flex;

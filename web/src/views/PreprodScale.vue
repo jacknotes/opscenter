@@ -32,7 +32,7 @@
       </div>
       </template>
 
-      <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow>
+      <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow max-height="calc(100vh - 240px)">
         <el-table-column type="selection" width="45" />
         <el-table-column prop="category" label="类型" width="100">
           <template #default="{ row }">

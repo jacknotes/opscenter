@@ -26,7 +26,7 @@
         </div>
       </template>
 
-      <el-table :data="logs" stripe border v-force-reflow>
+      <el-table :data="logs" stripe border v-force-reflow max-height="calc(100vh - 200px)">
         <el-table-column prop="created_at" label="时间" width="180">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>

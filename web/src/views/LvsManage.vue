@@ -10,7 +10,7 @@
         </div>
       </template>
 
-      <el-table :data="lvsData" stripe border v-force-reflow>
+      <el-table :data="lvsData" stripe border v-force-reflow max-height="calc(100vh - 200px)">
         <el-table-column prop="ip" label="Virtual Server" width="150">
           <template #default="{ row }">{{ row.ip }}:{{ row.port }}</template>
         </el-table-column>
