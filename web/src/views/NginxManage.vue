@@ -13,39 +13,39 @@
           </el-select>
           <el-input v-model="filterKeyword" placeholder="搜索upstream/ip/port" clearable style="width: 250px;" />
         </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+          <div class="stat-item">
+            <span class="stat-value">{{ filteredUpstreams.length }}</span>
+            <span class="stat-label">Upstream 组</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value stat-success">{{ totalUpCount }}</span>
+            <span class="stat-label">在线</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value stat-danger">{{ totalDownCount }}</span>
+            <span class="stat-label">离线</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-value stat-primary">{{ selectedServers.length }}</span>
+            <span class="stat-label">已选择后端</span>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
+          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
+          <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
+          <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
+          <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
+          <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
+          <el-button type="success" @click="handleViewConfig">查看配置</el-button>
+          <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
+        </div>
       </template>
-
-      <!-- Stats Bar -->
-      <div class="stats-bar">
-        <div class="stat-item">
-          <span class="stat-value">{{ filteredUpstreams.length }}</span>
-          <span class="stat-label">Upstream 组</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-value stat-success">{{ totalUpCount }}</span>
-          <span class="stat-label">在线</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-value stat-danger">{{ totalDownCount }}</span>
-          <span class="stat-label">离线</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-value stat-primary">{{ selectedServers.length }}</span>
-          <span class="stat-label">已选择后端</span>
-        </div>
-      </div>
-
-      <!-- Toolbar -->
-      <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap;">
-        <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
-        <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
-        <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-        <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
-        <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
-        <el-button type="success" @click="handleViewConfig">查看配置</el-button>
-        <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
-      </div>
 
       <!-- Upstream Groups -->
       <div v-loading="loadingUpstreams">
@@ -1039,7 +1039,8 @@ async function executePreview() {
   border: none;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 100px);
 }
 
 :deep(.el-card__header) {
@@ -1071,7 +1072,8 @@ async function executePreview() {
 .stats-bar {
   display: flex;
   gap: 0;
-  margin-bottom: 16px;
+  margin-top: 10px;
+  margin-bottom: 0;
   background: #fff;
   border-radius: 8px;
   border: 1px solid #e4e7ed;
@@ -1113,7 +1115,7 @@ async function executePreview() {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
   padding: 10px 14px;
   background: #fff;
   border-radius: 8px;

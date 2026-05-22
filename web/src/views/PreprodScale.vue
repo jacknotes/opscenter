@@ -9,10 +9,8 @@
           </el-select>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
         </div>
-      </template>
-
-      <!-- 批量操作按钮 -->
-      <div class="toolbar" style="margin-bottom: 15px;">
+        <!-- 批量操作按钮 -->
+        <div class="toolbar">
         <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
           <el-option label="全部" value="all" />
           <el-option label="已扩容" value="up" />
@@ -32,6 +30,7 @@
           <template v-if="batchSkipUp > 0">，{{ batchSkipUp }} 项已扩容将跳过</template>
         </span>
       </div>
+      </template>
 
       <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow>
         <el-table-column type="selection" width="45" />

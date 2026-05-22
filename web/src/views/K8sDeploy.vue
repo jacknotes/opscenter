@@ -9,9 +9,7 @@
           </el-select>
           <el-input v-model="search" placeholder="搜索命名空间/名称/策略/步骤" clearable style="width: 250px;" />
         </div>
-      </template>
-
-      <div class="toolbar" style="margin-bottom: 15px;">
+        <div class="toolbar">
         <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
           <el-option label="全部" value="all" />
           <el-option label="待发布" value="pending" />
@@ -26,6 +24,7 @@
           已选 {{ selectedIds.size }} 项
         </span>
       </div>
+      </template>
 
       <el-table ref="tableRef" :data="paginatedRollouts" :row-key="row => row.namespace + '/' + row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow>
         <el-table-column type="selection" width="55" />

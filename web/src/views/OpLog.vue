@@ -143,3 +143,6 @@ async function loadData() {
   }
 }
 </script>
+
+<style scoped>
+</style>
