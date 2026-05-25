@@ -7,15 +7,17 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-// Config 是应用的顶层配置结构，包含服务器、数据库、JWT 和加密相关配置。
+// Config 是应用的顶层配置结构，包含服务器、数据库、Redis、JWT 和加密相关配置。
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
+	Redis    RedisConfig    `yaml:"redis"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	Crypto   CryptoConfig   `yaml:"crypto"`
 }
@@ -50,11 +52,23 @@ type CryptoConfig struct {
 	Key string `yaml:"key"`
 }
 
+// RedisConfig 是 Redis 连接配置，支持单节点和哨兵两种模式。
+type RedisConfig struct {
+	Mode          string   `yaml:"mode"`
+	Password      string   `yaml:"password"`
+	DB            int      `yaml:"db"`
+	Host          string   `yaml:"host"`
+	Port          int      `yaml:"port"`
+	MasterName    string   `yaml:"master_name"`
+	SentinelAddrs []string `yaml:"sentinel_addrs"`
+}
+
 // Global 是全局配置单例，程序启动时由 Load 初始化。
 var Global Config
 
 // Load 从指定的 YAML 文件加载配置到 Global 单例。
-// 支持通过环境变量 DB_HOST、DB_PORT、DB_PASSWORD、JWT_SECRET、CRYPTO_KEY、ADMIN_PASSWORD 覆盖对应配置项。
+// 支持通过环境变量覆盖：DB_HOST、DB_PORT、DB_PASSWORD、JWT_SECRET、CRYPTO_KEY、ADMIN_PASSWORD、
+// REDIS_MODE、REDIS_HOST、REDIS_PORT、REDIS_PASSWORD、REDIS_DB、REDIS_MASTER_NAME、REDIS_SENTINEL_ADDRS。
 func Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -84,6 +98,39 @@ func Load(path string) error {
 	}
 	if v := os.Getenv("ADMIN_PASSWORD"); v != "" {
 		Global.Server.AdminPassword = v
+	}
+	if v := os.Getenv("REDIS_MODE"); v != "" {
+		Global.Redis.Mode = v
+	}
+	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+		Global.Redis.Password = v
+	}
+	if v := os.Getenv("REDIS_HOST"); v != "" {
+		Global.Redis.Host = v
+	}
+	if v := os.Getenv("REDIS_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			Global.Redis.Port = port
+		}
+	}
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if db, err := strconv.Atoi(v); err == nil {
+			Global.Redis.DB = db
+		}
+	}
+	if v := os.Getenv("REDIS_MASTER_NAME"); v != "" {
+		Global.Redis.MasterName = v
+	}
+	if v := os.Getenv("REDIS_SENTINEL_ADDRS"); v != "" {
+		Global.Redis.SentinelAddrs = strings.Split(v, ",")
+	}
+
+	// Redis 默认值
+	if Global.Redis.Mode == "" {
+		Global.Redis.Mode = "standalone"
+	}
+	if Global.Redis.Port == 0 {
+		Global.Redis.Port = 6379
 	}
 
 	if Global.JWT.Expire == 0 {

@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -39,8 +41,8 @@ import (
 //	@name						Authorization
 //	@description				"Bearer {token}"
 
-// main 是程序入口，负责加载配置、连接数据库、自动迁移模型、启动 HTTP 服务器，
-// 并在收到 SIGINT/SIGTERM 信号时优雅停机，清理 SSH 连接和后台协程。
+// main 是程序入口，负责加载配置、连接数据库和 Redis、自动迁移模型、启动 HTTP 服务器，
+// 并在收到 SIGINT/SIGTERM 信号时优雅停机，清理 SSH 连接和 Redis 客户端。
 func main() {
 	configPath := flag.String("config", "config.yaml", "配置文件路径")
 	flag.Parse()
@@ -63,8 +65,32 @@ func main() {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
+	// Connect Redis
+	var rdb *redis.Client
+	rcfg := config.Global.Redis
+	if rcfg.Mode == "sentinel" {
+		rdb = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    rcfg.MasterName,
+			SentinelAddrs: rcfg.SentinelAddrs,
+			Password:      rcfg.Password,
+			DB:            rcfg.DB,
+		})
+	} else {
+		rdb = redis.NewClient(&redis.Options{
+			Addr:     rcfg.Host + ":" + strconv.Itoa(rcfg.Port),
+			Password: rcfg.Password,
+			DB:       rcfg.DB,
+		})
+	}
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	if err := rdb.Ping(pingCtx).Err(); err != nil {
+		log.Fatalf("连接 Redis 失败: %v", err)
+	}
+	log.Println("Redis 连接成功")
+
 	// Setup router
-	app := router.Setup(db)
+	app := router.Setup(db, rdb)
 
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", config.Global.Server.Host, config.Global.Server.Port)
@@ -99,6 +125,9 @@ func main() {
 	app.SSHManager.Close()
 	app.LockManager.Stop()
 	app.PreviewMgr.Stop()
+	if err := rdb.Close(); err != nil {
+		log.Printf("Redis 关闭失败: %v", err)
+	}
 
 	log.Println("服务已停止")
 }

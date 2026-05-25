@@ -1,10 +1,17 @@
 package service
 
 import (
-	"sync"
+	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
+)
+
+const (
+	previewKeyPrefix = "opscenter:preview:"
+	previewTTL       = 5 * time.Minute
 )
 
 // PreviewData 存储操作预览数据，用于预览 → 执行两步流程。
@@ -18,20 +25,24 @@ type PreviewData struct {
 	ExpiresAt time.Time
 }
 
-// PreviewManager 管理操作预览的内存存储，使用 UUID 作为键，5 分钟自动过期。
-type PreviewManager struct {
-	previews sync.Map
-	stop     chan struct{}
-	stopOnce sync.Once
+type previewDataJSON struct {
+	ID        string                 `json:"id"`
+	Module    string                 `json:"module"`
+	Action    string                 `json:"action"`
+	ServerID  uint                   `json:"server_id"`
+	Params    map[string]interface{} `json:"params"`
+	CreatedAt time.Time              `json:"created_at"`
+	ExpiresAt time.Time              `json:"expires_at"`
 }
 
-// NewPreviewManager 创建预览管理器并启动后台清理协程。
-func NewPreviewManager() *PreviewManager {
-	pm := &PreviewManager{
-		stop: make(chan struct{}),
-	}
-	go pm.cleanup()
-	return pm
+// PreviewManager 管理操作预览的 Redis 存储，使用 UUID 作为键，5 分钟自动过期。
+type PreviewManager struct {
+	rdb *redis.Client
+}
+
+// NewPreviewManager 创建预览管理器。
+func NewPreviewManager(rdb *redis.Client) *PreviewManager {
+	return &PreviewManager{rdb: rdb}
 }
 
 // Create 创建一条预览记录，返回 UUID 作为 preview_id。
@@ -39,65 +50,48 @@ func (pm *PreviewManager) Create(module, action string, serverID uint, params ma
 	id := uuid.New().String()
 	now := time.Now()
 
-	data := &PreviewData{
+	data := previewDataJSON{
 		ID:        id,
 		Module:    module,
 		Action:    action,
 		ServerID:  serverID,
 		Params:    params,
 		CreatedAt: now,
-		ExpiresAt: now.Add(5 * time.Minute),
+		ExpiresAt: now.Add(previewTTL),
 	}
 
-	pm.previews.Store(id, data)
+	bytes, _ := json.Marshal(data)
+	pm.rdb.Set(context.Background(), previewKeyPrefix+id, bytes, previewTTL)
 	return id
 }
 
-// Get 根据 preview_id 获取预览记录，过期记录会被自动删除。
+// Get 根据 preview_id 获取预览记录。
 func (pm *PreviewManager) Get(id string) (*PreviewData, bool) {
-	val, ok := pm.previews.Load(id)
-	if !ok {
+	val, err := pm.rdb.Get(context.Background(), previewKeyPrefix+id).Bytes()
+	if err != nil {
 		return nil, false
 	}
 
-	data := val.(*PreviewData)
-	if time.Now().After(data.ExpiresAt) {
-		pm.previews.Delete(id)
+	var data previewDataJSON
+	if err := json.Unmarshal(val, &data); err != nil {
 		return nil, false
 	}
 
-	return data, true
+	return &PreviewData{
+		ID:        data.ID,
+		Module:    data.Module,
+		Action:    data.Action,
+		ServerID:  data.ServerID,
+		Params:    data.Params,
+		CreatedAt: data.CreatedAt,
+		ExpiresAt: data.ExpiresAt,
+	}, true
 }
 
 // Delete 删除指定的预览记录。
 func (pm *PreviewManager) Delete(id string) {
-	pm.previews.Delete(id)
+	pm.rdb.Del(context.Background(), previewKeyPrefix+id)
 }
 
-// Stop 停止后台清理协程。
-func (pm *PreviewManager) Stop() {
-	pm.stopOnce.Do(func() {
-		close(pm.stop)
-	})
-}
-
-func (pm *PreviewManager) cleanup() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-pm.stop:
-			return
-		case <-ticker.C:
-			now := time.Now()
-			pm.previews.Range(func(key, value interface{}) bool {
-				data := value.(*PreviewData)
-				if now.After(data.ExpiresAt) {
-					pm.previews.Delete(key)
-				}
-				return true
-			})
-		}
-	}
-}
+// Stop 无操作，Redis 版本由 TTL 自动过期，无需手动清理。
+func (pm *PreviewManager) Stop() {}

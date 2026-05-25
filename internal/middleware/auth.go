@@ -2,9 +2,9 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"opscenter/internal/config"
@@ -13,8 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
+
+const blacklistKeyPrefix = "opscenter:blacklist:jti:"
 
 // Claims 是 JWT 的自定义声明，包含用户 ID、用户名和角色。
 type Claims struct {
@@ -24,25 +27,32 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-// tokenBlacklist 内存 token 黑名单，用于撤销已签发的 token
-var (
-	tokenBlacklist = make(map[string]struct{})
-	blacklistMu    sync.RWMutex
-)
+// rdb 是 token 黑名单使用的 Redis 客户端。
+var rdb *redis.Client
 
-// BlacklistToken 将 token 的 jti 加入黑名单
-func BlacklistToken(jti string) {
-	blacklistMu.Lock()
-	defer blacklistMu.Unlock()
-	tokenBlacklist[jti] = struct{}{}
+// InitBlacklist 初始化 token 黑名单的 Redis 客户端。
+func InitBlacklist(client *redis.Client) {
+	rdb = client
 }
 
-// IsBlacklisted 检查 jti 是否在黑名单中
+// BlacklistToken 将 token 的 jti 加入黑名单。
+func BlacklistToken(jti string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Set(context.Background(), blacklistKeyPrefix+jti, "1", config.Global.JWT.Expire)
+}
+
+// IsBlacklisted 检查 jti 是否在黑名单中。
 func IsBlacklisted(jti string) bool {
-	blacklistMu.RLock()
-	defer blacklistMu.RUnlock()
-	_, ok := tokenBlacklist[jti]
-	return ok
+	if rdb == nil {
+		return false
+	}
+	val, err := rdb.Exists(context.Background(), blacklistKeyPrefix+jti).Result()
+	if err != nil {
+		return false
+	}
+	return val > 0
 }
 
 // Auth 返回 JWT 认证中间件。支持从 Authorization Header 或 URL query 参数 token 中提取令牌。

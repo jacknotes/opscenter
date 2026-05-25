@@ -16,6 +16,21 @@ database:
   dbname: opscenter
   charset: utf8mb4
 
+redis:
+  # standalone 单节点模式 | sentinel 哨兵模式
+  mode: standalone
+  password: ""
+  db: 0
+  # 单节点模式配置
+  host: localhost
+  port: 6379
+  # 哨兵模式配置（mode: sentinel 时生效）
+  master_name: mymaster
+  sentinel_addrs:
+    - "10.0.0.1:26379"
+    - "10.0.0.2:26379"
+    - "10.0.0.3:26379"
+
 jwt:
   secret: your-secret-key-change-in-production
   expire: 24h

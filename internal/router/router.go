@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
@@ -26,7 +27,7 @@ type App struct {
 // Setup 初始化路由引擎、注册所有中间件和路由，返回 App 实例。
 // 路由分三组：公开路由（健康检查、登录）、WebSocket（query token 认证）、受保护路由（JWT 认证）。
 // 管理员路由额外使用 AdminRequired 中间件。
-func Setup(db *gorm.DB) *App {
+func Setup(db *gorm.DB, rdb *redis.Client) *App {
 	r := gin.Default()
 
 	// Middleware
@@ -41,8 +42,9 @@ func Setup(db *gorm.DB) *App {
 
 	// Services
 	sshManager := service.NewSSHManager()
-	previewMgr := service.NewPreviewManager()
-	lockManager := service.NewLockManager()
+	previewMgr := service.NewPreviewManager(rdb)
+	lockManager := service.NewLockManager(rdb)
+	middleware.InitBlacklist(rdb)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(db)
