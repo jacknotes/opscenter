@@ -74,12 +74,16 @@ func main() {
 			SentinelAddrs: rcfg.SentinelAddrs,
 			Password:      rcfg.Password,
 			DB:            rcfg.DB,
+			PoolSize:      rcfg.PoolSize,
+			MinIdleConns:  rcfg.MinIdleConns,
 		})
 	} else {
 		rdb = redis.NewClient(&redis.Options{
-			Addr:     rcfg.Host + ":" + strconv.Itoa(rcfg.Port),
-			Password: rcfg.Password,
-			DB:       rcfg.DB,
+			Addr:         rcfg.Host + ":" + strconv.Itoa(rcfg.Port),
+			Password:     rcfg.Password,
+			DB:           rcfg.DB,
+			PoolSize:     rcfg.PoolSize,
+			MinIdleConns: rcfg.MinIdleConns,
 		})
 	}
 	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)

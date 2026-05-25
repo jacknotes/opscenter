@@ -30,6 +30,9 @@ redis:
     - "10.0.0.1:26379"
     - "10.0.0.2:26379"
     - "10.0.0.3:26379"
+  # 连接池配置
+  pool_size: 10
+  min_idle_conns: 2
 
 jwt:
   secret: your-secret-key-change-in-production

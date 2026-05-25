@@ -61,6 +61,9 @@ type RedisConfig struct {
 	Port          int      `yaml:"port"`
 	MasterName    string   `yaml:"master_name"`
 	SentinelAddrs []string `yaml:"sentinel_addrs"`
+	// 连接池配置
+	PoolSize     int `yaml:"pool_size"`
+	MinIdleConns int `yaml:"min_idle_conns"`
 }
 
 // Global 是全局配置单例，程序启动时由 Load 初始化。
@@ -131,6 +134,12 @@ func Load(path string) error {
 	}
 	if Global.Redis.Port == 0 {
 		Global.Redis.Port = 6379
+	}
+	if Global.Redis.PoolSize == 0 {
+		Global.Redis.PoolSize = 10
+	}
+	if Global.Redis.MinIdleConns == 0 {
+		Global.Redis.MinIdleConns = 2
 	}
 
 	if Global.JWT.Expire == 0 {
