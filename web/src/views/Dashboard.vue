@@ -24,7 +24,9 @@
         </div>
       </template>
       <el-table :data="logs" stripe v-if="logs.length > 0" v-force-reflow>
-        <el-table-column prop="created_at" label="时间" width="180" />
+        <el-table-column label="时间" width="180">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column prop="username" label="操作人" width="100" />
         <el-table-column prop="module" label="模块" width="100">
           <template #default="{ row }">
@@ -65,6 +67,11 @@ const featureCards = [
 
 const moduleLabels = markRaw({ lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' })
 const moduleTagTypes = markRaw({ lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' })
+
+function formatTime(t) {
+  if (!t) return ''
+  return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+}
 
 function moduleLabel(m) { return moduleLabels[m] || m }
 function moduleTagType(m) { return moduleTagTypes[m] || '' }
