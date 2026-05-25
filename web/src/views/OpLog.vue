@@ -23,6 +23,7 @@
             <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 100%" :shortcuts="dateShortcuts" @change="onDateChange" @clear="onDateChange" clearable />
           </div>
           <el-input v-model="keyword" style="width: 250px; margin-left: 20px;" placeholder="搜索操作人/动作/目标/服务器/IP" clearable @change="onSearch" @clear="onSearch" />
+          <el-button type="primary" @click="loadData">{{ hasFilters ? '查询' : '刷新' }}</el-button>
         </div>
       </template>
 
@@ -72,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getLogs } from '../api'
 import { ElMessage } from 'element-plus'
 
@@ -89,6 +90,10 @@ const dateShortcuts = [
   { text: '近一个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 1); return [s, e] } },
   { text: '近三个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 3); return [s, e] } },
 ]
+
+const hasFilters = computed(() =>
+  module.value !== 'all' || status.value !== 'all' || !!keyword.value || !!dateRange.value
+)
 
 onMounted(() => {
   loadData()
