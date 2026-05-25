@@ -490,7 +490,7 @@ function executePreview() {
   executing.value = true
   previewVisible.value = false
 
-  const url = getWebSocketUrl('/api/ws/exec')
+  const url = getWebSocketUrl('/api/ws/exec', userStore.token)
   wsConnect(url, previewId.value, {
     token: userStore.token,
     onDone: async () => {

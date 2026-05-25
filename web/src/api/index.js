@@ -41,11 +41,12 @@ export const login = (data) => api.post('/login', data)
 export const logout = () => api.post('/logout')
 export const getUserInfo = () => api.get('/user/info')
 
-// WebSocket URL helper（token 通过消息传递，不放在 URL 中）
-export const getWebSocketUrl = (path) => {
+// WebSocket URL helper
+export const getWebSocketUrl = (path, token) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const host = window.location.host
-  return `${protocol}//${host}${path}`
+  const url = `${protocol}//${host}${path}`
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 }
 
 // Servers
