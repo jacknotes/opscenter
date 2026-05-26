@@ -332,7 +332,7 @@ func (m *SSHManager) ExecuteStream(server *model.Server, command string, passwor
 
 // Command whitelist patterns
 var (
-	lvsCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|status|op\s+\d{1,3}\s+\d{1,3}\s+(on|off)|swap\s+\d{1,3}\s+\d{1,3}\s+\d{1,3})$`)
+	lvsCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|status|op\s+[\d.]+\s+[\d.]+\s+(on|off)|swap\s+[\d.]+\s+[\d.]+\s+[\d.]+)$`)
 	k8sCommandPattern   = regexp.MustCompile(`^/[\w/./-]+\.sh\s+(list|single_(online|sync|rollback)\s+[\w.-]+\s+[\w-]+|full_(online|sync|rollback)|scale(down|up)(\s+[\w.-]+)*)$`)
 	nginxCommandPattern = regexp.MustCompile(`^(cat|cp|sed\s+-i|nginx\s+(-t|-s\s+reload)|ls)\s+[\w/.%*-]+$`)
 
@@ -358,9 +358,38 @@ func ValidateCommand(serverType, command string) bool {
 	}
 }
 
-// ValidateIP validates IP last octet (1-254)
+// ValidateIP validates a full IPv4 address or a last octet (1-254)
 func ValidateIP(ip string) bool {
-	if len(ip) == 0 || len(ip) > 3 {
+	if len(ip) == 0 {
+		return false
+	}
+	// Full IPv4 address
+	parts := strings.Split(ip, ".")
+	if len(parts) == 4 {
+		for _, part := range parts {
+			if len(part) == 0 || len(part) > 3 {
+				return false
+			}
+			for _, c := range part {
+				if c < '0' || c > '9' {
+					return false
+				}
+			}
+			if part[0] == '0' && len(part) > 1 {
+				return false
+			}
+			n := 0
+			for _, c := range part {
+				n = n*10 + int(c-'0')
+			}
+			if n > 255 {
+				return false
+			}
+		}
+		return true
+	}
+	// Last octet only (1-254)
+	if len(ip) > 3 {
 		return false
 	}
 	for _, c := range ip {
@@ -368,7 +397,6 @@ func ValidateIP(ip string) bool {
 			return false
 		}
 	}
-	// 不能以 0 开头（除非就是 "0"），且范围 1-254
 	if ip[0] == '0' && len(ip) > 1 {
 		return false
 	}

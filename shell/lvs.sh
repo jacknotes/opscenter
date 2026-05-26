@@ -6,7 +6,7 @@
 
 VS_FILE='/etc/keepalived/conf.d/virtual_server/vs_*.conf'
 RS_FILE='/etc/keepalived/conf.d/real_server/rs_*.conf'
-IP_PREFIX='192.168.13.'
+IP_PREFIX=${IP_PREFIX:-'192.168.13.'}
 DATETIME='date +"%Y-%m-%d-%H:%M:%S"'
 VS_MATCH_STRING='vs_'
 RS_MATCH_STRING='rs_'

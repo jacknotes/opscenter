@@ -78,6 +78,14 @@ func (h *LVSHandler) List(c *gin.Context) {
 	}
 
 	servers := h.lvsService.ParseListOutput(output)
+
+	// 获取 status 输出，补充下线的 RS
+	statusOutput, statusErr := h.sshManager.Execute(&server, server.ScriptPath+" status")
+	if statusErr == nil && statusOutput != "" {
+		statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
+		servers = h.lvsService.MergeOfflineRS(servers, statusGroups)
+	}
+
 	c.JSON(http.StatusOK, servers)
 }
 
@@ -113,7 +121,8 @@ func (h *LVSHandler) Status(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"output": output})
+	statusGroups := h.lvsService.ParseStatusOutput(output)
+	c.JSON(http.StatusOK, gin.H{"output": output, "groups": statusGroups})
 }
 
 // OpPreview godoc
