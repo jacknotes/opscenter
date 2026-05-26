@@ -196,7 +196,7 @@ func (h *ServerHandler) Create(c *gin.Context) {
 		return
 	}
 
-	h.auditLog(c, "create_server", fmt.Sprintf("创建服务器: %s (%s:%d)", server.Name, server.Host, server.Port), "", "success", "")
+	createAuditLog(h.db, c, "server", "create_server", fmt.Sprintf("创建服务器: %s (%s:%d)", server.Name, server.Host, server.Port), "", "success", "", server.ID, server.Name)
 	c.JSON(http.StatusCreated, server.ToResponse())
 }
 
@@ -268,7 +268,7 @@ func (h *ServerHandler) Update(c *gin.Context) {
 		return
 	}
 
-	h.auditLog(c, "update_server", fmt.Sprintf("更新服务器: %s (ID: %d)", input.Name, id), "", "success", "")
+	createAuditLog(h.db, c, "server", "update_server", fmt.Sprintf("更新服务器: %s (ID: %d)", input.Name, id), "", "success", "", uint(id), input.Name)
 	c.JSON(http.StatusOK, input.ToResponse())
 }
 
@@ -302,7 +302,7 @@ func (h *ServerHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	h.auditLog(c, "delete_server", fmt.Sprintf("删除服务器: %s (ID: %d)", serverName, id), "", "success", "")
+	createAuditLog(h.db, c, "server", "delete_server", fmt.Sprintf("删除服务器: %s (ID: %d)", serverName, id), "", "success", "", uint(id), serverName)
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
@@ -342,7 +342,7 @@ func (h *ServerHandler) ToggleEnabled(c *gin.Context) {
 	if !newState {
 		action = "disable_server"
 	}
-	h.auditLog(c, action, fmt.Sprintf("%s服务器: %s (ID: %d)", map[bool]string{true: "启用", false: "禁用"}[newState], server.Name, id), "", "success", "")
+	createAuditLog(h.db, c, "server", action, fmt.Sprintf("%s服务器: %s (ID: %d)", map[bool]string{true: "启用", false: "禁用"}[newState], server.Name, id), "", "success", "", uint(id), server.Name)
 
 	if newState {
 		c.JSON(http.StatusOK, gin.H{"message": "已启用", "enabled": true})

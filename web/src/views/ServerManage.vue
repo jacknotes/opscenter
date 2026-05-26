@@ -8,12 +8,12 @@
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
           <el-button type="info" class="el-button--cyan" @click="handleCopySelected" :disabled="!selectedRow">复制</el-button>
           <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow">删除</el-button>
+          <el-input v-model="searchQuery" placeholder="搜索名称 / IP / 类型" clearable style="width: 250px; margin-left: auto;" />
         </div>
       </template>
 
-      <el-table :data="servers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 200px)">
+      <el-table :data="filteredServers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 200px)">
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="id" label="ID" width="60" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
@@ -102,11 +102,24 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getServers, getServerForEdit, createServer, updateServer, deleteServer, testConnection } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const servers = ref([])
+const searchQuery = ref('')
+
+const filteredServers = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return servers.value
+  return servers.value.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.host.toLowerCase().includes(q) ||
+    s.server_type.toLowerCase().includes(q) ||
+    s.env.toLowerCase().includes(q) ||
+    String(s.port).includes(q)
+  )
+})
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const isCopy = ref(false)
