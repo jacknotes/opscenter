@@ -186,13 +186,29 @@
             {{ isBatchAllSelected ? '取消全选' : '全选' }}
           </el-button>
         </div>
-        <el-table :data="batchItems" size="small" max-height="500" class="batch-table" v-force-reflow>
+        <el-table ref="batchTableRef" :data="batchItems" size="small" max-height="500" class="batch-table" v-force-reflow row-key="upstreamName">
+          <el-table-column type="expand" width="1">
+            <template #default="{ row }">
+              <div class="batch-expand-servers">
+                <div v-for="s in row.servers" :key="serverKey(s)" class="batch-server-item">
+                  <span class="status-dot" :class="s.status === 'up' ? 'status-up' : 'status-down'" />
+                  <span class="batch-server-ip">{{ s.ip }}</span>
+                  <span class="batch-server-port">:{{ s.port }}</span>
+                  <span v-if="s.weight" class="batch-server-weight">w={{ s.weight }}</span>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column label="启用" width="60" align="center">
             <template #default="{ row }">
               <el-checkbox v-model="row.enabled" :disabled="!row.hasBoth && !row.hasMultipleUp" />
             </template>
           </el-table-column>
-          <el-table-column label="Upstream 组" prop="upstreamName" min-width="150" />
+          <el-table-column label="Upstream 组" min-width="150">
+            <template #default="{ row }">
+              <span class="batch-upstream-name" @click="toggleBatchExpand(row)">{{ row.upstreamName }}</span>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="130">
             <template #default="{ row }">
               <span class="badge badge-success">{{ row.upCount }} up</span>
@@ -352,6 +368,7 @@ const swapOnlineIP = ref('')
 const swapAffectedUpstreams = ref([])
 const batchDialogVisible = ref(false)
 const batchItems = ref([])
+const batchTableRef = ref(null)
 
 const selectedMap = ref({})
 
@@ -782,6 +799,10 @@ function toggleBatchSelectAll() {
       i.enabled = newState
     }
   })
+}
+
+function toggleBatchExpand(row) {
+  batchTableRef.value?.toggleRowExpansion(row)
 }
 
 const batchValidCount = computed(() => {
@@ -1234,6 +1255,10 @@ async function executePreview() {
   }
 }
 
+:deep(.batch-table .el-table__expand-column .el-table__expand-icon) {
+  display: none;
+}
+
 :deep(.server-table .el-table__header th) {
   background: #f5f7fa !important;
   color: #606266;
@@ -1592,6 +1617,41 @@ async function executePreview() {
   color: #e6a23c;
   margin-top: 2px;
   line-height: 1.2;
+}
+
+.batch-upstream-name {
+  color: #409eff;
+  cursor: pointer;
+  font-weight: 500;
+}
+.batch-upstream-name:hover {
+  text-decoration: underline;
+}
+
+.batch-expand-servers {
+  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.batch-server-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+.batch-server-ip {
+  font-family: monospace;
+}
+.batch-server-port {
+  color: #909399;
+  font-family: monospace;
+}
+.batch-server-weight {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 2px;
 }
 
 /* ===== Upstream Toggle Button ===== */
