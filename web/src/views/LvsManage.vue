@@ -31,7 +31,7 @@
         <el-table-column label="" width="45" align="center">
           <template #default="{ row }">
             <template v-if="row.isDetail">
-              <el-table :data="getRSView(row.group).data" :span-method="getRSView(row.group).spanMethod" stripe size="small" max-height="300" style="width: 100%;">
+              <el-table :data="getRSView(row.group).data" :span-method="getRSView(row.group).spanMethod" stripe size="small" style="width: 100%;">
                 <el-table-column label="" width="45" align="center">
                   <template #header>
                     <el-checkbox :model-value="isAllSelected(row.group)" :indeterminate="isIndeterminate(row.group)" @change="(val) => toggleSelectAll(row.group, val)" />
@@ -40,27 +40,27 @@
                     <el-checkbox :model-value="isBatchSelected(row.group.ip, rs.ip)" @change="(val) => toggleBatch(row.group.ip, rs.ip, val)" />
                   </template>
                 </el-table-column>
-                <el-table-column label="Real Server" width="130">
+                <el-table-column label="Real Server" min-width="130">
                   <template #default="{ row: rs }">{{ rs.ip }}</template>
                 </el-table-column>
-                <el-table-column label="端口" width="70" align="center">
+                <el-table-column label="端口" width="80" align="center">
                   <template #default="{ row: rs }">{{ rs.port }}</template>
                 </el-table-column>
-                <el-table-column label="状态" width="70" align="center">
+                <el-table-column label="状态" width="80" align="center">
                   <template #default="{ row: rs }">
                     <el-tag :type="rs.status === 'up' ? 'success' : 'danger'" size="small">{{ rs.status }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="转发" width="70" align="center">
+                <el-table-column label="转发" width="80" align="center">
                   <template #default="{ row: rs }">{{ rs.forward }}</template>
                 </el-table-column>
-                <el-table-column label="Weight" width="70" align="center">
+                <el-table-column label="Weight" width="80" align="center">
                   <template #default="{ row: rs }">{{ rs.weight }}</template>
                 </el-table-column>
-                <el-table-column label="ActiveConn" width="90" align="center">
+                <el-table-column label="ActiveConn" width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.activeConn }}</template>
                 </el-table-column>
-                <el-table-column label="InActConn" width="90" align="center">
+                <el-table-column label="InActConn" width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.inactConn }}</template>
                 </el-table-column>
               </el-table>
@@ -427,10 +427,10 @@ function flattenRS(group) {
   return rows
 }
 
-// 合并单元格：同 IP 的行合并前两列（checkbox 和 Real Server）
+// 合并单元格：同 IP 的行只合并 checkbox 列，Real Server IP 不合并（保证表头与数据一一对应）
 function spanRSMethod(flattened) {
   return ({ rowIndex, columnIndex }) => {
-    if (columnIndex <= 1) {
+    if (columnIndex === 0) {
       const ip = flattened[rowIndex].ip
       if (rowIndex > 0 && flattened[rowIndex - 1].ip === ip) return [0, 0]
       let count = 1
