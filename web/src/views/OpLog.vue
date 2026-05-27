@@ -8,8 +8,8 @@
             <el-option label="全部" value="all" />
             <el-option label="LVS" value="lvs" />
             <el-option label="Nginx" value="nginx" />
-            <el-option label="Kubernetes" value="k8s" />
-            <el-option label="Kubernetes-PrePro" value="preprod" />
+            <el-option label="k8s" value="k8s" />
+            <el-option label="k8s-prepro" value="preprod" />
             <el-option label="认证" value="auth" />
             <el-option label="服务器" value="server" />
           </el-select>
@@ -28,6 +28,16 @@
       </template>
 
       <el-table :data="logs" stripe border v-force-reflow max-height="calc(100vh - 200px)">
+        <el-table-column type="expand" width="50">
+          <template #default="{ row }">
+            <div style="padding: 10px;">
+              <p><strong>命令：</strong></p>
+              <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">{{ row.detail }}</pre>
+              <p style="margin-top: 10px;"><strong>输出：</strong></p>
+              <pre style="background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ row.output }}</pre>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="时间" width="180">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
@@ -44,16 +54,6 @@
         <el-table-column prop="status" label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column type="expand" label="详情" width="80">
-          <template #default="{ row }">
-            <div style="padding: 10px;">
-              <p><strong>命令：</strong></p>
-              <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">{{ row.detail }}</pre>
-              <p style="margin-top: 10px;"><strong>输出：</strong></p>
-              <pre style="background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ row.output }}</pre>
-            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -109,7 +109,7 @@ function onSearch() {
   loadData()
 }
 
-const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' }
+const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'k8s', preprod: 'k8s-prepro', auth: '认证', server: '服务器' }
 const moduleTagTypes = { lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' }
 
 function moduleLabel(m) {
