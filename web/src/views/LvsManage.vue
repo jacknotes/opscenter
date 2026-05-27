@@ -32,7 +32,7 @@
         <el-table-column type="expand">
           <template #default="{ row }">
             <div style="padding: 8px 16px;">
-              <el-table :data="row.realServers" stripe size="small" max-height="300" row-key="ip">
+              <el-table :data="getRSView(row).data" :span-method="getRSView(row).spanMethod" stripe size="small" max-height="300">
                 <el-table-column label="" width="45" align="center">
                   <template #header>
                     <el-checkbox
@@ -49,26 +49,16 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="ip" label="Real Server" width="140" />
-                <el-table-column label="状态" min-width="200">
-                  <template #default="{ row: rs }">
-                    <span v-for="s in rs.statuses" :key="s.port" style="margin-right: 10px;">
-                      {{ s.port }}:
-                      <el-tag :type="s.status === 'up' ? 'success' : 'danger'" size="small">{{ s.status }}</el-tag>
-                    </span>
+                <el-table-column prop="port" label="状态" width="80" align="center">
+                  <template #default="{ row: s }">
+                    {{ s.port }}:
+                    <el-tag :type="s.status === 'up' ? 'success' : 'danger'" size="small">{{ s.status }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="转发" width="70" align="center">
-                  <template #default="{ row: rs }">{{ rs.statuses[0]?.forward }}</template>
-                </el-table-column>
-                <el-table-column label="Weight" width="70" align="center">
-                  <template #default="{ row: rs }">{{ rs.statuses[0]?.weight }}</template>
-                </el-table-column>
-                <el-table-column label="ActiveConn" width="90" align="center">
-                  <template #default="{ row: rs }">{{ rs.statuses[0]?.activeConn }}</template>
-                </el-table-column>
-                <el-table-column label="InActConn" width="90" align="center">
-                  <template #default="{ row: rs }">{{ rs.statuses[0]?.inactConn }}</template>
-                </el-table-column>
+                <el-table-column prop="forward" label="转发" width="80" align="center" />
+                <el-table-column prop="weight" label="Weight" width="80" align="center" />
+                <el-table-column prop="activeConn" label="ActiveConn" width="100" align="center" />
+                <el-table-column prop="inactConn" label="InActConn" width="100" align="center" />
               </el-table>
             </div>
           </template>
@@ -366,6 +356,40 @@ async function loadStatus() {
   } finally {
     statusLoading.value = false
   }
+}
+
+// 将 RS 按端口展平为逐行数据
+function flattenRS(group) {
+  const rows = []
+  for (const rs of group.realServers) {
+    for (const s of rs.statuses) {
+      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn })
+    }
+  }
+  return rows
+}
+
+// 合并单元格：同 IP 的行合并前两列（checkbox 和 Real Server）
+function spanRSMethod(flattened) {
+  return ({ rowIndex, columnIndex }) => {
+    if (columnIndex <= 1) {
+      const ip = flattened[rowIndex].ip
+      if (rowIndex > 0 && flattened[rowIndex - 1].ip === ip) return [0, 0]
+      let count = 1
+      while (rowIndex + count < flattened.length && flattened[rowIndex + count].ip === ip) count++
+      return [count, 1]
+    }
+  }
+}
+
+// 缓存展平数据和对应的 span-method，避免模板中重复计算
+const rsDataCache = new Map()
+function getRSView(group) {
+  let view = rsDataCache.get(group.ip)
+  const flat = flattenRS(group)
+  view = { data: flat, spanMethod: spanRSMethod(flat) }
+  rsDataCache.set(group.ip, view)
+  return view
 }
 
 function isBatchSelected(vip, rsIp) {
