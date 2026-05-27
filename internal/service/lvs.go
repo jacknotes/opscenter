@@ -26,6 +26,8 @@ type VirtualServer struct {
 	IP          string       `json:"ip"`
 	Port        string       `json:"port"`
 	Protocol    string       `json:"protocol"`
+	Scheduler   string       `json:"scheduler"`
+	Flags       string       `json:"flags"`
 	RealServers []RealServer `json:"real_servers"`
 }
 
@@ -51,7 +53,7 @@ func NewLVSService(sshManager *SSHManager) *LVSService {
 }
 
 var (
-	vsPattern       = regexp.MustCompile(`^(\w+)\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+\w+.*$`)
+	vsPattern       = regexp.MustCompile(`^(\w+)\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+(\w+)\s*(.*)$`)
 	rsPattern       = regexp.MustCompile(`^->\s+(\d+\.\d+\.\d+\.\d+):(\d+)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)$`)
 	statusVsPattern = regexp.MustCompile(`vs_(\d+\.\d+\.\d+\.\d+)_(\d+)\.conf:`)
 	statusRsPattern = regexp.MustCompile(`rs_(\d+\.\d+\.\d+\.\d+)_(\d+)\.conf`)
@@ -74,9 +76,11 @@ func (s *LVSService) ParseListOutput(output string) []VirtualServer {
 				servers = append(servers, *currentVS)
 			}
 			currentVS = &VirtualServer{
-				Protocol: matches[1],
-				IP:       matches[2],
-				Port:     matches[3],
+				Protocol:  matches[1],
+				IP:        matches[2],
+				Port:      matches[3],
+				Scheduler: matches[4],
+				Flags:     strings.TrimSpace(matches[5]),
 			}
 			continue
 		}

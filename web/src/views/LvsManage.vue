@@ -26,67 +26,88 @@
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
       </div>
 
-      <!-- 主表格：按 VIP 分组 -->
-      <el-table :data="filteredGroups" stripe border v-force-reflow max-height="calc(100vh - 240px)" row-key="ip"
-        :expand-row-keys="expandRowKeys" @expand-change="onExpandChange">
-        <el-table-column type="expand">
+      <!-- 主表格：按 VIP 分组，每端口一行，展开后 RS 表格插入在组下方 -->
+      <el-table :data="flattenedMainData" :span-method="mainSpanMethod" stripe border v-force-reflow max-height="calc(100vh - 240px)" row-key="uid">
+        <el-table-column label="" width="45" align="center">
           <template #default="{ row }">
-            <div style="padding: 8px 16px;">
-              <el-table :data="getRSView(row).data" :span-method="getRSView(row).spanMethod" stripe size="small" max-height="300">
+            <template v-if="row.isDetail">
+              <el-table :data="getRSView(row.group).data" :span-method="getRSView(row.group).spanMethod" stripe size="small" max-height="300" style="width: 100%;">
                 <el-table-column label="" width="45" align="center">
                   <template #header>
-                    <el-checkbox
-                      :model-value="isAllSelected(row)"
-                      :indeterminate="isIndeterminate(row)"
-                      @change="(val) => toggleSelectAll(row, val)"
-                    />
+                    <el-checkbox :model-value="isAllSelected(row.group)" :indeterminate="isIndeterminate(row.group)" @change="(val) => toggleSelectAll(row.group, val)" />
                   </template>
                   <template #default="{ row: rs }">
-                    <el-checkbox
-                      :model-value="isBatchSelected(row.ip, rs.ip)"
-                      @change="(val) => toggleBatch(row.ip, rs.ip, val)"
-                    />
+                    <el-checkbox :model-value="isBatchSelected(row.group.ip, rs.ip)" @change="(val) => toggleBatch(row.group.ip, rs.ip, val)" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="ip" label="Real Server" width="140" />
-                <el-table-column prop="port" label="状态" width="80" align="center">
-                  <template #default="{ row: s }">
-                    {{ s.port }}:
-                    <el-tag :type="s.status === 'up' ? 'success' : 'danger'" size="small">{{ s.status }}</el-tag>
+                <el-table-column label="Real Server" width="130">
+                  <template #default="{ row: rs }">{{ rs.ip }}</template>
+                </el-table-column>
+                <el-table-column label="端口" width="70" align="center">
+                  <template #default="{ row: rs }">{{ rs.port }}</template>
+                </el-table-column>
+                <el-table-column label="状态" width="70" align="center">
+                  <template #default="{ row: rs }">
+                    <el-tag :type="rs.status === 'up' ? 'success' : 'danger'" size="small">{{ rs.status }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="forward" label="转发" width="80" align="center" />
-                <el-table-column prop="weight" label="Weight" width="80" align="center" />
-                <el-table-column prop="activeConn" label="ActiveConn" width="100" align="center" />
-                <el-table-column prop="inactConn" label="InActConn" width="100" align="center" />
+                <el-table-column label="转发" width="70" align="center">
+                  <template #default="{ row: rs }">{{ rs.forward }}</template>
+                </el-table-column>
+                <el-table-column label="Weight" width="70" align="center">
+                  <template #default="{ row: rs }">{{ rs.weight }}</template>
+                </el-table-column>
+                <el-table-column label="ActiveConn" width="90" align="center">
+                  <template #default="{ row: rs }">{{ rs.activeConn }}</template>
+                </el-table-column>
+                <el-table-column label="InActConn" width="90" align="center">
+                  <template #default="{ row: rs }">{{ rs.inactConn }}</template>
+                </el-table-column>
               </el-table>
-            </div>
+            </template>
+            <span v-else-if="row.isFirst" style="cursor: pointer; font-size: 14px;" @click="toggleVIP(row.ip)">
+              {{ expandedVIPs.has(row.ip) ? '−' : '+' }}
+            </span>
           </template>
         </el-table-column>
-        <el-table-column label="Virtual Server" min-width="200">
+        <el-table-column label="Virtual Server" width="140">
           <template #default="{ row }">
-            <div style="font-weight: bold;">{{ row.ip }}</div>
+            <div v-if="!row.isDetail" style="font-weight: bold;">{{ row.ip }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="端口" min-width="150">
+        <el-table-column label="端口" width="80" align="center">
           <template #default="{ row }">
-            <el-tag v-for="p in row.ports" :key="p" size="small" style="margin-right: 4px;">{{ p }}</el-tag>
+            <span v-if="!row.isDetail">{{ row.port }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="协议" width="80">
-          <template #default="{ row }">{{ row.protocols.join(', ') }}</template>
+        <el-table-column label="调度算法" width="90" align="center">
+          <template #default="{ row }">
+            <span v-if="!row.isDetail">{{ row.scheduler }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Flags" min-width="150">
+          <template #default="{ row }">
+            <span v-if="!row.isDetail">{{ row.flags }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="协议" width="70" align="center">
+          <template #default="{ row }">
+            <span v-if="!row.isDetail">{{ row.protocol }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="RS 数量" width="80" align="center">
-          <template #default="{ row }">{{ row.realServers.length }}</template>
+          <template #default="{ row }">
+            <span v-if="!row.isDetail">{{ row.rsCount }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="在线" width="60" align="center">
           <template #default="{ row }">
-            <span style="color: #67c23a; font-weight: bold;">{{ countUp(row) }}</span>
+            <span v-if="!row.isDetail" style="color: #67c23a; font-weight: bold;">{{ row.upCount }}</span>
           </template>
         </el-table-column>
         <el-table-column label="离线" width="60" align="center">
           <template #default="{ row }">
-            <span style="color: #f56c6c; font-weight: bold;">{{ countDown(row) }}</span>
+            <span v-if="!row.isDetail" style="color: #f56c6c; font-weight: bold;">{{ row.downCount }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -228,11 +249,10 @@ function groupByVIP(data) {
   const map = new Map()
   for (const vs of data) {
     if (!map.has(vs.ip)) {
-      map.set(vs.ip, { ip: vs.ip, ports: [], protocols: [], realServersMap: new Map() })
+      map.set(vs.ip, { ip: vs.ip, entries: [], realServersMap: new Map() })
     }
     const group = map.get(vs.ip)
-    group.ports.push(vs.port)
-    group.protocols.push(vs.protocol)
+    group.entries.push({ port: vs.port, protocol: vs.protocol, scheduler: vs.scheduler, flags: vs.flags })
 
     for (const rs of vs.real_servers) {
       if (!group.realServersMap.has(rs.ip)) {
@@ -251,8 +271,7 @@ function groupByVIP(data) {
 
   return Array.from(map.values()).map(g => ({
     ip: g.ip,
-    ports: g.ports,
-    protocols: [...new Set(g.protocols)],
+    entries: g.entries,
     realServers: Array.from(g.realServersMap.values()),
   }))
 }
@@ -260,20 +279,20 @@ function groupByVIP(data) {
 // 虚拟服务器选项
 const vsOptions = computed(() => groupedData.value.map(g => g.ip))
 
-// 展开行
-const expandRowKeys = ref(vsFilter.value ? [vsFilter.value] : [])
+// 自定义展开状态（VIP 级别）
+const expandedVIPs = ref(new Set())
 
 watch(vsFilter, (val) => {
   if (val) {
-    expandRowKeys.value = [val]
+    expandedVIPs.value = new Set([val])
     allExpanded.value = true
   } else if (!allExpanded.value) {
-    expandRowKeys.value = []
+    expandedVIPs.value = new Set()
   }
 })
 
 watch(allExpanded, (val) => {
-  expandRowKeys.value = val ? filteredGroups.value.map(g => g.ip) : []
+  expandedVIPs.value = val ? new Set(filteredGroups.value.map(g => g.ip)) : new Set()
 })
 
 // 当前显示的所有 RS 是否全部选中
@@ -296,6 +315,44 @@ function countUp(row) {
 
 function countDown(row) {
   return row.realServers.filter(rs => rs.statuses.every(s => s.status === 'down')).length
+}
+
+// 主表格：将 VIP 分组展平为每端口一行，展开时插入 RS 详情行
+const flattenedMainData = computed(() => {
+  const rows = []
+  for (const group of filteredGroups.value) {
+    const rsCount = group.realServers.length
+    const upCount = countUp(group)
+    const downCount = countDown(group)
+    group.entries.forEach((entry, i) => {
+      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group })
+    })
+    // 展开时在组末尾插入 RS 详情行
+    if (expandedVIPs.value.has(group.ip)) {
+      rows.push({ uid: group.ip + ':detail', ip: group.ip, isDetail: true, group })
+    }
+  }
+  return rows
+})
+
+// 主表格合并单元格
+function mainSpanMethod({ rowIndex, columnIndex }) {
+  const row = flattenedMainData.value[rowIndex]
+  // 详情行：合并所有列为一个单元格
+  if (row.isDetail) {
+    return columnIndex === 0 ? [1, 9] : [0, 0]
+  }
+  // 端口行：合并 expand按钮(0)、IP(1)、RS数量(6)、在线(7)、离线(8)
+  if (columnIndex === 0 || columnIndex === 1 || columnIndex === 6 || columnIndex === 7 || columnIndex === 8) {
+    if (!row.isFirst) return [0, 0]
+    let count = 0
+    let i = rowIndex
+    while (i < flattenedMainData.value.length && flattenedMainData.value[i].ip === row.ip && !flattenedMainData.value[i].isDetail) {
+      count++
+      i++
+    }
+    return [count, 1]
+  }
 }
 
 onMounted(async () => {
@@ -328,6 +385,7 @@ async function loadData() {
   try {
     lvsData.value = await getLvsList(serverId.value)
     groupedData.value = groupByVIP(lvsData.value)
+    invalidateRSCache()
     batchSelected.value = new Set()
     if (vsFilter.value && !groupedData.value.some(g => g.ip === vsFilter.value)) {
       vsFilter.value = ''
@@ -379,15 +437,20 @@ function spanRSMethod(flattened) {
       while (rowIndex + count < flattened.length && flattened[rowIndex + count].ip === ip) count++
       return [count, 1]
     }
+    return [1, 1]
   }
 }
 
 // 缓存展平数据和对应的 span-method，避免模板中重复计算
 const rsDataCache = new Map()
+function invalidateRSCache() {
+  rsDataCache.clear()
+}
 function getRSView(group) {
-  let view = rsDataCache.get(group.ip)
+  const cached = rsDataCache.get(group.ip)
+  if (cached) return cached
   const flat = flattenRS(group)
-  view = { data: flat, spanMethod: spanRSMethod(flat) }
+  const view = { data: flat, spanMethod: spanRSMethod(flat) }
   rsDataCache.set(group.ip, view)
   return view
 }
@@ -443,16 +506,14 @@ function toggleExpandAll() {
   allExpanded.value = !allExpanded.value
 }
 
-function onExpandChange(row, expanded) {
-  const key = row.ip
-  if (expanded) {
-    if (!expandRowKeys.value.includes(key)) {
-      expandRowKeys.value = [...expandRowKeys.value, key]
-    }
+function toggleVIP(vip) {
+  const newSet = new Set(expandedVIPs.value)
+  if (newSet.has(vip)) {
+    newSet.delete(vip)
   } else {
-    expandRowKeys.value = expandRowKeys.value.filter(k => k !== key)
-    allExpanded.value = false
+    newSet.add(vip)
   }
+  expandedVIPs.value = newSet
 }
 
 function toggleAllFiltered() {
