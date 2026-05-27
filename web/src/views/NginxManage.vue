@@ -14,36 +14,28 @@
           <el-input v-model="filterKeyword" placeholder="搜索upstream/ip/port" clearable style="width: 250px;" />
         </div>
 
-        <!-- Stats Bar -->
-        <div class="stats-bar">
-          <div class="stat-item">
-            <span class="stat-value">{{ filteredUpstreams.length }}</span>
-            <span class="stat-label">Upstream 组</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value stat-success">{{ totalUpCount }}</span>
-            <span class="stat-label">在线</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value stat-danger">{{ totalDownCount }}</span>
-            <span class="stat-label">离线</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value stat-primary">{{ selectedServers.length }}</span>
-            <span class="stat-label">已选择后端</span>
-          </div>
-        </div>
-
         <!-- Toolbar -->
         <div class="toolbar">
+          <span class="stat-chip">Upstream <b>{{ filteredUpstreams.length }}</b></span>
+          <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
+          <span class="stat-chip stat-chip-danger">离线 <b>{{ totalDownCount }}</b></span>
+          <span class="stat-chip stat-chip-primary">已选 <b>{{ selectedServers.length }}</b></span>
+          <el-divider direction="vertical" style="height: 20px; margin: 0;" />
           <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
-          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
-          <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
-          <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
-          <el-button type="primary" @click="openBatchDialog">批量操作</el-button>
-          <el-button type="warning" @click="openBackupDialog">备份列表</el-button>
-          <el-button type="success" @click="handleViewConfig">查看配置</el-button>
+          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消' : '全选' }}</el-button>
+          <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">上线</el-button>
+          <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">下线</el-button>
+          <el-button type="primary" @click="openBatchDialog">批量</el-button>
           <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
+          <el-dropdown trigger="click">
+            <el-button type="info" class="el-button--cyan">更多<el-icon style="margin-left: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"></path></svg></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="openBackupDialog">备份列表</el-dropdown-item>
+                <el-dropdown-item @click="handleViewConfig">查看配置</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </template>
 
@@ -1068,47 +1060,25 @@ async function executePreview() {
   white-space: nowrap;
 }
 
-/* ===== Stats Bar ===== */
-.stats-bar {
-  display: flex;
-  gap: 0;
-  margin-top: 10px;
-  margin-bottom: 0;
-  background: #fff;
-  border-radius: 8px;
-  border: 1px solid #e4e7ed;
-  overflow: hidden;
+/* ===== Stat Chips ===== */
+.stat-chip {
+  font-size: 13px;
+  color: #606266;
+  background: #f4f4f5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
-.stat-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 12px 8px;
-  border-right: 1px solid #e4e7ed;
-}
-
-.stat-item:last-child {
-  border-right: none;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
+.stat-chip b {
+  margin-left: 4px;
+  font-size: 14px;
   color: #303133;
-  line-height: 1.2;
 }
 
-.stat-value.stat-success { color: #67c23a; }
-.stat-value.stat-danger { color: #f56c6c; }
-.stat-value.stat-primary { color: #409eff; }
-
-.stat-label {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 2px;
-}
+.stat-chip-success b { color: #67c23a; }
+.stat-chip-danger b { color: #f56c6c; }
+.stat-chip-primary b { color: #409eff; }
 
 /* ===== Toolbar ===== */
 .toolbar {

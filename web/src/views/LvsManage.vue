@@ -16,11 +16,11 @@
 
       <!-- 操作栏 -->
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-        <span style="color: #606266; font-size: 13px;">已选 {{ batchSelectedIPs.length }} 台 RS</span>
+        <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
         <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
-        <el-button type="info" class="el-button--cyan" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">批量上线</el-button>
-        <el-button type="danger" :disabled="!canBatchOffline" @click="handleBatchOffline">批量下线</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消' : '全选' }}</el-button>
+        <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">上线</el-button>
+        <el-button type="danger" :disabled="!canBatchOffline" @click="handleBatchOffline">下线</el-button>
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
@@ -449,10 +449,15 @@ async function handleBatchOnline() {
   if (items.length === 0) return
 
   // 只处理全部端口 down 的 RS，跳过已是 up 的
-  const targets = batchSelectedDetails.value.filter(d => d.isFullyDown)
+  const allDetails = batchSelectedDetails.value
+  const targets = allDetails.filter(d => d.isFullyDown)
   if (targets.length === 0) {
     ElMessage.warning('所选服务器均已在线，无需上线')
     return
+  }
+  const skipped = allDetails.length - targets.length
+  if (skipped > 0) {
+    ElMessage.warning(`${skipped} 台服务器已在线，将自动跳过，仅对 ${targets.length} 台离线服务器执行上线`)
   }
 
   const byVip = {}
@@ -485,12 +490,12 @@ async function handleBatchOffline() {
   if (items.length === 0) return
 
   // 只处理全部端口 up 的 RS，跳过已是 down 的
-  const targets = batchSelectedDetails.value.filter(d => d.isFullyUp)
+  const allDetails = batchSelectedDetails.value
+  const targets = allDetails.filter(d => d.isFullyUp)
   if (targets.length === 0) {
     ElMessage.warning('所选服务器均已离线，无需下线')
     return
   }
-
   const byVip = {}
   for (const { vip, rsIp } of targets) {
     if (!byVip[vip]) byVip[vip] = []
@@ -506,6 +511,11 @@ async function handleBatchOffline() {
       ElMessage.error(`VIP ${vip} 下线后将无在线服务器，至少需要保留一台`)
       return
     }
+  }
+
+  const skipped = allDetails.length - targets.length
+  if (skipped > 0) {
+    ElMessage.warning(`${skipped} 台服务器已离线，将自动跳过，仅对 ${targets.length} 台在线服务器执行下线`)
   }
 
   try {
@@ -573,3 +583,23 @@ async function executePreview() {
   }
 }
 </script>
+
+<style scoped>
+/* ===== Stat Chips ===== */
+.stat-chip {
+  font-size: 13px;
+  color: #606266;
+  background: #f4f4f5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.stat-chip b {
+  margin-left: 4px;
+  font-size: 14px;
+  color: #303133;
+}
+
+.stat-chip-primary b { color: #409eff; }
+</style>
