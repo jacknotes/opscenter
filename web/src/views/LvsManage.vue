@@ -17,13 +17,13 @@
       <!-- 操作栏 -->
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
         <span style="color: #606266; font-size: 13px;">已选 {{ batchSelectedIPs.length }} 台 RS</span>
-        <el-button type="info" class="el-button--cyan" size="small" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
-        <el-button type="info" class="el-button--cyan" size="small" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消全选' : '全选' }}</el-button>
-        <el-button type="primary" size="small" :disabled="!canBatchOnline" @click="handleBatchOnline">批量上线</el-button>
-        <el-button type="danger" size="small" :disabled="!canBatchOffline" @click="handleBatchOffline">批量下线</el-button>
-        <el-button type="primary" size="small" :disabled="!canSwap" @click="handleSwap">切换</el-button>
-        <el-button type="success" size="small" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
-        <el-button type="info" class="el-button--cyan" size="small" @click="loadData" :loading="loading">刷新</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">批量上线</el-button>
+        <el-button type="danger" :disabled="!canBatchOffline" @click="handleBatchOffline">批量下线</el-button>
+        <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
+        <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
+        <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
       </div>
 
       <!-- 主表格：按 VIP 分组 -->

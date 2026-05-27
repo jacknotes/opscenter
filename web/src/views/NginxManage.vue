@@ -36,7 +36,7 @@
 
         <!-- Toolbar -->
         <div class="toolbar">
-          <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '全部折叠' : '全部展开' }}</el-button>
+          <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
           <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消全选' : '全选' }}</el-button>
           <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">批量上线</el-button>
           <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">批量下线</el-button>
