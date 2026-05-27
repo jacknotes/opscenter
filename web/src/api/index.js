@@ -66,6 +66,9 @@ export const lvsOpPreview = (data) => api.post('/lvs/op/preview', data)
 export const lvsOpExecute = (data) => api.post('/lvs/op/execute', data)
 export const lvsSwapPreview = (data) => api.post('/lvs/swap/preview', data)
 export const lvsSwapExecute = (data) => api.post('/lvs/swap/execute', data)
+export const getLvsTags = (params) => api.get('/lvs/tags', { params })
+export const updateLvsTag = (data) => api.put('/lvs/tags', data)
+export const deleteLvsTag = (rsIp) => api.delete(`/lvs/tags/${encodeURIComponent(rsIp)}`)
 
 // K8s
 export const getK8sRollouts = (serverId) => api.get('/k8s/rollouts', { params: { server_id: serverId } })

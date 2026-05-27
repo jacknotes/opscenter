@@ -51,6 +51,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 	serverHandler := handler.NewServerHandler(db)
 	logHandler := handler.NewLogHandler(db)
 	lvsHandler := handler.NewLVSHandler(db, sshManager, previewMgr)
+	lvsTagHandler := handler.NewLVSTagHandler(db)
 	k8sHandler := handler.NewK8sHandler(db, sshManager, previewMgr)
 	preprodHandler := handler.NewPreprodHandler(db, sshManager, previewMgr, lockManager)
 	nginxHandler := handler.NewNginxHandler(db, sshManager, previewMgr)
@@ -90,10 +91,19 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 		{
 			lvs.GET("/list", lvsHandler.List)
 			lvs.GET("/status", lvsHandler.Status)
+			lvs.GET("/tags", lvsTagHandler.List)
 			lvs.POST("/op/preview", lvsHandler.OpPreview)
 			lvs.POST("/op/execute", lvsHandler.OpExecute)
 			lvs.POST("/swap/preview", lvsHandler.SwapPreview)
 			lvs.POST("/swap/execute", lvsHandler.SwapExecute)
+
+			// Admin-only tag management
+			lvsAdmin := lvs.Group("")
+			lvsAdmin.Use(middleware.AdminRequired(db))
+			{
+				lvsAdmin.PUT("/tags", lvsTagHandler.CreateOrUpdate)
+				lvsAdmin.DELETE("/tags/:rs_ip", lvsTagHandler.Delete)
+			}
 		}
 
 		// K8s

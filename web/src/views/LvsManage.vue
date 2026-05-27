@@ -44,6 +44,24 @@
                 <el-table-column label="Real Server" min-width="130">
                   <template #default="{ row: rs }">{{ rs.ip }}</template>
                 </el-table-column>
+                <el-table-column label="环境" width="120" align="center">
+                  <template #default="{ row: rs }">
+                    <el-tag
+                      v-if="rs.tag"
+                      :type="rs.tag.includes('生产') && !rs.tag.includes('预生产') ? 'danger' : 'warning'"
+                      size="small"
+                      style="cursor: pointer;"
+                      @click="openTagDialog(rs.ip, rs.tag)"
+                    >{{ rs.tag }}</el-tag>
+                    <el-button
+                      v-else
+                      type="info"
+                      link
+                      size="small"
+                      @click="openTagDialog(rs.ip, '')"
+                    >设置标签</el-button>
+                  </template>
+                </el-table-column>
                 <el-table-column label="端口" width="80" align="center">
                   <template #default="{ row: rs }">{{ rs.port }}</template>
                 </el-table-column>
@@ -175,12 +193,39 @@
         <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 500px; overflow-y: auto; font-size: 13px;">{{ statusRaw }}</pre>
       </div>
     </el-dialog>
+
+    <!-- Tag Edit Dialog -->
+    <el-dialog v-model="tagDialogVisible" title="设置环境标签" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="RS IP">
+          <el-input :model-value="tagForm.rs_ip" disabled />
+        </el-form-item>
+        <el-form-item label="环境标签">
+          <el-select
+            v-model="tagForm.tag"
+            filterable
+            allow-create
+            clearable
+            placeholder="选择或输入标签"
+            style="width: 100%"
+          >
+            <el-option v-for="opt in tagOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button v-if="tagForm.tag" type="danger" @click="handleDeleteTag" :loading="tagSaving">删除标签</el-button>
+        <span style="flex: 1;"></span>
+        <el-button @click="tagDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSaveTag" :loading="tagSaving">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute } from '../api'
+import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag } from '../api'
 import { ElMessage } from 'element-plus'
 
 const servers = ref([])
@@ -209,6 +254,13 @@ const statusRaw = ref('')
 const statusLoading = ref(false)
 const loading = ref(false)
 const batchSelected = ref(new Set())
+const tagDialogVisible = ref(false)
+const tagForm = ref({ rs_ip: '', tag: '' })
+const tagSaving = ref(false)
+const tagOptions = [
+  { label: '生产环境', value: '生产环境' },
+  { label: '预生产环境', value: '预生产环境' },
+]
 
 const batchSelectedIPs = computed(() => {
   return Array.from(batchSelected.value).map(key => {
@@ -257,7 +309,9 @@ function groupByVIP(data) {
 
     for (const rs of vs.real_servers) {
       if (!group.realServersMap.has(rs.ip)) {
-        group.realServersMap.set(rs.ip, { ip: rs.ip, statuses: [] })
+        group.realServersMap.set(rs.ip, { ip: rs.ip, statuses: [], tag: rs.tag || '' })
+      } else if (rs.tag) {
+        group.realServersMap.get(rs.ip).tag = rs.tag
       }
       group.realServersMap.get(rs.ip).statuses.push({
         port: rs.port,
@@ -422,7 +476,7 @@ function flattenRS(group) {
   const rows = []
   for (const rs of group.realServers) {
     for (const s of rs.statuses) {
-      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn })
+      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn, tag: rs.tag || '' })
     }
   }
   return rows
@@ -666,6 +720,43 @@ async function executePreview() {
     output.value = e.response?.data?.output || ''
   } finally {
     executing.value = false
+  }
+}
+
+function openTagDialog(rsIp, currentTag) {
+  tagForm.value = { rs_ip: rsIp, tag: currentTag }
+  tagDialogVisible.value = true
+}
+
+async function handleSaveTag() {
+  if (!tagForm.value.tag) {
+    ElMessage.warning('请输入标签')
+    return
+  }
+  tagSaving.value = true
+  try {
+    await updateLvsTag({ rs_ip: tagForm.value.rs_ip, tag: tagForm.value.tag })
+    ElMessage.success('标签已保存')
+    tagDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '保存失败')
+  } finally {
+    tagSaving.value = false
+  }
+}
+
+async function handleDeleteTag() {
+  tagSaving.value = true
+  try {
+    await deleteLvsTag(tagForm.value.rs_ip)
+    ElMessage.success('标签已删除')
+    tagDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '删除失败')
+  } finally {
+    tagSaving.value = false
   }
 }
 </script>

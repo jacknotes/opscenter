@@ -40,6 +40,7 @@ type RealServer struct {
 	ActiveConn int    `json:"active_conn"`
 	InActConn  int    `json:"inact_conn"`
 	Status     string `json:"status"`
+	Tag        string `json:"tag,omitempty"`
 }
 
 // LVSService 提供 LVS 管理的业务逻辑，包括输出解析和预览生成。

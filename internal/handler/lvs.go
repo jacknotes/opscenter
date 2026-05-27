@@ -86,6 +86,33 @@ func (h *LVSHandler) List(c *gin.Context) {
 		servers = h.lvsService.MergeOfflineRS(servers, statusGroups)
 	}
 
+	// 查询标签并注入到 RS 数据
+	rsIPs := make(map[string]bool)
+	for _, vs := range servers {
+		for _, rs := range vs.RealServers {
+			rsIPs[rs.IP] = true
+		}
+	}
+	ipList := make([]string, 0, len(rsIPs))
+	for ip := range rsIPs {
+		ipList = append(ipList, ip)
+	}
+	var tags []model.LvsRSTag
+	if len(ipList) > 0 {
+		h.db.Where("rs_ip IN ?", ipList).Find(&tags)
+	}
+	tagMap := make(map[string]string)
+	for _, t := range tags {
+		tagMap[t.RSIP] = t.Tag
+	}
+	for i := range servers {
+		for j := range servers[i].RealServers {
+			if tag, ok := tagMap[servers[i].RealServers[j].IP]; ok {
+				servers[i].RealServers[j].Tag = tag
+			}
+		}
+	}
+
 	c.JSON(http.StatusOK, servers)
 }
 
