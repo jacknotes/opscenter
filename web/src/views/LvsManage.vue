@@ -4,11 +4,11 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择LVS服务器" style="width: 200px" @change="onServerChange">
+          <el-select v-model="serverId" placeholder="选择LVS服务器" style="width: 150px" @change="onServerChange">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <span class="filter-label">虚拟服务器:</span>
-          <el-select v-model="vsFilter" placeholder="全部" clearable filterable style="width: 200px">
+          <el-select v-model="vsFilter" placeholder="全部" clearable filterable style="width: 150px">
             <el-option v-for="ip in vsOptions" :key="ip" :label="ip" :value="ip" />
           </el-select>
         </div>
@@ -16,7 +16,6 @@
 
       <!-- 操作栏 -->
       <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
-        <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
         <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
         <el-button type="info" class="el-button--cyan" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消' : '全选' }}</el-button>
         <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">上线</el-button>
@@ -24,6 +23,8 @@
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
+        <span style="margin-left: auto;"></span>
+        <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
       </div>
 
       <!-- 主表格：按 VIP 分组，每端口一行，展开后 RS 表格插入在组下方 -->

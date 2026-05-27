@@ -4,18 +4,24 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 250px" @change="loadData">
+          <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 150px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
+          <span style="margin-left: auto;"></span>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
         </div>
         <!-- 批量操作按钮 -->
         <div class="toolbar">
-        <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
-          <el-option label="全部" value="all" />
-          <el-option label="已扩容" value="up" />
-          <el-option label="已缩容" value="down" />
-        </el-select>
+        <el-dropdown trigger="click" @command="onStatusFilter" style="margin-right: 12px;">
+          <el-button type="info" class="el-button--cyan">{{ statusFilterLabel }}<el-icon style="margin-left: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"></path></svg></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="all">全部</el-dropdown-item>
+              <el-dropdown-item command="up">已扩容</el-dropdown-item>
+              <el-dropdown-item command="down">已缩容</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ allSelected ? '取消选择' : '全选' }}</el-button>
         <el-button type="danger" :disabled="selectedIds.size > 0 ? !canBatchScaleDown : !canFullScaleDown" @click="handleBatchScaleDown">
           {{ selectedIds.size > 0 ? '批量缩容' : '全量缩容' }}
@@ -195,6 +201,8 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const skipSelectionSync = ref(false)
 const statusFilter = ref('all')
+const statusFilterLabels = { all: '全部', up: '已扩容', down: '已缩容' }
+const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 
 // Batch confirm
 const batchConfirmVisible = ref(false)
@@ -300,6 +308,11 @@ function restoreSelection() {
 }
 
 watch(search, () => { currentPage.value = 1; restoreSelection() })
+
+function onStatusFilter(cmd) {
+  statusFilter.value = cmd
+  currentPage.value = 1
+}
 
 function handleToggleSelect() {
   if (allSelected.value) {
@@ -514,5 +527,15 @@ function executePreview() {
 .text-warning {
   color: #e6a23c;
   font-weight: bold;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.toolbar :deep(.el-dropdown) {
+  display: inline-flex;
 }
 </style>

@@ -4,17 +4,23 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px;">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 250px" @change="loadData">
+          <el-select v-model="serverId" placeholder="选择K8s服务器" style="width: 150px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
+          <span style="margin-left: auto;"></span>
           <el-input v-model="search" placeholder="搜索命名空间/名称/策略/步骤" clearable style="width: 250px;" />
         </div>
         <div class="toolbar">
-        <el-select v-model="statusFilter" style="width: 120px;" @change="currentPage = 1">
-          <el-option label="全部" value="all" />
-          <el-option label="待发布" value="pending" />
-          <el-option label="已上线" value="online" />
-        </el-select>
+        <el-dropdown trigger="click" @command="onStatusFilter" style="margin-right: 12px;">
+          <el-button type="info" class="el-button--cyan">{{ statusFilterLabel }}<el-icon style="margin-left: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"></path></svg></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="all">全部</el-dropdown-item>
+              <el-dropdown-item command="pending">待发布</el-dropdown-item>
+              <el-dropdown-item command="online">已上线</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="info" class="el-button--cyan" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
         <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
@@ -105,6 +111,8 @@ const output = ref('')
 const currentAction = ref('')
 const search = ref('')
 const statusFilter = ref('all')
+const statusFilterLabels = { all: '全部', pending: '待发布', online: '已上线' }
+const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 const tableRef = ref(null)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -162,6 +170,11 @@ function restoreSelection() {
 }
 
 watch(search, () => { currentPage.value = 1; restoreSelection() })
+
+function onStatusFilter(cmd) {
+  statusFilter.value = cmd
+  currentPage.value = 1
+}
 
 function handleToggleSelect() {
   if (allSelected.value) {
@@ -310,3 +323,16 @@ async function executePreview() {
   }
 }
 </script>
+
+<style scoped>
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.toolbar :deep(.el-dropdown) {
+  display: inline-flex;
+}
+</style>
