@@ -33,14 +33,16 @@ type VirtualServer struct {
 
 // RealServer 表示 LVS 后端真实服务器（RS）的状态信息。
 type RealServer struct {
-	IP         string `json:"ip"`
-	Port       string `json:"port"`
-	Forward    string `json:"forward"`
-	Weight     int    `json:"weight"`
-	ActiveConn int    `json:"active_conn"`
-	InActConn  int    `json:"inact_conn"`
-	Status     string `json:"status"`
-	Tag        string `json:"tag,omitempty"`
+	IP             string `json:"ip"`
+	Port           string `json:"port"`
+	Forward        string `json:"forward"`
+	Weight         int    `json:"weight"`
+	ActiveConn     int    `json:"active_conn"`
+	InActConn      int    `json:"inact_conn"`
+	Status         string `json:"status"`
+	Tag            string `json:"tag,omitempty"`
+	Disabled       bool   `json:"disabled,omitempty"`
+	DisabledReason string `json:"disabled_reason,omitempty"`
 }
 
 // LVSService 提供 LVS 管理的业务逻辑，包括输出解析和预览生成。

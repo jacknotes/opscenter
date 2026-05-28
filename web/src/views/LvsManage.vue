@@ -32,33 +32,40 @@
         <el-table-column label="" width="45" align="center">
           <template #default="{ row }">
             <template v-if="row.isDetail">
-              <el-table :data="getRSView(row.group).data" :span-method="getRSView(row.group).spanMethod" stripe size="small" style="width: 100%;">
+              <el-table :data="getRSView(row.group).data" :span-method="getRSView(row.group).spanMethod" :row-class-name="({ row: rs }) => rs.disabled ? 'rs-disabled-row' : ''" stripe size="small" style="width: 100%;">
                 <el-table-column label="" width="45" align="center">
                   <template #header>
                     <el-checkbox :model-value="isAllSelected(row.group)" :indeterminate="isIndeterminate(row.group)" @change="(val) => toggleSelectAll(row.group, val)" />
                   </template>
                   <template #default="{ row: rs }">
-                    <el-checkbox :model-value="isBatchSelected(row.group.ip, rs.ip)" @change="(val) => toggleBatch(row.group.ip, rs.ip, val)" />
+                    <el-checkbox :model-value="isBatchSelected(row.group.ip, rs.ip)" :disabled="rs.disabled" @change="(val) => toggleBatch(row.group.ip, rs.ip, val)" />
                   </template>
                 </el-table-column>
                 <el-table-column label="Real Server" min-width="130">
-                  <template #default="{ row: rs }">{{ rs.ip }}</template>
+                  <template #default="{ row: rs }">
+                    <span :style="rs.disabled ? 'color: #c0c4cc; text-decoration: line-through;' : ''">{{ rs.ip }}</span>
+                  </template>
                 </el-table-column>
                 <el-table-column label="环境" width="120" align="center">
                   <template #default="{ row: rs }">
+                    <template v-if="rs.disabled">
+                      <el-tooltip :content="rs.disabledReason" placement="top" :disabled="!rs.disabledReason">
+                        <el-tag type="info" size="small" style="cursor: pointer;" @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)">已禁用</el-tag>
+                      </el-tooltip>
+                    </template>
                     <el-tag
-                      v-if="rs.tag"
+                      v-else-if="rs.tag"
                       :type="rs.tag.includes('生产') && !rs.tag.includes('预生产') ? 'danger' : 'warning'"
                       size="small"
                       style="cursor: pointer;"
-                      @click="openTagDialog(rs.ip, rs.tag)"
+                      @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)"
                     >{{ rs.tag }}</el-tag>
                     <el-button
                       v-else
                       type="info"
                       link
                       size="small"
-                      @click="openTagDialog(rs.ip, '')"
+                      @click="openTagDialog(rs.ip, '', rs.disabled, rs.disabledReason)"
                     >设置标签</el-button>
                   </template>
                 </el-table-column>
@@ -212,9 +219,15 @@
             <el-option v-for="opt in tagOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="禁用操作">
+          <el-switch v-model="tagForm.disabled" />
+        </el-form-item>
+        <el-form-item v-if="tagForm.disabled" label="禁用原因" required>
+          <el-input v-model="tagForm.disabled_reason" type="textarea" :rows="2" placeholder="请输入禁用原因（必填）" />
+        </el-form-item>
       </el-form>
       <template #footer>
-        <el-button v-if="tagForm.tag" type="danger" @click="handleDeleteTag" :loading="tagSaving">删除标签</el-button>
+        <el-button v-if="tagForm.tag || tagForm.disabled" type="danger" @click="handleDeleteTag" :loading="tagSaving">删除配置</el-button>
         <span style="flex: 1;"></span>
         <el-button @click="tagDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSaveTag" :loading="tagSaving">保存</el-button>
@@ -255,7 +268,7 @@ const statusLoading = ref(false)
 const loading = ref(false)
 const batchSelected = ref(new Set())
 const tagDialogVisible = ref(false)
-const tagForm = ref({ rs_ip: '', tag: '' })
+const tagForm = ref({ rs_ip: '', tag: '', disabled: false, disabled_reason: '' })
 const tagSaving = ref(false)
 const tagOptions = [
   { label: '生产环境', value: '生产环境' },
@@ -309,9 +322,13 @@ function groupByVIP(data) {
 
     for (const rs of vs.real_servers) {
       if (!group.realServersMap.has(rs.ip)) {
-        group.realServersMap.set(rs.ip, { ip: rs.ip, statuses: [], tag: rs.tag || '' })
-      } else if (rs.tag) {
-        group.realServersMap.get(rs.ip).tag = rs.tag
+        group.realServersMap.set(rs.ip, { ip: rs.ip, statuses: [], tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabled_reason || '' })
+      } else {
+        if (rs.tag) group.realServersMap.get(rs.ip).tag = rs.tag
+        if (rs.disabled) {
+          group.realServersMap.get(rs.ip).disabled = true
+          group.realServersMap.get(rs.ip).disabledReason = rs.disabled_reason || ''
+        }
       }
       group.realServersMap.get(rs.ip).statuses.push({
         port: rs.port,
@@ -352,7 +369,7 @@ watch(allExpanded, (val) => {
 
 // 当前显示的所有 RS 是否全部选中
 const isAllFilteredSelected = computed(() => {
-  const allKeys = filteredGroups.value.flatMap(g => g.realServers.map(rs => g.ip + ':' + rs.ip))
+  const allKeys = filteredGroups.value.flatMap(g => g.realServers.filter(rs => !rs.disabled).map(rs => g.ip + ':' + rs.ip))
   return allKeys.length > 0 && allKeys.every(k => batchSelected.value.has(k))
 })
 
@@ -476,7 +493,7 @@ function flattenRS(group) {
   const rows = []
   for (const rs of group.realServers) {
     for (const s of rs.statuses) {
-      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn, tag: rs.tag || '' })
+      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn, tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabledReason || '' })
     }
   }
   return rows
@@ -525,9 +542,9 @@ function toggleBatch(vip, rsIp, checked) {
   batchSelected.value = newSet
 }
 
-// 获取 VIP 下所有唯一的 RS IP 列表
+// 获取 VIP 下所有唯一的可操作 RS IP 列表（排除禁用）
 function getRSKeys(group) {
-  return group.realServers.map(rs => group.ip + ':' + rs.ip)
+  return group.realServers.filter(rs => !rs.disabled).map(rs => group.ip + ':' + rs.ip)
 }
 
 // 全选状态
@@ -543,7 +560,7 @@ function isIndeterminate(group) {
   return selected.length > 0 && selected.length < keys.length
 }
 
-// 全选/反选
+// 全选/反选（仅操作未禁用的 RS）
 function toggleSelectAll(group, checked) {
   const keys = getRSKeys(group)
   const newSet = new Set(batchSelected.value)
@@ -572,7 +589,7 @@ function toggleVIP(vip) {
 }
 
 function toggleAllFiltered() {
-  const allKeys = filteredGroups.value.flatMap(g => g.realServers.map(rs => g.ip + ':' + rs.ip))
+  const allKeys = filteredGroups.value.flatMap(g => g.realServers.filter(rs => !rs.disabled).map(rs => g.ip + ':' + rs.ip))
   const allSelected = allKeys.length > 0 && allKeys.every(k => batchSelected.value.has(k))
   const newSet = new Set(batchSelected.value)
   if (allSelected) {
@@ -723,20 +740,25 @@ async function executePreview() {
   }
 }
 
-function openTagDialog(rsIp, currentTag) {
-  tagForm.value = { rs_ip: rsIp, tag: currentTag }
+function openTagDialog(rsIp, currentTag, disabled, disabledReason) {
+  tagForm.value = { rs_ip: rsIp, tag: currentTag || '', disabled: !!disabled, disabled_reason: disabledReason || '' }
   tagDialogVisible.value = true
 }
 
 async function handleSaveTag() {
-  if (!tagForm.value.tag) {
-    ElMessage.warning('请输入标签')
+  if (tagForm.value.disabled && !tagForm.value.disabled_reason.trim()) {
+    ElMessage.warning('禁用时必须填写禁用原因')
     return
   }
   tagSaving.value = true
   try {
-    await updateLvsTag({ rs_ip: tagForm.value.rs_ip, tag: tagForm.value.tag })
-    ElMessage.success('标签已保存')
+    await updateLvsTag({
+      rs_ip: tagForm.value.rs_ip,
+      tag: tagForm.value.tag,
+      disabled: tagForm.value.disabled,
+      disabled_reason: tagForm.value.disabled_reason,
+    })
+    ElMessage.success('保存成功')
     tagDialogVisible.value = false
     await loadData()
   } catch (e) {
@@ -779,4 +801,13 @@ async function handleDeleteTag() {
 }
 
 .stat-chip-primary b { color: #409eff; }
+
+:deep(.rs-disabled-row) {
+  background-color: #f5f7fa !important;
+  opacity: 0.6;
+}
+
+:deep(.rs-disabled-row:hover > td) {
+  background-color: #f5f7fa !important;
+}
 </style>

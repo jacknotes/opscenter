@@ -101,14 +101,16 @@ func (h *LVSHandler) List(c *gin.Context) {
 	if len(ipList) > 0 {
 		h.db.Where("rs_ip IN ?", ipList).Find(&tags)
 	}
-	tagMap := make(map[string]string)
-	for _, t := range tags {
-		tagMap[t.RSIP] = t.Tag
+	tagMap := make(map[string]*model.LvsRSTag)
+	for i := range tags {
+		tagMap[tags[i].RSIP] = &tags[i]
 	}
 	for i := range servers {
 		for j := range servers[i].RealServers {
-			if tag, ok := tagMap[servers[i].RealServers[j].IP]; ok {
-				servers[i].RealServers[j].Tag = tag
+			if t, ok := tagMap[servers[i].RealServers[j].IP]; ok {
+				servers[i].RealServers[j].Tag = t.Tag
+				servers[i].RealServers[j].Disabled = t.Disabled
+				servers[i].RealServers[j].DisabledReason = t.DisabledReason
 			}
 		}
 	}
@@ -179,6 +181,12 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 
 	if req.State != "on" && req.State != "off" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "状态必须是 on 或 off"})
+		return
+	}
+
+	// 校验 RS 是否被禁用
+	if reason := h.checkRSDisabled(req.RSIP); reason != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP, reason)})
 		return
 	}
 
@@ -301,6 +309,16 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 		return
 	}
 
+	// 校验 RS 是否被禁用
+	if reason := h.checkRSDisabled(req.RSIP1); reason != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP1, reason)})
+		return
+	}
+	if reason := h.checkRSDisabled(req.RSIP2); reason != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP2, reason)})
+		return
+	}
+
 	var server model.Server
 	if err := h.db.First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
@@ -392,4 +410,13 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	h.previewMgr.Delete(req.PreviewID)
 
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})
+}
+
+// checkRSDisabled 检查 RS 是否被禁用，返回禁用原因；未禁用返回空字符串。
+func (h *LVSHandler) checkRSDisabled(rsIP string) string {
+	var tag model.LvsRSTag
+	if err := h.db.Where("rs_ip = ? AND disabled = ?", rsIP, true).First(&tag).Error; err != nil {
+		return ""
+	}
+	return tag.DisabledReason
 }

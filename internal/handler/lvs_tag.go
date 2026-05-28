@@ -20,8 +20,10 @@ func NewLVSTagHandler(db *gorm.DB) *LVSTagHandler {
 }
 
 type LvsTagRequest struct {
-	RSIP string `json:"rs_ip" binding:"required"`
-	Tag  string `json:"tag" binding:"required"`
+	RSIP           string `json:"rs_ip" binding:"required"`
+	Tag            string `json:"tag"`
+	Disabled       bool   `json:"disabled"`
+	DisabledReason string `json:"disabled_reason"`
 }
 
 // List godoc
@@ -73,19 +75,30 @@ func (h *LVSTagHandler) CreateOrUpdate(c *gin.Context) {
 		return
 	}
 
-	tag := model.LvsRSTag{
-		RSIP: req.RSIP,
-		Tag:  req.Tag,
+	if req.Disabled && strings.TrimSpace(req.DisabledReason) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "禁用时必须填写禁用原因"})
+		return
 	}
 
-	if err := h.db.Where("rs_ip = ?", req.RSIP).Assign("tag", req.Tag).FirstOrCreate(&tag).Error; err != nil {
+	updates := map[string]interface{}{
+		"tag":             req.Tag,
+		"disabled":        req.Disabled,
+		"disabled_reason": req.DisabledReason,
+	}
+
+	tag := model.LvsRSTag{RSIP: req.RSIP}
+	if err := h.db.Where("rs_ip = ?", req.RSIP).Assign(updates).FirstOrCreate(&tag).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存标签失败"})
 		return
 	}
 
-	createAuditLog(h.db, c, "lvs", "update_tag",
-		fmt.Sprintf("更新RS标签: %s -> %s", req.RSIP, req.Tag),
-		"", "success", "", 0, "")
+	action := "update_tag"
+	detail := fmt.Sprintf("更新RS标签: %s -> %s", req.RSIP, req.Tag)
+	if req.Disabled {
+		action = "disable_rs"
+		detail = fmt.Sprintf("禁用RS: %s, 原因: %s", req.RSIP, req.DisabledReason)
+	}
+	createAuditLog(h.db, c, "lvs", action, detail, "", "success", "", 0, "")
 
 	c.JSON(http.StatusOK, gin.H{"message": "标签已保存"})
 }
