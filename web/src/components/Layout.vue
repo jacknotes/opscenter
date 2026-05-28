@@ -110,15 +110,16 @@
           <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
-          <el-dropdown @command="handleCommand">
-            <span style="cursor: pointer;">{{ userStore.userInfo?.username }} <el-icon><ArrowDown /></el-icon></span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="changePwd">修改密码</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
+          <el-popover placement="bottom-end" trigger="click" :width="100" popper-class="user-popover" :show-after="0" :hide-after="0">
+            <template #reference>
+              <span style="cursor: pointer;">{{ userStore.userInfo?.username }} <el-icon><ArrowDown /></el-icon></span>
             </template>
-          </el-dropdown>
+            <div class="user-menu">
+              <div class="user-menu-item" @click="handleCommand('profile')">个人信息</div>
+              <div class="user-menu-item" @click="handleCommand('changePwd')">修改密码</div>
+              <div class="user-menu-item user-menu-item--danger" @click="handleCommand('logout')">退出登录</div>
+            </div>
+          </el-popover>
         </div>
       </el-header>
 
@@ -127,6 +128,20 @@
       </el-main>
     </el-container>
   </el-container>
+
+  <!-- User Profile Dialog -->
+  <el-dialog v-model="profileVisible" title="个人信息" width="400px">
+    <el-descriptions :column="1" border>
+      <el-descriptions-item label="用户名">{{ userStore.userInfo?.username }}</el-descriptions-item>
+      <el-descriptions-item label="姓名">{{ userStore.userInfo?.name }}</el-descriptions-item>
+      <el-descriptions-item label="邮箱">{{ userStore.userInfo?.email }}</el-descriptions-item>
+      <el-descriptions-item label="角色">
+        <el-tag :type="userStore.userInfo?.role === 'admin' ? 'danger' : 'info'" size="small">
+          {{ userStore.userInfo?.role === 'admin' ? '管理员' : '普通用户' }}
+        </el-tag>
+      </el-descriptions-item>
+    </el-descriptions>
+  </el-dialog>
 
   <!-- Change Password Dialog -->
   <el-dialog v-model="changePwdVisible" title="修改密码" width="400px">
@@ -163,6 +178,7 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 
 const drawerVisible = ref(false)
+const profileVisible = ref(false)
 const changePwdVisible = ref(false)
 const changePwdLoading = ref(false)
 const changePwdForm = ref({ old_password: '', new_password: '', confirm_password: '' })
@@ -177,7 +193,9 @@ onMounted(async () => {
 })
 
 function handleCommand(cmd) {
-  if (cmd === 'logout') {
+  if (cmd === 'profile') {
+    profileVisible.value = true
+  } else if (cmd === 'logout') {
     logout().catch(() => {}).finally(() => {
       userStore.logout()
       router.push('/login').catch(() => {})
@@ -257,5 +275,39 @@ async function submitChangePwd() {
 :deep(.mobile-drawer .el-drawer__body) {
   padding: 0;
   background: var(--sidebar-bg);
+}
+
+.user-menu {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.user-menu-item {
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.2s;
+  text-align: center;
+}
+
+.user-menu-item:hover {
+  background: var(--content-bg);
+}
+
+.user-menu-item--danger {
+  color: #F56C6C;
+}
+</style>
+
+<style>
+.user-popover.el-popover {
+  padding: 4px 0 !important;
+  min-width: 100px !important;
+  width: 100px !important;
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--card-shadow) !important;
 }
 </style>
