@@ -127,6 +127,10 @@ export const getNginxBackups = (serverId, opts) => api.get('/nginx/backups', { p
 // Logs
 export const getLogs = (params) => api.get('/logs', { params })
 
+// Dashboard
+export const getDashboardStats = () => api.get('/dashboard/stats')
+export const getDashboardRemoteStats = () => api.get('/dashboard/remote-stats', { timeout: 35000 })
+
 // Users
 export const getUsers = () => api.get('/users')
 export const createUser = (data) => api.post('/users', data)

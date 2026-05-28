@@ -181,6 +181,26 @@ func (m *SSHManager) Execute(server *model.Server, command string) (string, erro
 	return string(output), nil
 }
 
+// ExecuteWithTimeout 带超时的命令执行。超时后返回错误。
+func (m *SSHManager) ExecuteWithTimeout(server *model.Server, command string, timeout time.Duration) (string, error) {
+	type result struct {
+		output string
+		err    error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		output, err := m.Execute(server, command)
+		ch <- result{output, err}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.output, r.err
+	case <-time.After(timeout):
+		return "", fmt.Errorf("执行超时 (%v)", timeout)
+	}
+}
+
 // ExecuteWithPipe 通过 stdin 管道将密码传递给远程命令。
 // 密码使用 base64 编码避免 shell 元字符导致的注入问题。
 func (m *SSHManager) ExecuteWithPipe(server *model.Server, command, password string) (string, error) {

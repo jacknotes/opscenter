@@ -1,15 +1,232 @@
 <template>
   <div class="dashboard">
-    <!-- 功能入口卡片 -->
+    <!-- 统计卡片网格 -->
     <el-row :gutter="20">
-      <el-col :span="6" v-for="card in featureCards" :key="card.title">
-        <div class="feature-card" @click="$router.push(card.route)">
-          <div class="feature-icon" :style="{ background: card.iconBg }">
-            <el-icon :size="28" :color="card.iconColor"><component :is="card.icon" /></el-icon>
+      <!-- 服务器管理（admin） -->
+      <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
+        <div class="stat-card" @click="$router.push('/servers')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(144,147,153,0.1)">
+              <el-icon :size="22" color="#909399"><Monitor /></el-icon>
+            </div>
+            <span class="stat-title">服务器管理</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
           </div>
-          <div class="feature-info">
-            <div class="feature-title">{{ card.title }}</div>
-            <div class="feature-desc">{{ card.desc }}</div>
+          <div class="stat-body" v-if="!statsLoading && serverStats">
+            <div class="stat-row">
+              <span class="stat-label">总数</span>
+              <span class="stat-value">{{ serverStats.total }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">启用 / 禁用</span>
+              <span class="stat-value">
+                <span class="text-success">{{ serverStats.enabled }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-danger">{{ serverStats.disabled }}</span>
+              </span>
+            </div>
+            <div class="stat-tags">
+              <el-tag v-for="(count, type) in serverStats.by_type" :key="type" size="small" type="info" class="stat-tag">
+                {{ typeLabel(type) }}: {{ count }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="statsLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>加载失败</span>
+            <el-button text type="primary" size="small" @click.stop="loadStats">重试</el-button>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- 用户管理（admin） -->
+      <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
+        <div class="stat-card" @click="$router.push('/users')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(144,147,153,0.1)">
+              <el-icon :size="22" color="#909399"><User /></el-icon>
+            </div>
+            <span class="stat-title">用户管理</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="stat-body" v-if="!statsLoading && userStats">
+            <div class="stat-row">
+              <span class="stat-label">总数</span>
+              <span class="stat-value">{{ userStats.total }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">启用 / 禁用</span>
+              <span class="stat-value">
+                <span class="text-success">{{ userStats.enabled }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-danger">{{ userStats.disabled }}</span>
+              </span>
+            </div>
+            <div class="stat-tags">
+              <el-tag v-for="(count, role) in userStats.by_role" :key="role" size="small" :type="role === 'admin' ? 'danger' : 'info'" class="stat-tag">
+                {{ role === 'admin' ? '管理员' : '普通用户' }}: {{ count }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="statsLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>加载失败</span>
+            <el-button text type="primary" size="small" @click.stop="loadStats">重试</el-button>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- LVS 管理 -->
+      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
+        <div class="stat-card" @click="$router.push('/lvs')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(64,158,255,0.1)">
+              <el-icon :size="22" color="#409EFF"><Connection /></el-icon>
+            </div>
+            <span class="stat-title">LVS 管理</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="stat-body" v-if="!remoteLoading && lvsStats">
+            <div class="stat-row">
+              <span class="stat-label">VirtualServer</span>
+              <span class="stat-value">{{ lvsStats.vs_count }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">RealServer 在线 / 离线</span>
+              <span class="stat-value">
+                <span class="text-success">{{ lvsStats.rs_online }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-danger">{{ lvsStats.rs_offline }}</span>
+              </span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">ActiveConn / InActConn</span>
+              <span class="stat-value">
+                <span>{{ lvsStats.total_active_conn }}</span>
+                <span class="stat-divider">/</span>
+                <span>{{ lvsStats.total_inact_conn }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="remoteLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>{{ remoteError || '加载失败' }}</span>
+            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- Nginx 管理 -->
+      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
+        <div class="stat-card" @click="$router.push('/nginx')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(103,194,58,0.1)">
+              <el-icon :size="22" color="#67C23A"><Document /></el-icon>
+            </div>
+            <span class="stat-title">Nginx 管理</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="stat-body" v-if="!remoteLoading && nginxStats">
+            <div class="stat-row">
+              <span class="stat-label">Upstream 组</span>
+              <span class="stat-value">{{ nginxStats.upstream_count }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Server 在线 / 离线</span>
+              <span class="stat-value">
+                <span class="text-success">{{ nginxStats.server_online }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-danger">{{ nginxStats.server_offline }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="remoteLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>{{ remoteError || '加载失败' }}</span>
+            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- K8S 发布 -->
+      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
+        <div class="stat-card" @click="$router.push('/k8s')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(230,162,60,0.1)">
+              <el-icon :size="22" color="#E6A23C"><Box /></el-icon>
+            </div>
+            <span class="stat-title">K8S 发布</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="stat-body" v-if="!remoteLoading && k8sStats">
+            <div class="stat-row">
+              <span class="stat-label">Rollout 总数</span>
+              <span class="stat-value">{{ k8sStats.total_rollouts }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">待发布 / 已发布</span>
+              <span class="stat-value">
+                <span class="text-warning">{{ k8sStats.pending }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-success">{{ k8sStats.online }}</span>
+              </span>
+            </div>
+            <div class="stat-tags" v-if="k8sStats.by_namespace && Object.keys(k8sStats.by_namespace).length > 0">
+              <el-tag v-for="(count, ns) in k8sStats.by_namespace" :key="ns" size="small" type="warning" class="stat-tag">
+                {{ ns }}: {{ count }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="remoteLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>{{ remoteError || '加载失败' }}</span>
+            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
+          </div>
+        </div>
+      </el-col>
+
+      <!-- 预生产扩缩容 -->
+      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
+        <div class="stat-card" @click="$router.push('/preprod')">
+          <div class="stat-header">
+            <div class="stat-icon" style="background: rgba(245,108,108,0.1)">
+              <el-icon :size="22" color="#F56C6C"><ZoomOut /></el-icon>
+            </div>
+            <span class="stat-title">预生产扩缩容</span>
+            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="stat-body" v-if="!remoteLoading && preprodStats">
+            <div class="stat-row">
+              <span class="stat-label">资源总数</span>
+              <span class="stat-value">{{ preprodStats.total_resources }}</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">已缩容 / 已扩容 / 正常</span>
+              <span class="stat-value">
+                <span class="text-danger">{{ preprodStats.scaled_down }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-warning">{{ preprodStats.expanded }}</span>
+                <span class="stat-divider">/</span>
+                <span class="text-success">{{ preprodStats.normal }}</span>
+              </span>
+            </div>
+          </div>
+          <div class="stat-body" v-else-if="remoteLoading">
+            <el-skeleton :rows="2" animated />
+          </div>
+          <div class="stat-body stat-error" v-else>
+            <span>{{ remoteError || '加载失败' }}</span>
+            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
           </div>
         </div>
       </el-col>
@@ -20,7 +237,13 @@
       <template #header>
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <span style="font-weight: 600; font-size: 15px;">最近操作</span>
-          <el-button text type="primary" @click="$router.push('/logs')">查看全部</el-button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <el-button text type="primary" size="small" :loading="remoteLoading" @click="loadRemoteStats">
+              <el-icon style="margin-right: 4px"><Refresh /></el-icon>
+              刷新远程数据
+            </el-button>
+            <el-button text type="primary" @click="$router.push('/logs')">查看全部</el-button>
+          </div>
         </div>
       </template>
       <el-table :data="logs" stripe v-if="logs.length > 0" v-force-reflow>
@@ -53,17 +276,29 @@
 
 <script setup>
 import { ref, onMounted, markRaw } from 'vue'
-import { getLogs } from '../api'
-import { Connection, Document, Box, ZoomOut } from '@element-plus/icons-vue'
+import { getLogs, getDashboardStats, getDashboardRemoteStats } from '../api'
+import { useUserStore } from '../stores/user'
+import { Connection, Document, Box, ZoomOut, Monitor, User, ArrowRight, Refresh } from '@element-plus/icons-vue'
+
+const userStore = useUserStore()
 
 const logs = ref([])
 
-const featureCards = [
-  { title: 'LVS 管理', desc: 'LVS 负载均衡上下线与切换', route: '/lvs', icon: markRaw(Connection), iconColor: '#409EFF', iconBg: 'rgba(64, 158, 255, 0.1)' },
-  { title: 'Nginx 管理', desc: 'Nginx upstream 配置管理', route: '/nginx', icon: markRaw(Document), iconColor: '#67C23A', iconBg: 'rgba(103, 194, 58, 0.1)' },
-  { title: 'K8S 发布', desc: 'Kubernetes Argo Rollout 发布', route: '/k8s', icon: markRaw(Box), iconColor: '#E6A23C', iconBg: 'rgba(230, 162, 60, 0.1)' },
-  { title: '预生产扩缩容', desc: '预生产环境资源扩缩容', route: '/preprod', icon: markRaw(ZoomOut), iconColor: '#F56C6C', iconBg: 'rgba(245, 108, 108, 0.1)' },
-]
+// MySQL 统计（即时）
+const statsLoading = ref(true)
+const serverStats = ref(null)
+const userStats = ref(null)
+
+// SSH 远程统计（慢）
+const remoteLoading = ref(true)
+const remoteError = ref(null)
+const lvsStats = ref(null)
+const nginxStats = ref(null)
+const k8sStats = ref(null)
+const preprodStats = ref(null)
+
+const typeLabels = { lvs: 'LVS', nginx: 'Nginx', kubernetes: 'K8S', preprod: 'Preprod' }
+function typeLabel(type) { return typeLabels[type] || type }
 
 const moduleLabels = markRaw({ lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' })
 const moduleTagTypes = markRaw({ lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' })
@@ -76,7 +311,40 @@ function formatTime(t) {
 function moduleLabel(m) { return moduleLabels[m] || m }
 function moduleTagType(m) { return moduleTagTypes[m] || '' }
 
+async function loadStats() {
+  statsLoading.value = true
+  try {
+    const res = await getDashboardStats()
+    serverStats.value = res.servers || null
+    userStats.value = res.users || null
+  } catch (e) {
+    console.error('加载 MySQL 统计失败:', e)
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+async function loadRemoteStats() {
+  remoteLoading.value = true
+  remoteError.value = null
+  try {
+    const res = await getDashboardRemoteStats()
+    lvsStats.value = res.lvs || null
+    nginxStats.value = res.nginx || null
+    k8sStats.value = res.k8s || null
+    preprodStats.value = res.preprod || null
+  } catch (e) {
+    console.error('加载远程统计失败:', e)
+    remoteError.value = '远程数据加载失败'
+  } finally {
+    remoteLoading.value = false
+  }
+}
+
 onMounted(async () => {
+  // 并行加载 MySQL 统计、SSH 远程统计、操作日志
+  loadStats()
+  loadRemoteStats()
   try {
     const res = await getLogs({ page: 1, size: 10 })
     logs.value = res.data || []
@@ -91,53 +359,103 @@ onMounted(async () => {
   padding: 0;
 }
 
-.feature-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 24px 20px;
+.stat-card {
   background: var(--card-bg);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   margin-bottom: 20px;
+  overflow: hidden;
 }
 
-.feature-card:hover {
+.stat-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 }
 
-.feature-card:active {
+.stat-card:active {
   transform: translateY(-1px);
 }
 
-.feature-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 0;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.feature-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.stat-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
 }
 
-.feature-title {
-  font-size: 15px;
+.stat-arrow {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.stat-body {
+  padding: 12px 20px 16px;
+  min-height: 60px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.feature-desc {
-  font-size: 12px;
+.stat-divider {
+  margin: 0 4px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  font-weight: 400;
 }
+
+.stat-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.stat-tag {
+  font-size: 12px;
+}
+
+.stat-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.text-success { color: #67C23A; }
+.text-danger { color: #F56C6C; }
+.text-warning { color: #E6A23C; }
 </style>

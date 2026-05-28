@@ -58,6 +58,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 	preprodHandler := handler.NewPreprodHandler(db, sshManager, previewMgr, lockManager)
 	nginxHandler := handler.NewNginxHandler(db, sshManager, previewMgr)
 	wsHandler := handler.NewWSHandler(db, sshManager, previewMgr, lockManager)
+	dashboardHandler := handler.NewDashboardHandler(db, sshManager)
 
 	// Initialize admin user
 	authHandler.InitAdmin()
@@ -87,6 +88,10 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 
 		// Logs
 		protected.GET("/logs", logHandler.List)
+
+		// Dashboard
+		protected.GET("/dashboard/stats", dashboardHandler.Stats)
+		protected.GET("/dashboard/remote-stats", dashboardHandler.RemoteStats)
 
 		// LVS
 		lvs := protected.Group("/lvs")
