@@ -339,7 +339,7 @@ var (
 	validateProjectNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 	validateNamespacePattern   = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
 	validateUpstreamNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	validateConfigPatternPattern = regexp.MustCompile(`^[a-zA-Z0-9._*?-]+$`)
+	validateConfigPatternPattern = regexp.MustCompile(`^[a-zA-Z0-9._*?,!-]+$`)
 
 	// 文件路径中不允许的字符（防注入）
 	unsafePathChars = regexp.MustCompile(`[;&|$\x60\n\r]`)
