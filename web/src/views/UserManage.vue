@@ -2,7 +2,7 @@
   <div>
     <el-card class="main-card">
       <template #header>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
           <el-button :type="selectedRow?.enabled ? 'warning' : 'success'" @click="handleToggleSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">{{ selectedRow?.enabled ? '禁用' : '启用' }}</el-button>
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
@@ -269,6 +269,21 @@ async function handleSubmitResetPwd() {
 </script>
 
 <style scoped>
+:deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+}
 :deep(.disabled-row) {
   background-color: #fafafa !important;
   opacity: 0.6;

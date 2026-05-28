@@ -325,6 +325,10 @@ async function executePreview() {
 </script>
 
 <style scoped>
+:deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
 .toolbar {
   display: flex;
   align-items: center;

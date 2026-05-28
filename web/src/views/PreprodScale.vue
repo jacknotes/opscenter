@@ -679,6 +679,10 @@ function executePreview() {
 </script>
 
 <style scoped>
+:deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
 .text-warning {
   color: #e6a23c;
   font-weight: bold;
