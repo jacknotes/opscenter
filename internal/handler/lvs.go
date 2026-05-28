@@ -74,11 +74,16 @@ func (h *LVSHandler) List(c *gin.Context) {
 
 	output, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
+		// keepalived 服务器可能宕机或服务不可用，返回空列表而非报错
+		c.Header("X-Warning", fmt.Sprintf("无法连接服务器或执行命令失败: %v", err))
+		c.JSON(http.StatusOK, []interface{}{})
 		return
 	}
 
 	servers := h.lvsService.ParseListOutput(output)
+	if servers == nil {
+		servers = []service.VirtualServer{}
+	}
 
 	// 获取 status 输出，补充下线的 RS
 	statusOutput, statusErr := h.sshManager.Execute(&server, server.ScriptPath+" status")

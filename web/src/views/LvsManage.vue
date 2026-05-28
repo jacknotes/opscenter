@@ -21,7 +21,7 @@
         <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">上线</el-button>
         <el-button type="danger" :disabled="!canBatchOffline" @click="handleBatchOffline">下线</el-button>
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
-        <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
+        <el-button type="success" @click="loadStatus" :loading="statusLoading">查看配置</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
         <span style="margin-left: auto;"></span>
         <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
@@ -321,6 +321,7 @@ const canSwap = computed(() => {
 
 // 按 VIP 聚合数据
 function groupByVIP(data) {
+  if (!data || !Array.isArray(data)) return []
   const map = new Map()
   for (const vs of data) {
     if (!map.has(vs.ip)) {
@@ -476,7 +477,15 @@ async function loadData() {
       vsFilter.value = ''
     }
   } catch (e) {
-    ElMessage.error('加载数据失败')
+    if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+      ElMessage.error('连接超时，目标服务器可能不可达，请检查服务器状态')
+    } else if (e.response?.data?.error) {
+      ElMessage.error(e.response.data.error)
+    } else if (!e.response) {
+      ElMessage.error('网络异常，无法连接到后端服务')
+    } else {
+      ElMessage.error('加载数据失败：' + (e.message || '未知错误'))
+    }
   } finally {
     loading.value = false
   }

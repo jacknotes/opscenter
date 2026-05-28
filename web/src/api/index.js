@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useUserStore } from '../stores/user'
 import router from '../router'
+import { ElMessage } from 'element-plus'
 
 // 创建 Axios 实例，所有 API 请求的基础配置
 const api = axios.create({
@@ -23,7 +24,13 @@ api.interceptors.request.use(config => {
 
 // 响应拦截器：提取 response.data，401 时自动登出并跳转登录页
 api.interceptors.response.use(
-  response => response.data,
+  response => {
+    const warning = response.headers['x-warning']
+    if (warning) {
+      ElMessage({ message: warning, type: 'warning', duration: 5000 })
+    }
+    return response.data
+  },
   error => {
     if (error.response?.status === 401) {
       const userStore = useUserStore()
