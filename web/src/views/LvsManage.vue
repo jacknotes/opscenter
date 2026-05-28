@@ -202,7 +202,7 @@
     </el-dialog>
 
     <!-- Tag Edit Dialog -->
-    <el-dialog v-model="tagDialogVisible" title="设置环境标签" width="400px">
+    <el-dialog v-model="tagDialogVisible" title="设置环境标签" width="min(400px, 90vw)" align-center>
       <el-form label-width="80px">
         <el-form-item label="RS IP">
           <el-input :model-value="tagForm.rs_ip" disabled />
