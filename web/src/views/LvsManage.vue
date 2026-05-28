@@ -23,7 +23,6 @@
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
-        <el-checkbox v-model="autoRefresh" style="margin-left: 4px;">自动刷新</el-checkbox>
         <span style="margin-left: auto;"></span>
         <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
       </div>
@@ -276,7 +275,6 @@ const statusRaw = ref('')
 const statusLoading = ref(false)
 const loading = ref(false)
 const batchSelected = ref(new Set())
-const autoRefresh = ref(false)
 let autoRefreshTimer = null
 const tagDialogVisible = ref(false)
 const tagForm = ref({ rs_ip: '', tag: '', disabled: false, disabled_reason: '' })
@@ -455,6 +453,8 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load servers:', e)
   }
+  // 页面加载后自动启动 300 秒定时刷新
+  startAutoRefresh()
 })
 
 async function onServerChange() {
@@ -511,14 +511,6 @@ function stopAutoRefresh() {
     autoRefreshTimer = null
   }
 }
-
-watch(autoRefresh, (val) => {
-  if (val) {
-    startAutoRefresh()
-  } else {
-    stopAutoRefresh()
-  }
-})
 
 onUnmounted(() => {
   stopAutoRefresh()
