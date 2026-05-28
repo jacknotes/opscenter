@@ -12,10 +12,8 @@
             <el-option v-for="ip in vsOptions" :key="ip" :label="ip" :value="ip" />
           </el-select>
         </div>
-      </template>
-
-      <!-- 操作栏 -->
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+        <!-- 操作栏 -->
+        <div class="toolbar">
         <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
         <el-button type="info" class="el-button--cyan" @click="toggleAllFiltered">{{ isAllFilteredSelected ? '取消' : '全选' }}</el-button>
         <el-button type="primary" :disabled="!canBatchOnline" @click="handleBatchOnline">上线</el-button>
@@ -24,8 +22,11 @@
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看配置</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
         <span style="margin-left: auto;"></span>
+        <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
+        <span class="stat-chip stat-chip-danger">离线 <b>{{ totalDownCount }}</b></span>
         <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
       </div>
+      </template>
 
       <!-- 主表格：按 VIP 分组，每端口一行，展开后 RS 表格插入在组下方 -->
       <el-table :data="flattenedMainData" :span-method="mainSpanMethod" stripe border v-force-reflow max-height="calc(100vh - 240px)" row-key="uid">
@@ -436,6 +437,10 @@ function groupByVIP(data) {
 
 // 虚拟服务器选项
 const vsOptions = computed(() => groupedData.value.map(g => g.ip))
+
+// 全局在线/离线统计
+const totalUpCount = computed(() => filteredGroups.value.reduce((sum, g) => sum + countUp(g), 0))
+const totalDownCount = computed(() => filteredGroups.value.reduce((sum, g) => sum + countDown(g), 0))
 
 // 自定义展开状态（VIP 级别）
 const expandedVIPs = ref(new Set())
@@ -1000,6 +1005,8 @@ async function handleDeleteVSTag() {
   color: #303133;
 }
 
+.stat-chip-success b { color: #67c23a; }
+.stat-chip-danger b { color: #f56c6c; }
 .stat-chip-primary b { color: #409eff; }
 
 :deep(.rs-disabled-row) {
@@ -1009,5 +1016,27 @@ async function handleDeleteVSTag() {
 
 :deep(.rs-disabled-row:hover > td) {
   background-color: #f5f7fa !important;
+}
+
+/* ===== Card Header ===== */
+:deep(.el-card__header) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* ===== Toolbar ===== */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+  padding: 10px 14px;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+}
+.toolbar :deep(.el-dropdown) {
+  display: inline-flex;
 }
 </style>
