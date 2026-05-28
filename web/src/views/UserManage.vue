@@ -8,10 +8,11 @@
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
           <el-button type="warning" @click="handleResetPwdSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">重置密码</el-button>
           <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow || selectedRow?.id === currentUserId || selectedRow?.username === 'admin'">删除</el-button>
+          <el-input v-model="searchQuery" placeholder="搜索用户名 / 姓名 / 邮箱" clearable style="width: 250px; margin-left: auto;" />
         </div>
       </template>
 
-      <el-table :data="users" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 200px)">
+      <el-table :data="filteredUsers" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 200px)">
         <el-table-column type="selection" width="45" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
@@ -91,6 +92,19 @@ const userStore = useUserStore()
 const currentUserId = computed(() => userStore.userInfo?.id)
 
 const users = ref([])
+const searchQuery = ref('')
+
+const filteredUsers = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return users.value
+  return users.value.filter(u =>
+    u.username.toLowerCase().includes(q) ||
+    u.name.toLowerCase().includes(q) ||
+    u.email.toLowerCase().includes(q) ||
+    u.role.toLowerCase().includes(q)
+  )
+})
+
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
