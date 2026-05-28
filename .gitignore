@@ -52,5 +52,10 @@ tmp/
 temp/
 *.tmp
 
-# Claude
+# AI Tools
 .claude/
+.omo/
+.opencode/
+
+# Generated Docs (regenerate with: swag init)
+docs/
