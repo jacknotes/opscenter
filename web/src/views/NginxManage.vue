@@ -1224,10 +1224,11 @@ async function executePreview() {
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1;
 }
 
 .badge-info {
