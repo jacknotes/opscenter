@@ -92,8 +92,8 @@
                 </el-table-column>
               </el-table>
             </template>
-            <span v-else-if="row.isFirst" style="cursor: pointer; font-size: 14px;" @click="toggleVIP(row.ip)">
-              {{ expandedVIPs.has(row.ip) ? '−' : '+' }}
+            <span v-else-if="row.isFirst" style="cursor: pointer; display: inline-flex; align-items: center;" @click="toggleVIP(row.ip)">
+              <el-icon :size="14"><ArrowDown v-if="expandedVIPs.has(row.ip)" /><ArrowRight v-else /></el-icon>
             </span>
           </template>
         </el-table-column>
@@ -312,6 +312,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag, updateLvsVSTag, deleteLvsVSTag, checkLvsOnlineForPreprod } from '../api'
 import { ElMessage } from 'element-plus'
+import { ArrowRight, ArrowDown } from '@element-plus/icons-vue'
 
 const servers = ref([])
 const serverId = ref(null)
