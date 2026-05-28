@@ -178,15 +178,21 @@
     </el-dialog>
 
     <!-- Batch Operations Dialog -->
-    <el-dialog v-model="batchDialogVisible" title="批量操作" width="800px" class="cool-dialog">
+    <el-dialog v-model="batchDialogVisible" width="800px" class="cool-dialog">
+      <template #header>
+        <div class="batch-dialog-header">
+          <span class="el-dialog__title">批量操作</span>
+          <span class="batch-hint-text">为每个 Upstream 组选择操作类型，支持上线、下线、切换（反转全部状态）混合操作</span>
+        </div>
+      </template>
       <div class="batch-dialog-body">
         <div class="batch-hint">
-          <span>为每个 Upstream 组选择操作类型，支持上线、下线、切换（反转全部状态）混合操作</span>
-          <el-button size="small" @click="toggleBatchSelectAll" style="margin-left: 12px;">
+          <el-button size="small" @click="toggleBatchSelectAll">
             {{ isBatchAllSelected ? '取消全选' : '全选' }}
           </el-button>
+          <el-input v-model="batchSearch" placeholder="搜索 IP / 端口" size="small" clearable style="width: 160px;" />
         </div>
-        <el-table ref="batchTableRef" :data="batchItems" size="small" max-height="500" class="batch-table" v-force-reflow row-key="upstreamName">
+        <el-table ref="batchTableRef" :data="filteredBatchItems" size="small" max-height="500" class="batch-table" v-force-reflow row-key="upstreamName">
           <el-table-column type="expand" width="1">
             <template #default="{ row }">
               <div class="batch-expand-servers">
@@ -272,7 +278,7 @@
             </template>
           </el-table-column>
         </el-table>
-        <div v-if="batchItems.length === 0" class="batch-empty">
+        <div v-if="filteredBatchItems.length === 0" class="batch-empty">
           暂无可执行的批量操作
         </div>
       </div>
@@ -368,6 +374,7 @@ const swapOnlineIP = ref('')
 const swapAffectedUpstreams = ref([])
 const batchDialogVisible = ref(false)
 const batchItems = ref([])
+const batchSearch = ref('')
 const batchTableRef = ref(null)
 
 const selectedMap = ref({})
@@ -784,17 +791,27 @@ function openBatchDialog() {
     }
   })
   batchItems.value = items
+  batchSearch.value = ''
   batchDialogVisible.value = true
 }
 
+const filteredBatchItems = computed(() => {
+  const q = batchSearch.value.trim().toLowerCase()
+  if (!q) return batchItems.value
+  return batchItems.value.filter(item => {
+    if (item.upstreamName.toLowerCase().includes(q)) return true
+    return item.servers.some(s => s.ip.includes(q) || s.port.includes(q))
+  })
+})
+
 const isBatchAllSelected = computed(() => {
-  const eligible = batchItems.value.filter(i => i.hasBoth || i.hasMultipleUp)
+  const eligible = filteredBatchItems.value.filter(i => i.hasBoth || i.hasMultipleUp)
   return eligible.length > 0 && eligible.every(i => i.enabled)
 })
 
 function toggleBatchSelectAll() {
   const newState = !isBatchAllSelected.value
-  batchItems.value.forEach(i => {
+  filteredBatchItems.value.forEach(i => {
     if (i.hasBoth || i.hasMultipleUp) {
       i.enabled = newState
     }
@@ -1588,6 +1605,17 @@ async function executePreview() {
   max-height: 550px;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.batch-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.batch-hint-text {
+  font-size: 13px;
+  color: #909399;
 }
 
 .batch-hint {
