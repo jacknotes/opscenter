@@ -23,6 +23,7 @@
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看状态</el-button>
         <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
+        <el-checkbox v-model="autoRefresh" style="margin-left: 4px;">自动刷新</el-checkbox>
         <span style="margin-left: auto;"></span>
         <span class="stat-chip stat-chip-primary">已选 <b>{{ batchSelectedIPs.length }}</b></span>
       </div>
@@ -99,6 +100,14 @@
         <el-table-column label="Virtual Server" width="140">
           <template #default="{ row }">
             <div v-if="!row.isDetail" style="font-weight: bold;">{{ row.ip }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="角色" width="70" align="center">
+          <template #default="{ row }">
+            <template v-if="!row.isDetail">
+              <el-tag v-if="row.role === 'master'" type="success" size="small">主</el-tag>
+              <el-tag v-else-if="row.role === 'backup'" type="info" size="small">备</el-tag>
+            </template>
           </template>
         </el-table-column>
         <el-table-column label="端口" width="80" align="center">
@@ -237,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag } from '../api'
 import { ElMessage } from 'element-plus'
 
@@ -267,6 +276,8 @@ const statusRaw = ref('')
 const statusLoading = ref(false)
 const loading = ref(false)
 const batchSelected = ref(new Set())
+const autoRefresh = ref(false)
+let autoRefreshTimer = null
 const tagDialogVisible = ref(false)
 const tagForm = ref({ rs_ip: '', tag: '', disabled: false, disabled_reason: '' })
 const tagSaving = ref(false)
@@ -315,9 +326,10 @@ function groupByVIP(data) {
   const map = new Map()
   for (const vs of data) {
     if (!map.has(vs.ip)) {
-      map.set(vs.ip, { ip: vs.ip, entries: [], realServersMap: new Map() })
+      map.set(vs.ip, { ip: vs.ip, entries: [], realServersMap: new Map(), role: vs.role || '' })
     }
     const group = map.get(vs.ip)
+    if (vs.role && !group.role) group.role = vs.role
     group.entries.push({ port: vs.port, protocol: vs.protocol, scheduler: vs.scheduler, flags: vs.flags })
 
     for (const rs of vs.real_servers) {
@@ -345,6 +357,7 @@ function groupByVIP(data) {
     ip: g.ip,
     entries: g.entries,
     realServers: Array.from(g.realServersMap.values()),
+    role: g.role,
   }))
 }
 
@@ -397,7 +410,7 @@ const flattenedMainData = computed(() => {
     const upCount = countUp(group)
     const downCount = countDown(group)
     group.entries.forEach((entry, i) => {
-      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group })
+      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group, role: group.role })
     })
     // 展开时在组末尾插入 RS 详情行
     if (expandedVIPs.value.has(group.ip)) {
@@ -412,10 +425,10 @@ function mainSpanMethod({ rowIndex, columnIndex }) {
   const row = flattenedMainData.value[rowIndex]
   // 详情行：合并所有列为一个单元格
   if (row.isDetail) {
-    return columnIndex === 0 ? [1, 9] : [0, 0]
+    return columnIndex === 0 ? [1, 10] : [0, 0]
   }
-  // 端口行：合并 expand按钮(0)、IP(1)、RS数量(6)、在线(7)、离线(8)
-  if (columnIndex === 0 || columnIndex === 1 || columnIndex === 6 || columnIndex === 7 || columnIndex === 8) {
+  // 端口行：合并 expand按钮(0)、IP(1)、角色(2)、RS数量(7)、在线(8)、离线(9)
+  if (columnIndex === 0 || columnIndex === 1 || columnIndex === 2 || columnIndex === 7 || columnIndex === 8 || columnIndex === 9) {
     if (!row.isFirst) return [0, 0]
     let count = 0
     let i = rowIndex
@@ -468,6 +481,48 @@ async function loadData() {
     loading.value = false
   }
 }
+
+// 静默刷新：不显示 loading，保留展开/选择状态
+async function silentRefresh() {
+  if (!serverId.value) return
+  try {
+    lvsData.value = await getLvsList(serverId.value)
+    groupedData.value = groupByVIP(lvsData.value)
+    invalidateRSCache()
+    // 清理已不存在的 RS 选中项
+    const validKeys = new Set(
+      filteredGroups.value.flatMap(g => g.realServers.map(rs => g.ip + ':' + rs.ip))
+    )
+    batchSelected.value = new Set(Array.from(batchSelected.value).filter(k => validKeys.has(k)))
+  } catch {
+    // 静默失败，不弹错误提示
+  }
+}
+
+// 自动刷新定时器管理
+function startAutoRefresh() {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(silentRefresh, 300000)
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+}
+
+watch(autoRefresh, (val) => {
+  if (val) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 
 async function loadStatus() {
   if (!serverId.value) return

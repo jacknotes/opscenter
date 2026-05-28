@@ -29,6 +29,7 @@ type VirtualServer struct {
 	Scheduler   string       `json:"scheduler"`
 	Flags       string       `json:"flags"`
 	RealServers []RealServer `json:"real_servers"`
+	Role        string       `json:"role,omitempty"` // "master" 或 "backup"
 }
 
 // RealServer 表示 LVS 后端真实服务器（RS）的状态信息。

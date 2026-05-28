@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -111,6 +112,46 @@ func (h *LVSHandler) List(c *gin.Context) {
 				servers[i].RealServers[j].Tag = t.Tag
 				servers[i].RealServers[j].Disabled = t.Disabled
 				servers[i].RealServers[j].DisabledReason = t.DisabledReason
+			}
+		}
+	}
+
+	// 检测 VS IP 是否绑定在本机（主备角色判断）
+	vsIPSet := make(map[string]bool)
+	for _, vs := range servers {
+		if vs.IP != "0.0.0.0" {
+			vsIPSet[vs.IP] = true
+		}
+	}
+	if len(vsIPSet) > 0 {
+		vsIPs := make([]string, 0, len(vsIPSet))
+		for ip := range vsIPSet {
+			vsIPs = append(vsIPs, ip)
+		}
+		escapedIPs := make([]string, len(vsIPs))
+		for i, ip := range vsIPs {
+			escapedIPs[i] = strings.ReplaceAll(ip, ".", "\\.")
+		}
+		grepPattern := strings.Join(escapedIPs, "|")
+		checkCmd := fmt.Sprintf("ip -4 a show | grep -oE '%s' || true", grepPattern)
+		checkOutput, checkErr := h.sshManager.Execute(&server, checkCmd)
+		if checkErr == nil {
+			masterIPs := make(map[string]bool)
+			for _, line := range strings.Split(strings.TrimSpace(checkOutput), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" {
+					masterIPs[line] = true
+				}
+			}
+			for i := range servers {
+				if servers[i].IP == "0.0.0.0" {
+					continue
+				}
+				if masterIPs[servers[i].IP] {
+					servers[i].Role = "master"
+				} else {
+					servers[i].Role = "backup"
+				}
 			}
 		}
 	}
