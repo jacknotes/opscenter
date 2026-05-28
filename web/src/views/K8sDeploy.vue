@@ -21,7 +21,7 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button type="info" class="el-button--cyan" @click="handleToggleSelect">{{ allSelected ? '取消全选' : '全选' }}</el-button>
+        <el-button type="info" class="el-button--cyan" @click="handleToggleSelect">{{ allSelected ? '取消' : '全选' }}</el-button>
         <el-button type="primary" @click="handleAction('online')">{{ selectedIds.size > 0 ? '批量上线' : '全量上线' }}</el-button>
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
         <el-button type="danger" @click="handleAction('rollback')">{{ selectedIds.size > 0 ? '批量回滚' : '全量回滚' }}</el-button>

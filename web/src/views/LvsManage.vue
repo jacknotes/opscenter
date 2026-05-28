@@ -46,7 +46,7 @@
                     <span :style="rs.disabled ? 'color: #c0c4cc; text-decoration: line-through;' : ''">{{ rs.ip }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="环境" width="120" align="center">
+                <el-table-column label="标签" width="120" align="center">
                   <template #default="{ row: rs }">
                     <template v-if="rs.disabled">
                       <el-tooltip :content="rs.disabledReason" placement="top" :disabled="!rs.disabledReason">
@@ -230,12 +230,12 @@
     </el-dialog>
 
     <!-- Tag Edit Dialog -->
-    <el-dialog v-model="tagDialogVisible" title="设置环境标签" width="min(400px, 90vw)" align-center>
+    <el-dialog v-model="tagDialogVisible" title="设置 RS 标签" width="min(400px, 90vw)" align-center>
       <el-form label-width="80px">
         <el-form-item label="RS IP">
           <el-input :model-value="tagForm.rs_ip" disabled />
         </el-form-item>
-        <el-form-item label="环境标签">
+        <el-form-item label="标签">
           <el-select
             v-model="tagForm.tag"
             filterable

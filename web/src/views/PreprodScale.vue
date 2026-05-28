@@ -7,7 +7,6 @@
           <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 150px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <el-button type="info" class="el-button--cyan" size="small" @click="openBindingDialog">依赖配置</el-button>
           <span style="margin-left: auto;"></span>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
         </div>
@@ -23,18 +22,17 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ allSelected ? '取消选择' : '全选' }}</el-button>
+        <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ allSelected ? '取消' : '全选' }}</el-button>
         <el-button type="danger" :disabled="selectedIds.size > 0 ? !canBatchScaleDown : !canFullScaleDown" @click="handleBatchScaleDown">
           {{ selectedIds.size > 0 ? '批量缩容' : '全量缩容' }}
         </el-button>
         <el-button type="success" :disabled="selectedIds.size > 0 ? !canBatchScaleUp : !canFullScaleUp" @click="handleBatchScaleUp">
           {{ selectedIds.size > 0 ? '批量扩容' : '全量扩容' }}
         </el-button>
+        <el-button type="info" class="el-button--cyan" @click="openBindingDialog">依赖配置</el-button>
         <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
         <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
           已选 {{ selectedIds.size }} 项
-          <template v-if="batchSkipDown > 0">，{{ batchSkipDown }} 项已缩容将跳过</template>
-          <template v-if="batchSkipUp > 0">，{{ batchSkipUp }} 项已扩容将跳过</template>
         </span>
       </div>
       </template>
@@ -209,14 +207,14 @@
       </el-alert>
       <div v-if="lvsCheckWarnings">
         <el-table :data="lvsCheckWarnings" stripe size="small" border max-height="300">
-          <el-table-column prop="vs_tag" label="VS 标签" width="120" />
-          <el-table-column prop="rs_env_tag" label="RS 环境标签" width="150" />
-          <el-table-column prop="rs_ip" label="RS IP" width="140" />
           <el-table-column prop="status" label="状态" width="80" align="center">
             <template #default="{ row }">
-              <el-tag type="danger" size="small">{{ row.status }}</el-tag>
+              <el-tag :type="row.status === 'Up' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="vs_tag" label="VS 标签" width="120" />
+          <el-table-column prop="rs_env_tag" label="RS标签" width="150" />
+          <el-table-column prop="rs_ip" label="RS IP" width="140" />
           <el-table-column prop="lvs_server" label="LVS 服务器" min-width="120" />
         </el-table>
       </div>
@@ -357,15 +355,6 @@ const canFullScaleUp = computed(() =>
   resources.value.some(r => r.current < r.target_replicas)
 )
 
-const batchSkipDown = computed(() => {
-  if (selectedIds.value.size === 0) return 0
-  return selectedResources.value.filter(r => r.current === 0).length
-})
-
-const batchSkipUp = computed(() => {
-  if (selectedIds.value.size === 0) return 0
-  return selectedResources.value.filter(r => r.current >= r.target_replicas).length
-})
 
 function handleSizeChange(size) {
   pageSize.value = size
