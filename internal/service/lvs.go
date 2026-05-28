@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"opscenter/internal/model"
 )
 
 // StatusGroup 表示从 keepalived 配置中解析出的 VS 及其 RS 列表。
@@ -30,6 +32,7 @@ type VirtualServer struct {
 	Flags       string       `json:"flags"`
 	RealServers []RealServer `json:"real_servers"`
 	Role        string       `json:"role,omitempty"` // "master" 或 "backup"
+	Tag         string       `json:"tag,omitempty"`  // VS 标签
 }
 
 // RealServer 表示 LVS 后端真实服务器（RS）的状态信息。
@@ -217,6 +220,42 @@ func (s *LVSService) MergeOfflineRS(listServers []VirtualServer, statusGroups []
 	}
 
 	return listServers
+}
+
+// DetectRoles 检测 VS IP 是否绑定在本机，判断主备角色。
+// 返回 "master" 或 "backup"，检测失败返回空字符串。
+func (s *LVSService) DetectRoles(vsIPs []string, server *model.Server) map[string]string {
+	roles := make(map[string]string)
+	if len(vsIPs) == 0 {
+		return roles
+	}
+
+	escapedIPs := make([]string, len(vsIPs))
+	for i, ip := range vsIPs {
+		escapedIPs[i] = strings.ReplaceAll(ip, ".", "\\.")
+	}
+	grepPattern := strings.Join(escapedIPs, "|")
+	checkCmd := fmt.Sprintf("ip -4 a show | grep -oE '%s' || true", grepPattern)
+	checkOutput, checkErr := s.sshManager.Execute(server, checkCmd)
+	if checkErr != nil {
+		return roles
+	}
+
+	masterIPs := make(map[string]bool)
+	for _, line := range strings.Split(strings.TrimSpace(checkOutput), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			masterIPs[line] = true
+		}
+	}
+	for _, ip := range vsIPs {
+		if masterIPs[ip] {
+			roles[ip] = "master"
+		} else {
+			roles[ip] = "backup"
+		}
+	}
+	return roles
 }
 
 // GenerateOpPreview 生成 LVS 上线/下线操作的命令和描述。

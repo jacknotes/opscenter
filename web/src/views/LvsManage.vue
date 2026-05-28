@@ -109,6 +109,26 @@
             </template>
           </template>
         </el-table-column>
+        <el-table-column label="标签" width="120" align="center">
+          <template #default="{ row }">
+            <template v-if="row.isFirst && !row.isDetail">
+              <el-tag
+                v-if="row.tag"
+                type="warning"
+                size="small"
+                style="cursor: pointer;"
+                @click="openVSTagDialog(row.ip, row.tag)"
+              >{{ row.tag }}</el-tag>
+              <el-button
+                v-else
+                type="info"
+                link
+                size="small"
+                @click="openVSTagDialog(row.ip, '')"
+              >设置标签</el-button>
+            </template>
+          </template>
+        </el-table-column>
         <el-table-column label="端口" width="80" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.port }}</span>
@@ -241,12 +261,55 @@
         <el-button type="primary" @click="handleSaveTag" :loading="tagSaving">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- VS Tag Edit Dialog -->
+    <el-dialog v-model="vsTagDialogVisible" title="设置 VS 标签" width="min(400px, 90vw)" align-center>
+      <el-form label-width="80px">
+        <el-form-item label="VS IP">
+          <el-input :model-value="vsTagForm.vs_ip" disabled />
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-input v-model="vsTagForm.tag" placeholder="请输入标签，如：1号lvs" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button v-if="vsTagForm.tag" type="danger" @click="handleDeleteVSTag" :loading="vsTagSaving">删除标签</el-button>
+        <span style="flex: 1;"></span>
+        <el-button @click="vsTagDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSaveVSTag" :loading="vsTagSaving">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- LVS Online Check Warning Dialog -->
+    <el-dialog v-model="lvsOnlineCheckVisible" title="上线前检查" width="min(600px, 90vw)" align-center @close="handleLvsOnlineCheckCancel">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px;">
+        <template #title>
+          <span v-if="lvsOnlineCheckData">{{ lvsOnlineCheckData.vs_tag }} 的 RS {{ lvsOnlineCheckData.rs_env_tag }} 上线前，预生产环境以下资源副本异常：</span>
+        </template>
+      </el-alert>
+      <div v-if="lvsOnlineCheckData && lvsOnlineCheckData.warnings">
+        <el-table :data="lvsOnlineCheckData.warnings" stripe size="small" border max-height="300">
+          <el-table-column prop="name" label="资源名称" min-width="150" />
+          <el-table-column prop="category" label="类型" width="100" />
+          <el-table-column prop="current" label="当前副本" width="100" align="center" />
+          <el-table-column prop="target" label="目标副本" width="100" align="center" />
+        </el-table>
+      </div>
+      <el-alert type="info" :closable="false" style="margin-top: 12px;">
+        请输入"确认执行"以继续上线操作
+      </el-alert>
+      <el-input v-model="lvsOnlineCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px;" />
+      <template #footer>
+        <el-button @click="lvsOnlineCheckVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="lvsOnlineCheckConfirmText !== '确认执行'" @click="handleLvsOnlineCheckConfirm">确认执行</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag } from '../api'
+import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag, updateLvsVSTag, deleteLvsVSTag, checkLvsOnlineForPreprod } from '../api'
 import { ElMessage } from 'element-plus'
 
 const servers = ref([])
@@ -283,6 +346,15 @@ const tagOptions = [
   { label: '生产环境', value: '生产环境' },
   { label: '预生产环境', value: '预生产环境' },
 ]
+
+const vsTagDialogVisible = ref(false)
+const vsTagForm = ref({ vs_ip: '', tag: '' })
+const vsTagSaving = ref(false)
+
+const lvsOnlineCheckVisible = ref(false)
+const lvsOnlineCheckData = ref(null)
+const lvsOnlineCheckCallback = ref(null)
+const lvsOnlineCheckConfirmText = ref('')
 
 const batchSelectedIPs = computed(() => {
   return Array.from(batchSelected.value).map(key => {
@@ -325,10 +397,11 @@ function groupByVIP(data) {
   const map = new Map()
   for (const vs of data) {
     if (!map.has(vs.ip)) {
-      map.set(vs.ip, { ip: vs.ip, entries: [], realServersMap: new Map(), role: vs.role || '' })
+      map.set(vs.ip, { ip: vs.ip, entries: [], realServersMap: new Map(), role: vs.role || '', tag: vs.tag || '' })
     }
     const group = map.get(vs.ip)
     if (vs.role && !group.role) group.role = vs.role
+    if (vs.tag && !group.tag) group.tag = vs.tag
     group.entries.push({ port: vs.port, protocol: vs.protocol, scheduler: vs.scheduler, flags: vs.flags })
 
     for (const rs of vs.real_servers) {
@@ -357,6 +430,7 @@ function groupByVIP(data) {
     entries: g.entries,
     realServers: Array.from(g.realServersMap.values()),
     role: g.role,
+    tag: g.tag,
   }))
 }
 
@@ -409,7 +483,7 @@ const flattenedMainData = computed(() => {
     const upCount = countUp(group)
     const downCount = countDown(group)
     group.entries.forEach((entry, i) => {
-      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group, role: group.role })
+      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group, role: group.role, tag: group.tag })
     })
     // 展开时在组末尾插入 RS 详情行
     if (expandedVIPs.value.has(group.ip)) {
@@ -424,10 +498,10 @@ function mainSpanMethod({ rowIndex, columnIndex }) {
   const row = flattenedMainData.value[rowIndex]
   // 详情行：合并所有列为一个单元格
   if (row.isDetail) {
-    return columnIndex === 0 ? [1, 10] : [0, 0]
+    return columnIndex === 0 ? [1, 11] : [0, 0]
   }
-  // 端口行：合并 expand按钮(0)、IP(1)、角色(2)、RS数量(7)、在线(8)、离线(9)
-  if (columnIndex === 0 || columnIndex === 1 || columnIndex === 2 || columnIndex === 7 || columnIndex === 8 || columnIndex === 9) {
+  // 端口行：合并 expand按钮(0)、IP(1)、角色(2)、标签(3)、RS数量(8)、在线(9)、离线(10)
+  if (columnIndex === 0 || columnIndex === 1 || columnIndex === 2 || columnIndex === 3 || columnIndex === 8 || columnIndex === 9 || columnIndex === 10) {
     if (!row.isFirst) return [0, 0]
     let count = 0
     let i = rowIndex
@@ -673,6 +747,25 @@ async function handleBatchOnline() {
     ElMessage.warning(`${skipped} 台服务器已在线，将自动跳过，仅对 ${targets.length} 台离线服务器执行上线`)
   }
 
+  // 检查 LVS 上线前的预生产依赖
+  for (const { vip, rsIp } of targets) {
+    try {
+      const checkRes = await checkLvsOnlineForPreprod({ vs_ip: vip, rs_ip: rsIp })
+      if (checkRes.need_warning) {
+        lvsOnlineCheckData.value = checkRes
+        lvsOnlineCheckVisible.value = true
+        lvsOnlineCheckConfirmText.value = ''
+        // 等待用户确认
+        const confirmed = await new Promise(resolve => {
+          lvsOnlineCheckCallback.value = resolve
+        })
+        if (!confirmed) return
+      }
+    } catch {
+      // 检查失败不阻塞操作
+    }
+  }
+
   const byVip = {}
   for (const { vip, rsIp } of targets) {
     if (!byVip[vip]) byVip[vip] = []
@@ -694,6 +787,21 @@ async function handleBatchOnline() {
     previewVisible.value = true
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '预览失败')
+  }
+}
+
+function handleLvsOnlineCheckConfirm() {
+  lvsOnlineCheckVisible.value = false
+  if (lvsOnlineCheckCallback.value) {
+    lvsOnlineCheckCallback.value(true)
+    lvsOnlineCheckCallback.value = null
+  }
+}
+
+function handleLvsOnlineCheckCancel() {
+  if (lvsOnlineCheckCallback.value) {
+    lvsOnlineCheckCallback.value(false)
+    lvsOnlineCheckCallback.value = null
   }
 }
 
@@ -835,6 +943,42 @@ async function handleDeleteTag() {
     ElMessage.error(e.response?.data?.error || '删除失败')
   } finally {
     tagSaving.value = false
+  }
+}
+
+function openVSTagDialog(vsIp, currentTag) {
+  vsTagForm.value = { vs_ip: vsIp, tag: currentTag || '' }
+  vsTagDialogVisible.value = true
+}
+
+async function handleSaveVSTag() {
+  vsTagSaving.value = true
+  try {
+    await updateLvsVSTag({
+      vs_ip: vsTagForm.value.vs_ip,
+      tag: vsTagForm.value.tag,
+    })
+    ElMessage.success('VS标签已保存')
+    vsTagDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '保存失败')
+  } finally {
+    vsTagSaving.value = false
+  }
+}
+
+async function handleDeleteVSTag() {
+  vsTagSaving.value = true
+  try {
+    await deleteLvsVSTag(vsTagForm.value.vs_ip)
+    ElMessage.success('VS标签已删除')
+    vsTagDialogVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '删除失败')
+  } finally {
+    vsTagSaving.value = false
   }
 }
 </script>

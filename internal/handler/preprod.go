@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,12 +18,22 @@ type PreprodScaleRequest struct {
 	ResourceNames []string `json:"resource_names"`
 }
 
+type CheckLvsForScaleDownRequest struct {
+	PreprodServerID uint `json:"preprod_server_id" binding:"required"`
+}
+
+type CheckLvsOnlineRequest struct {
+	VSIP string `json:"vs_ip" binding:"required"`
+	RSIP string `json:"rs_ip" binding:"required"`
+}
+
 type PreprodHandler struct {
 	db             *gorm.DB
 	sshManager     *service.SSHManager
 	previewMgr     *service.PreviewManager
 	lockManager    *service.LockManager
 	preprodService *service.PreprodService
+	lvsService     *service.LVSService
 }
 
 func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *service.PreviewManager, lockManager *service.LockManager) *PreprodHandler {
@@ -32,6 +43,7 @@ func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *
 		previewMgr:     previewMgr,
 		lockManager:    lockManager,
 		preprodService: service.NewPreprodService(sshManager),
+		lvsService:     service.NewLVSService(sshManager),
 	}
 }
 
@@ -216,6 +228,262 @@ func (h *PreprodHandler) ScaleUpExecute(c *gin.Context) {
 	}
 
 	h.executePreprodAction(c, req.PreviewID, "scaleup")
+}
+
+// CheckLvsForScaleDown 检查缩容前 LVS RS 状态。
+// 根据绑定配置，查找 master VS 上对应 RS 是否在线，若在线则返回警告。
+func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
+	var req CheckLvsForScaleDownRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	// 查询该 preprod 服务器的所有绑定
+	var bindings []model.LvsPreprodBinding
+	if err := h.db.Where("preprod_server_id = ?", req.PreprodServerID).Find(&bindings).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询绑定关系失败"})
+		return
+	}
+	if len(bindings) == 0 {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 查询所有 LVS 服务器
+	var lvsServers []model.Server
+	if err := h.db.Where("server_type = ? AND enabled = ?", "lvs", true).Find(&lvsServers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询LVS服务器失败"})
+		return
+	}
+	if len(lvsServers) == 0 {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 构建绑定索引: vs_tag -> []binding
+	bindingMap := make(map[string][]model.LvsPreprodBinding)
+	for _, b := range bindings {
+		bindingMap[b.VSTag] = append(bindingMap[b.VSTag], b)
+	}
+
+	// 并发查询所有 LVS 服务器
+	type warningResult struct {
+		VSTag     string `json:"vs_tag"`
+		RSEnvTag  string `json:"rs_env_tag"`
+		RSIP      string `json:"rs_ip"`
+		Status    string `json:"status"`
+		LVSServer string `json:"lvs_server"`
+	}
+
+	var (
+		warnings []warningResult
+		mu       sync.Mutex
+		wg       sync.WaitGroup
+		done     bool
+	)
+
+	for _, lvsServer := range lvsServers {
+		wg.Add(1)
+		go func(srv model.Server) {
+			defer wg.Done()
+
+			// 检查是否已有结果
+			mu.Lock()
+			if done {
+				mu.Unlock()
+				return
+			}
+			mu.Unlock()
+
+			// 获取 LVS 数据
+			output, err := h.sshManager.Execute(&srv, srv.ScriptPath+" list")
+			if err != nil {
+				return
+			}
+			vsList := h.lvsService.ParseListOutput(output)
+			if len(vsList) == 0 {
+				return
+			}
+
+			// 补充下线 RS
+			statusOutput, statusErr := h.sshManager.Execute(&srv, srv.ScriptPath+" status")
+			if statusErr == nil && statusOutput != "" {
+				statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
+				vsList = h.lvsService.MergeOfflineRS(vsList, statusGroups)
+			}
+
+			// 收集 VS IP 并检测角色
+			vsIPSet := make(map[string]bool)
+			for _, vs := range vsList {
+				if vs.IP != "0.0.0.0" {
+					vsIPSet[vs.IP] = true
+				}
+			}
+			vsIPs := make([]string, 0, len(vsIPSet))
+			for ip := range vsIPSet {
+				vsIPs = append(vsIPs, ip)
+			}
+			roles := h.lvsService.DetectRoles(vsIPs, &srv)
+
+			// 查询 VS 标签
+			var vsTags []model.LvsVSTag
+			if len(vsIPs) > 0 {
+				h.db.Where("vs_ip IN ?", vsIPs).Find(&vsTags)
+			}
+			vsTagMap := make(map[string]string)
+			for _, t := range vsTags {
+				vsTagMap[t.VSIP] = t.Tag
+			}
+
+			// 查询 RS 标签
+			rsIPSet := make(map[string]bool)
+			for _, vs := range vsList {
+				for _, rs := range vs.RealServers {
+					rsIPSet[rs.IP] = true
+				}
+			}
+			rsIPList := make([]string, 0, len(rsIPSet))
+			for ip := range rsIPSet {
+				rsIPList = append(rsIPList, ip)
+			}
+			var rsTags []model.LvsRSTag
+			if len(rsIPList) > 0 {
+				h.db.Where("rs_ip IN ?", rsIPList).Find(&rsTags)
+			}
+			rsTagMap := make(map[string]string)
+			for _, t := range rsTags {
+				rsTagMap[t.RSIP] = t.Tag
+			}
+
+			// 匹配绑定：找 master VS，检查 RS 状态
+			for _, vs := range vsList {
+				if roles[vs.IP] != "master" {
+					continue
+				}
+				vsTag := vsTagMap[vs.IP]
+				bindingsForVS, ok := bindingMap[vsTag]
+				if !ok {
+					continue
+				}
+				for _, binding := range bindingsForVS {
+					for _, rs := range vs.RealServers {
+						if rsTagMap[rs.IP] == binding.RSEnvTag && rs.Status == "up" {
+							mu.Lock()
+							if !done {
+								warnings = append(warnings, warningResult{
+									VSTag:     binding.VSTag,
+									RSEnvTag:  binding.RSEnvTag,
+									RSIP:      rs.IP,
+									Status:    rs.Status,
+									LVSServer: srv.Name,
+								})
+								done = true
+							}
+							mu.Unlock()
+							return
+						}
+					}
+				}
+			}
+		}(lvsServer)
+	}
+	wg.Wait()
+
+	if len(warnings) > 0 {
+		c.JSON(http.StatusOK, gin.H{"need_warning": true, "warnings": warnings})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+	}
+}
+
+// CheckLvsOnline 检查 LVS 上线前预生产资源状态。
+// 根据绑定配置，查找对应 preprod 服务器的资源是否全部正常。
+func (h *PreprodHandler) CheckLvsOnline(c *gin.Context) {
+	var req CheckLvsOnlineRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	// 查询 VS 标签
+	var vsTag model.LvsVSTag
+	if err := h.db.Where("vs_ip = ?", req.VSIP).First(&vsTag).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 查询 RS 标签
+	var rsTag model.LvsRSTag
+	if err := h.db.Where("rs_ip = ?", req.RSIP).First(&rsTag).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 查询绑定
+	var binding model.LvsPreprodBinding
+	if err := h.db.Where("vs_tag = ? AND rs_env_tag = ?", vsTag.Tag, rsTag.Tag).First(&binding).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 查询 preprod 服务器
+	var preprodServer model.Server
+	if err := h.db.First(&preprodServer, binding.PreprodServerID).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+
+	// 获取资源状态
+	output, err := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list")
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+		return
+	}
+	targetOutput, _ := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list-targets")
+
+	resources := h.preprodService.ParseListOutput(output)
+	if resources == nil {
+		resources = []service.PreprodResource{}
+	}
+	if targetOutput != "" {
+		targets := h.preprodService.ParseTargetOutput(targetOutput)
+		resources = h.preprodService.MergeTargets(resources, targets)
+	}
+
+	// 检查哪些资源副本不正常
+	type abnormalResource struct {
+		Name     string `json:"name"`
+		Category string `json:"category"`
+		Current  int    `json:"current"`
+		Target   int    `json:"target"`
+	}
+	var abnormal []abnormalResource
+	for _, r := range resources {
+		target := r.TargetReplicas
+		if target <= 0 {
+			target = r.Desired
+		}
+		if target > 0 && r.Current < target {
+			abnormal = append(abnormal, abnormalResource{
+				Name:     r.Name,
+				Category: r.Category,
+				Current:  r.Current,
+				Target:   target,
+			})
+		}
+	}
+
+	if len(abnormal) > 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"need_warning": true,
+			"warnings":     abnormal,
+			"vs_tag":       vsTag.Tag,
+			"rs_env_tag":   rsTag.Tag,
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"need_warning": false})
+	}
 }
 
 func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action string) {

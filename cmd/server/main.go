@@ -61,7 +61,7 @@ func main() {
 	}
 
 	// Auto migrate
-	if err := db.AutoMigrate(&model.User{}, &model.Server{}, &model.OperationLog{}, &model.LvsRSTag{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Server{}, &model.OperationLog{}, &model.LvsRSTag{}, &model.LvsVSTag{}, &model.LvsPreprodBinding{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 

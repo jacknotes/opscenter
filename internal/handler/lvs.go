@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -92,28 +91,28 @@ func (h *LVSHandler) List(c *gin.Context) {
 		servers = h.lvsService.MergeOfflineRS(servers, statusGroups)
 	}
 
-	// 查询标签并注入到 RS 数据
+	// 查询 RS 标签并注入到 RS 数据
 	rsIPs := make(map[string]bool)
 	for _, vs := range servers {
 		for _, rs := range vs.RealServers {
 			rsIPs[rs.IP] = true
 		}
 	}
-	ipList := make([]string, 0, len(rsIPs))
+	rsIPList := make([]string, 0, len(rsIPs))
 	for ip := range rsIPs {
-		ipList = append(ipList, ip)
+		rsIPList = append(rsIPList, ip)
 	}
-	var tags []model.LvsRSTag
-	if len(ipList) > 0 {
-		h.db.Where("rs_ip IN ?", ipList).Find(&tags)
+	var rsTags []model.LvsRSTag
+	if len(rsIPList) > 0 {
+		h.db.Where("rs_ip IN ?", rsIPList).Find(&rsTags)
 	}
-	tagMap := make(map[string]*model.LvsRSTag)
-	for i := range tags {
-		tagMap[tags[i].RSIP] = &tags[i]
+	rsTagMap := make(map[string]*model.LvsRSTag)
+	for i := range rsTags {
+		rsTagMap[rsTags[i].RSIP] = &rsTags[i]
 	}
 	for i := range servers {
 		for j := range servers[i].RealServers {
-			if t, ok := tagMap[servers[i].RealServers[j].IP]; ok {
+			if t, ok := rsTagMap[servers[i].RealServers[j].IP]; ok {
 				servers[i].RealServers[j].Tag = t.Tag
 				servers[i].RealServers[j].Disabled = t.Disabled
 				servers[i].RealServers[j].DisabledReason = t.DisabledReason
@@ -121,42 +120,40 @@ func (h *LVSHandler) List(c *gin.Context) {
 		}
 	}
 
-	// 检测 VS IP 是否绑定在本机（主备角色判断）
+	// 查询 VS 标签并注入到 VS 数据
 	vsIPSet := make(map[string]bool)
 	for _, vs := range servers {
 		if vs.IP != "0.0.0.0" {
 			vsIPSet[vs.IP] = true
 		}
 	}
-	if len(vsIPSet) > 0 {
-		vsIPs := make([]string, 0, len(vsIPSet))
-		for ip := range vsIPSet {
-			vsIPs = append(vsIPs, ip)
+	vsIPList := make([]string, 0, len(vsIPSet))
+	for ip := range vsIPSet {
+		vsIPList = append(vsIPList, ip)
+	}
+	var vsTags []model.LvsVSTag
+	if len(vsIPList) > 0 {
+		h.db.Where("vs_ip IN ?", vsIPList).Find(&vsTags)
+	}
+	vsTagMap := make(map[string]*model.LvsVSTag)
+	for i := range vsTags {
+		vsTagMap[vsTags[i].VSIP] = &vsTags[i]
+	}
+	for i := range servers {
+		if t, ok := vsTagMap[servers[i].IP]; ok {
+			servers[i].Tag = t.Tag
 		}
-		escapedIPs := make([]string, len(vsIPs))
-		for i, ip := range vsIPs {
-			escapedIPs[i] = strings.ReplaceAll(ip, ".", "\\.")
-		}
-		grepPattern := strings.Join(escapedIPs, "|")
-		checkCmd := fmt.Sprintf("ip -4 a show | grep -oE '%s' || true", grepPattern)
-		checkOutput, checkErr := h.sshManager.Execute(&server, checkCmd)
-		if checkErr == nil {
-			masterIPs := make(map[string]bool)
-			for _, line := range strings.Split(strings.TrimSpace(checkOutput), "\n") {
-				line = strings.TrimSpace(line)
-				if line != "" {
-					masterIPs[line] = true
-				}
+	}
+
+	// 检测 VS IP 是否绑定在本机（主备角色判断）
+	if len(vsIPList) > 0 {
+		roles := h.lvsService.DetectRoles(vsIPList, &server)
+		for i := range servers {
+			if servers[i].IP == "0.0.0.0" {
+				continue
 			}
-			for i := range servers {
-				if servers[i].IP == "0.0.0.0" {
-					continue
-				}
-				if masterIPs[servers[i].IP] {
-					servers[i].Role = "master"
-				} else {
-					servers[i].Role = "backup"
-				}
+			if role, ok := roles[servers[i].IP]; ok {
+				servers[i].Role = role
 			}
 		}
 	}

@@ -7,6 +7,7 @@
           <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 150px" @change="loadData">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
+          <el-button type="info" class="el-button--cyan" size="small" @click="openBindingDialog">依赖配置</el-button>
           <span style="margin-left: auto;"></span>
           <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
         </div>
@@ -162,6 +163,73 @@
       </template>
     </el-dialog>
 
+    <!-- Binding Config Dialog -->
+    <el-dialog v-model="bindingDialogVisible" title="LVS-Preprod 依赖配置" width="min(650px, 90vw)" align-center>
+      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 14px; color: #606266;">配置 VS 标签和 RS 环境标签的绑定关系</span>
+        <el-button type="primary" size="small" @click="showAddBinding">新增绑定</el-button>
+      </div>
+      <el-table :data="bindings" stripe size="small" border max-height="400">
+        <el-table-column prop="vs_tag" label="VS 标签" min-width="120" />
+        <el-table-column prop="rs_env_tag" label="RS 环境标签" min-width="150" />
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row }">
+            <el-button type="danger" link size="small" @click="handleDeleteBinding(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- Add binding sub-form -->
+      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: #f5f7fa; border-radius: 6px; border: 1px solid #e4e7ed;">
+        <el-form label-width="100px" size="small">
+          <el-form-item label="VS 标签">
+            <el-select v-model="newBinding.vs_tag" filterable allow-create clearable placeholder="选择或输入 VS 标签" style="width: 100%">
+              <el-option v-for="opt in vsTagOptions" :key="opt" :label="opt" :value="opt" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="RS 环境标签">
+            <el-select v-model="newBinding.rs_env_tag" filterable allow-create clearable placeholder="选择或输入 RS 环境标签" style="width: 100%">
+              <el-option v-for="opt in rsTagOptions" :key="opt" :label="opt" :value="opt" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div style="text-align: right; margin-top: 8px;">
+          <el-button size="small" @click="addBindingVisible = false">取消</el-button>
+          <el-button type="primary" size="small" :disabled="!newBinding.vs_tag || !newBinding.rs_env_tag" @click="handleAddBinding">保存</el-button>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- LVS Scale Down Check Warning Dialog -->
+    <el-dialog v-model="lvsCheckVisible" title="缩容前检查" width="min(600px, 90vw)" align-center @close="handleLvsCheckCancel">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px;">
+        <template #title>
+          以下 LVS RS 仍处于上线状态，缩容前请确认已下线：
+        </template>
+      </el-alert>
+      <div v-if="lvsCheckWarnings">
+        <el-table :data="lvsCheckWarnings" stripe size="small" border max-height="300">
+          <el-table-column prop="vs_tag" label="VS 标签" width="120" />
+          <el-table-column prop="rs_env_tag" label="RS 环境标签" width="150" />
+          <el-table-column prop="rs_ip" label="RS IP" width="140" />
+          <el-table-column prop="status" label="状态" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag type="danger" size="small">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="lvs_server" label="LVS 服务器" min-width="120" />
+        </el-table>
+      </div>
+      <el-alert type="info" :closable="false" style="margin-top: 12px;">
+        请输入"确认执行"以继续缩容操作
+      </el-alert>
+      <el-input v-model="lvsCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px;" />
+      <template #footer>
+        <el-button @click="lvsCheckVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="lvsCheckConfirmText !== '确认执行'" @click="handleLvsCheckConfirm">确认执行</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Streaming Output Area -->
     <StreamOutput
       v-if="streamStatus !== 'idle'"
@@ -174,7 +242,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl } from '../api'
+import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl, getLvsBindings, updateLvsBinding, deleteLvsBinding, getLvsVSTags, getLvsTags, checkLvsForScaleDown } from '../api'
 import { useWebSocket } from '../composables/useWebSocket'
 import { useUserStore } from '../stores/user'
 import StreamOutput from '../components/StreamOutput.vue'
@@ -225,6 +293,20 @@ const depWarningText = ref('')
 const depWarningAffected = ref([])
 const depWarningConfirmText = ref('')
 const depWarningCallback = ref(null)
+
+// Binding config
+const bindingDialogVisible = ref(false)
+const bindings = ref([])
+const addBindingVisible = ref(false)
+const newBinding = ref({ vs_tag: '', rs_env_tag: '' })
+const vsTagOptions = ref([])
+const rsTagOptions = ref([])
+
+// LVS scale down check
+const lvsCheckVisible = ref(false)
+const lvsCheckWarnings = ref(null)
+const lvsCheckConfirmText = ref('')
+const lvsCheckCallback = ref(null)
 
 const requireSet = computed(() => new Set(resources.value.filter(r => r.category === 'require').map(r => r.name)))
 
@@ -394,6 +476,74 @@ function onDepWarningConfirm() {
   depWarningCallback.value?.()
 }
 
+async function openBindingDialog() {
+  if (!serverId.value) {
+    ElMessage.warning('请先选择服务器')
+    return
+  }
+  addBindingVisible.value = false
+  try {
+    const [bindingList, vsTags, rsTags] = await Promise.all([
+      getLvsBindings({ preprod_server_id: serverId.value }),
+      getLvsVSTags(),
+      getLvsTags(),
+    ])
+    bindings.value = bindingList || []
+    vsTagOptions.value = [...new Set((vsTags || []).map(t => t.tag).filter(Boolean))]
+    rsTagOptions.value = [...new Set((rsTags || []).map(t => t.tag).filter(Boolean))]
+    bindingDialogVisible.value = true
+  } catch (e) {
+    ElMessage.error('加载绑定配置失败')
+  }
+}
+
+function showAddBinding() {
+  newBinding.value = { vs_tag: '', rs_env_tag: '' }
+  addBindingVisible.value = true
+}
+
+async function handleAddBinding() {
+  try {
+    await updateLvsBinding({
+      vs_tag: newBinding.value.vs_tag,
+      rs_env_tag: newBinding.value.rs_env_tag,
+      preprod_server_id: serverId.value,
+    })
+    ElMessage.success('绑定已保存')
+    addBindingVisible.value = false
+    // Reload bindings
+    const list = await getLvsBindings({ preprod_server_id: serverId.value })
+    bindings.value = list || []
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '保存失败')
+  }
+}
+
+async function handleDeleteBinding(id) {
+  try {
+    await deleteLvsBinding(id)
+    ElMessage.success('绑定已删除')
+    bindings.value = bindings.value.filter(b => b.id !== id)
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '删除失败')
+  }
+}
+
+function handleLvsCheckConfirm() {
+  lvsCheckVisible.value = false
+  if (lvsCheckCallback.value) {
+    lvsCheckCallback.value(true)
+    lvsCheckCallback.value = null
+  }
+}
+
+function handleLvsCheckCancel() {
+  if (lvsCheckCallback.value) {
+    lvsCheckCallback.value(false)
+    lvsCheckCallback.value = null
+  }
+}
+
 async function handleBatchScaleDown() {
   const isFull = selectedIds.value.size === 0
   const pool = isFull ? filteredResources.value : selectedResources.value
@@ -401,6 +551,22 @@ async function handleBatchScaleDown() {
   const skipCount = pool.filter(r => r.current === 0).length
   const names = targets.map(r => r.name)
   if (names.length === 0) return
+
+  // 检查 LVS RS 状态依赖
+  try {
+    const checkRes = await checkLvsForScaleDown({ preprod_server_id: serverId.value })
+    if (checkRes.need_warning) {
+      lvsCheckWarnings.value = checkRes.warnings
+      lvsCheckVisible.value = true
+      lvsCheckConfirmText.value = ''
+      const confirmed = await new Promise(resolve => {
+        lvsCheckCallback.value = resolve
+      })
+      if (!confirmed) return
+    }
+  } catch {
+    // 检查失败不阻塞操作
+  }
 
   // 全量操作时脚本自动处理依赖，跳过警告
   if (!isFull) {

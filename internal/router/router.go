@@ -52,6 +52,8 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 	logHandler := handler.NewLogHandler(db)
 	lvsHandler := handler.NewLVSHandler(db, sshManager, previewMgr)
 	lvsTagHandler := handler.NewLVSTagHandler(db)
+	lvsVSTagHandler := handler.NewLvsVSTagHandler(db)
+	bindingHandler := handler.NewLvsPreprodBindingHandler(db)
 	k8sHandler := handler.NewK8sHandler(db, sshManager, previewMgr)
 	preprodHandler := handler.NewPreprodHandler(db, sshManager, previewMgr, lockManager)
 	nginxHandler := handler.NewNginxHandler(db, sshManager, previewMgr)
@@ -92,10 +94,13 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			lvs.GET("/list", lvsHandler.List)
 			lvs.GET("/status", lvsHandler.Status)
 			lvs.GET("/tags", lvsTagHandler.List)
+			lvs.GET("/vs_tags", lvsVSTagHandler.List)
+			lvs.GET("/bindings", bindingHandler.List)
 			lvs.POST("/op/preview", lvsHandler.OpPreview)
 			lvs.POST("/op/execute", lvsHandler.OpExecute)
 			lvs.POST("/swap/preview", lvsHandler.SwapPreview)
 			lvs.POST("/swap/execute", lvsHandler.SwapExecute)
+			lvs.POST("/check/scaledown", preprodHandler.CheckLvsForScaleDown)
 
 			// Admin-only tag management
 			lvsAdmin := lvs.Group("")
@@ -103,6 +108,10 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			{
 				lvsAdmin.PUT("/tags", lvsTagHandler.CreateOrUpdate)
 				lvsAdmin.DELETE("/tags/:rs_ip", lvsTagHandler.Delete)
+				lvsAdmin.PUT("/vs_tags", lvsVSTagHandler.CreateOrUpdate)
+				lvsAdmin.DELETE("/vs_tags/:vs_ip", lvsVSTagHandler.Delete)
+				lvsAdmin.PUT("/bindings", bindingHandler.CreateOrUpdate)
+				lvsAdmin.DELETE("/bindings/:id", bindingHandler.Delete)
 			}
 		}
 
@@ -132,6 +141,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			preprod.POST("/scaledown/execute", preprodHandler.ScaleDownExecute)
 			preprod.POST("/scaleup/preview", preprodHandler.ScaleUpPreview)
 			preprod.POST("/scaleup/execute", preprodHandler.ScaleUpExecute)
+			preprod.POST("/check/lvs_online", preprodHandler.CheckLvsOnline)
 		}
 
 		// Nginx
