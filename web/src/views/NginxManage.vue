@@ -178,7 +178,7 @@
     </el-dialog>
 
     <!-- Batch Operations Dialog -->
-    <el-dialog v-model="batchDialogVisible" width="800px" class="cool-dialog">
+    <el-dialog v-model="batchDialogVisible" width="min(800px, 90vw)" class="cool-dialog" align-center>
       <template #header>
         <div class="batch-dialog-header">
           <span class="el-dialog__title">批量操作</span>
