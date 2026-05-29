@@ -7,12 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+
+	"opscenter/internal/config"
 )
 
-const (
-	previewKeyPrefix = "opscenter:preview:"
-	previewTTL       = 5 * time.Minute
-)
+const previewKeyPrefix = "opscenter:preview:"
 
 // PreviewData 存储操作预览数据，用于预览 → 执行两步流程。
 type PreviewData struct {
@@ -57,11 +56,11 @@ func (pm *PreviewManager) Create(module, action string, serverID uint, params ma
 		ServerID:  serverID,
 		Params:    params,
 		CreatedAt: now,
-		ExpiresAt: now.Add(previewTTL),
+		ExpiresAt: now.Add(config.Global.Timeouts.Preview),
 	}
 
 	bytes, _ := json.Marshal(data)
-	pm.rdb.Set(context.Background(), previewKeyPrefix+id, bytes, previewTTL)
+	pm.rdb.Set(context.Background(), previewKeyPrefix+id, bytes, config.Global.Timeouts.Preview)
 	return id
 }
 

@@ -5,11 +5,11 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/model"
 	"opscenter/internal/service"
 )
@@ -62,6 +62,7 @@ func NewPreprodHandler(db *gorm.DB, sshManager *service.SSHManager, previewMgr *
 //	@Failure		500			{object}	object
 //	@Router			/preprod/status [get]
 func (h *PreprodHandler) Status(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -74,13 +75,13 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 		return
 	}
 
-	output, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	output, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
 		return
 	}
 
-	targetOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list-targets")
+	targetOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list-targets")
 	if err != nil {
 		log.Printf("获取 target 状态失败: %v", err)
 	}
@@ -110,6 +111,7 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/preprod/scaledown/preview [post]
 func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreprodScaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -126,7 +128,7 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -182,6 +184,7 @@ func (h *PreprodHandler) ScaleDownExecute(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/preprod/scaleup/preview [post]
 func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreprodScaleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -198,7 +201,7 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -241,8 +244,20 @@ func (h *PreprodHandler) ScaleUpExecute(c *gin.Context) {
 }
 
 // CheckLvsForScaleDown 检查缩容前 LVS RS 状态。
-// 根据绑定配置，查找 master VS 上对应 RS 是否在线，若在线则返回警告。
+//
+//	@Summary		检查缩容前LVS状态
+//	@Description	检查预生产服务器缩容前对应LVS的在线状态
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		CheckLvsForScaleDownRequest	true	"检查请求"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/preprod/check/lvs_scaledown [post]
 func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req CheckLvsForScaleDownRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -307,7 +322,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			mu.Unlock()
 
 			// 获取 LVS 数据
-			output, err := h.sshManager.Execute(&srv, srv.ScriptPath+" list")
+			output, err := h.sshManager.Execute(ctx, &srv, srv.ScriptPath+" list")
 			if err != nil {
 				return
 			}
@@ -317,7 +332,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			}
 
 			// 补充下线 RS
-			statusOutput, statusErr := h.sshManager.Execute(&srv, srv.ScriptPath+" status")
+			statusOutput, statusErr := h.sshManager.Execute(ctx, &srv, srv.ScriptPath+" status")
 			if statusErr == nil && statusOutput != "" {
 				statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
 				vsList = h.lvsService.MergeOfflineRS(vsList, statusGroups)
@@ -408,8 +423,19 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 }
 
 // CheckLvsOnline 检查 LVS 上线前预生产资源状态。
-// 根据绑定配置，查找对应 preprod 服务器的资源是否全部正常。
+//
+//	@Summary		检查LVS在线状态
+//	@Description	检查指定服务器的LVS在线状态
+//	@Tags			预生产
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			request	body		CheckLvsOnlineRequest	true	"检查请求"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Router			/preprod/check/lvs_online [post]
 func (h *PreprodHandler) CheckLvsOnline(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req CheckLvsOnlineRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -445,12 +471,12 @@ func (h *PreprodHandler) CheckLvsOnline(c *gin.Context) {
 	}
 
 	// 获取资源状态
-	output, err := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list")
+	output, err := h.sshManager.Execute(ctx, &preprodServer, preprodServer.ScriptPath+" list")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"need_warning": false})
 		return
 	}
-	targetOutput, err := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list-targets")
+	targetOutput, err := h.sshManager.Execute(ctx, &preprodServer, preprodServer.ScriptPath+" list-targets")
 	if err != nil {
 		log.Printf("获取 target 状态失败: %v", err)
 	}
@@ -500,6 +526,7 @@ func (h *PreprodHandler) CheckLvsOnline(c *gin.Context) {
 }
 
 func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action string) {
+	ctx := c.Request.Context()
 	preview, ok := h.previewMgr.Get(previewID)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
@@ -519,7 +546,7 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 
 	// Acquire lock
 	username := c.GetString("username")
-	locked, holder := h.lockManager.TryLock(preview.ServerID, username, 10*time.Minute)
+	locked, holder := h.lockManager.TryLock(preview.ServerID, username, config.Global.Timeouts.Lock)
 	if !locked {
 		c.JSON(http.StatusConflict, gin.H{
 			"error": fmt.Sprintf("操作正在进行中，请等待 (当前操作人: %s)", holder.Username),
@@ -533,7 +560,7 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览命令为空"})
 		return
 	}
-	output, err := h.sshManager.ExecuteWithPipe(&server, command, server.ScriptPassword)
+	output, err := h.sshManager.ExecuteWithPipe(ctx, &server, command, server.ScriptPassword)
 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)

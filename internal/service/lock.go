@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"opscenter/internal/config"
 )
 
 const lockKeyPrefix = "opscenter:lock:"
 
-// DefaultLockTimeout 是分布式锁的默认超时时间。
-const DefaultLockTimeout = 10 * time.Minute
+// DefaultLockTimeout 返回分布式锁的默认超时时间（从配置读取）。
+func DefaultLockTimeout() time.Duration { return config.Global.Timeouts.Lock }
 
 // LockInfo 存储锁的持有者信息和过期时间。
 type LockInfo struct {

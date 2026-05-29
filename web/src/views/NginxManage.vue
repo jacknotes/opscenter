@@ -350,6 +350,7 @@ import {
   getNginxBackups
 } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../constants'
 
 const servers = ref([])
 const serverId = ref(null)
@@ -563,7 +564,7 @@ onMounted(async () => {
   try {
     servers.value = (await getServers('nginx')) || []
     if (servers.value.length > 0) {
-      const saved = localStorage.getItem('nginx_server')
+      const saved = localStorage.getItem(STORAGE_KEYS.NGINX_SERVER)
       if (saved && servers.value.some(s => s.id === Number(saved))) {
         serverId.value = Number(saved)
       } else {
@@ -578,11 +579,11 @@ onMounted(async () => {
 
 async function loadConfigs() {
   if (!serverId.value) return
-  localStorage.setItem('nginx_server', serverId.value)
+  localStorage.setItem(STORAGE_KEYS.NGINX_SERVER, serverId.value)
   try {
     configFiles.value = await getNginxConfigs(serverId.value)
     if (configFiles.value.length > 0) {
-      const saved = localStorage.getItem(`nginx_config_${serverId.value}`)
+      const saved = localStorage.getItem(STORAGE_KEYS.nginxConfig(serverId.value))
       if (saved && configFiles.value.includes(saved)) {
         configFile.value = saved
       } else {
@@ -597,7 +598,7 @@ async function loadConfigs() {
 
 function onConfigChange() {
   if (serverId.value && configFile.value) {
-    localStorage.setItem(`nginx_config_${serverId.value}`, configFile.value)
+    localStorage.setItem(STORAGE_KEYS.nginxConfig(serverId.value), configFile.value)
   }
   loadUpstreams()
 }
@@ -629,7 +630,7 @@ async function openBackupDialog() {
   loadingBackups.value = true
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000)
+    const timeoutId = setTimeout(() => controller.abort(), BACKUP_FETCH_TIMEOUT_MS)
     const res = await getNginxBackups(serverId.value, { signal: controller.signal })
     clearTimeout(timeoutId)
     backups.value = res || []

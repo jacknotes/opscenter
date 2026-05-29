@@ -245,6 +245,7 @@ import { useWebSocket } from '../composables/useWebSocket'
 import { useUserStore } from '../stores/user'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../constants'
 
 const BATCH_THRESHOLD = 10
 
@@ -265,7 +266,7 @@ const { outputLines, status: streamStatus, connect: wsConnect, disconnect: wsDis
 const outputCache = new Map()
 const search = ref('')
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const skipSelectionSync = ref(false)
 const statusFilter = ref('all')
 const statusFilterLabels = { all: '全部', up: '已扩容', down: '已缩容' }
@@ -426,7 +427,7 @@ onMounted(async () => {
   try {
     servers.value = (await getServers('preprod')) || []
     if (servers.value.length > 0) {
-      const saved = localStorage.getItem('preprod_server')
+      const saved = localStorage.getItem(STORAGE_KEYS.PREPROD_SERVER)
       if (saved && servers.value.some(s => s.id === Number(saved))) {
         serverId.value = Number(saved)
       } else {
@@ -445,7 +446,7 @@ onBeforeUnmount(() => {
 
 async function loadData() {
   if (!serverId.value) return
-  localStorage.setItem('preprod_server', serverId.value)
+  localStorage.setItem(STORAGE_KEYS.PREPROD_SERVER, serverId.value)
   try {
     resources.value = await getPreprodStatus(serverId.value)
     selectedIds.value.clear()

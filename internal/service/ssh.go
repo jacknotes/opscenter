@@ -4,6 +4,7 @@ package service
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"opscenter/internal/config"
@@ -26,7 +28,7 @@ import (
 type sshClient struct {
 	client    *ssh.Client
 	createdAt time.Time
-	lastUsed  time.Time
+	lastUsed  atomic.Int64 // Unix 纳秒时间戳，使用原子操作避免数据竞争
 }
 
 // SSHManager 管理 SSH 连接池，按服务器 ID 复用连接，支持单次执行和流式输出。
@@ -41,8 +43,8 @@ type SSHManager struct {
 func NewSSHManager() *SSHManager {
 	m := &SSHManager{
 		clients:     make(map[uint]*sshClient),
-		maxIdle:     10 * time.Minute,
-		maxLifetime: 1 * time.Hour,
+		maxIdle:     config.Global.Timeouts.SSHIdle,
+		maxLifetime: config.Global.Timeouts.SSHLifetime,
 	}
 	go m.cleanupStale()
 	return m
@@ -57,10 +59,11 @@ func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 
 	if ok {
 		now := time.Now()
-		if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(sc.lastUsed) > m.maxIdle {
+		lastUsedTime := time.Unix(0, sc.lastUsed.Load())
+		if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(lastUsedTime) > m.maxIdle {
 			m.CloseServer(server.ID)
 		} else {
-			sc.lastUsed = now
+			sc.lastUsed.Store(now.UnixNano())
 			return sc.client, nil
 		}
 	}
@@ -103,7 +106,8 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	// Double check
 	if sc, ok := m.clients[server.ID]; ok {
 		now := time.Now()
-		if now.Sub(sc.createdAt) <= m.maxLifetime && now.Sub(sc.lastUsed) <= m.maxIdle {
+		lastUsedTime := time.Unix(0, sc.lastUsed.Load())
+		if now.Sub(sc.createdAt) <= m.maxLifetime && now.Sub(lastUsedTime) <= m.maxIdle {
 			return sc.client, nil
 		}
 		// 过期，关闭旧连接
@@ -129,7 +133,7 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 		User:            server.Username,
 		Auth:            []ssh.AuthMethod{auth},
 		HostKeyCallback: hostKeyCallback(),
-		Timeout:         10 * time.Second,
+		Timeout:         config.Global.Timeouts.SSHConnect,
 	}
 
 	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
@@ -139,17 +143,18 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	}
 
 	now := time.Now()
-	m.clients[server.ID] = &sshClient{
+	sc := &sshClient{
 		client:    client,
 		createdAt: now,
-		lastUsed:  now,
 	}
+	sc.lastUsed.Store(now.UnixNano())
+	m.clients[server.ID] = sc
 	return client, nil
 }
 
 // Execute 在远程服务器上执行命令并返回合并输出（stdout + stderr）。
-// 若会话创建失败会自动重连一次。
-func (m *SSHManager) Execute(server *model.Server, command string) (string, error) {
+// 若会话创建失败会自动重连一次。支持通过 context 取消执行。
+func (m *SSHManager) Execute(ctx context.Context, server *model.Server, command string) (string, error) {
 	client, err := m.GetClient(server)
 	if err != nil {
 		return "", err
@@ -173,7 +178,19 @@ func (m *SSHManager) Execute(server *model.Server, command string) (string, erro
 	}
 	defer session.Close()
 
+	// 监听 context 取消信号，及时关闭会话
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			session.Close()
+		case <-done:
+		}
+	}()
+
 	output, err := session.CombinedOutput(command)
+	close(done)
+
 	if err != nil {
 		return string(output), fmt.Errorf("执行命令失败: %v, 输出: %s", err, string(output))
 	}
@@ -181,15 +198,15 @@ func (m *SSHManager) Execute(server *model.Server, command string) (string, erro
 	return string(output), nil
 }
 
-// ExecuteWithTimeout 带超时的命令执行。超时后返回错误。
-func (m *SSHManager) ExecuteWithTimeout(server *model.Server, command string, timeout time.Duration) (string, error) {
+// ExecuteWithTimeout 带超时的命令执行。超时后返回错误。支持通过 context 取消执行。
+func (m *SSHManager) ExecuteWithTimeout(ctx context.Context, server *model.Server, command string, timeout time.Duration) (string, error) {
 	type result struct {
 		output string
 		err    error
 	}
 	ch := make(chan result, 1)
 	go func() {
-		output, err := m.Execute(server, command)
+		output, err := m.Execute(ctx, server, command)
 		ch <- result{output, err}
 	}()
 
@@ -198,16 +215,18 @@ func (m *SSHManager) ExecuteWithTimeout(server *model.Server, command string, ti
 		return r.output, r.err
 	case <-time.After(timeout):
 		return "", fmt.Errorf("执行超时 (%v)", timeout)
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
 }
 
 // ExecuteWithPipe 通过 stdin 管道将密码传递给远程命令。
-// 密码使用 base64 编码避免 shell 元字符导致的注入问题。
-func (m *SSHManager) ExecuteWithPipe(server *model.Server, command, password string) (string, error) {
+// 密码使用 base64 编码避免 shell 元字符导致的注入问题。支持通过 context 取消执行。
+func (m *SSHManager) ExecuteWithPipe(ctx context.Context, server *model.Server, command, password string) (string, error) {
 	// 使用 base64 编码密码，避免单引号和 shell 元字符导致的命令注入
 	encoded := base64.StdEncoding.EncodeToString([]byte(password))
 	fullCommand := fmt.Sprintf("echo '%s' | base64 -d | %s", encoded, command)
-	return m.Execute(server, fullCommand)
+	return m.Execute(ctx, server, fullCommand)
 }
 
 // Close 关闭所有 SSH 连接并清空连接池。
@@ -234,18 +253,24 @@ func (m *SSHManager) CloseServer(serverID uint) {
 
 // cleanupStale 定期清理过期的 SSH 连接
 func (m *SSHManager) cleanupStale() {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(config.Global.Timeouts.SSHCleanup)
 	defer ticker.Stop()
 	for range ticker.C {
-		m.mu.Lock()
 		now := time.Now()
+		m.mu.Lock()
+		var stale []*sshClient
 		for id, sc := range m.clients {
-			if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(sc.lastUsed) > m.maxIdle {
-				sc.client.Close()
+			lastUsedTime := time.Unix(0, sc.lastUsed.Load())
+			if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(lastUsedTime) > m.maxIdle {
+				stale = append(stale, sc)
 				delete(m.clients, id)
 			}
 		}
 		m.mu.Unlock()
+
+		for _, sc := range stale {
+			sc.client.Close()
+		}
 	}
 }
 

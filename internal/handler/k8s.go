@@ -60,6 +60,7 @@ type K8sFullRequest struct {
 //	@Failure		500			{object}	object
 //	@Router			/k8s/rollouts [get]
 func (h *K8sHandler) Rollouts(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -67,12 +68,12 @@ func (h *K8sHandler) Rollouts(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, serverID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	output, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	output, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
 		return
@@ -99,6 +100,7 @@ func (h *K8sHandler) Rollouts(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/k8s/online/preview [post]
 func (h *K8sHandler) OnlinePreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -110,12 +112,12 @@ func (h *K8sHandler) OnlinePreview(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -171,6 +173,7 @@ func (h *K8sHandler) OnlineExecute(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/k8s/sync/preview [post]
 func (h *K8sHandler) SyncPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -182,12 +185,12 @@ func (h *K8sHandler) SyncPreview(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -243,6 +246,7 @@ func (h *K8sHandler) SyncExecute(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/k8s/rollback/preview [post]
 func (h *K8sHandler) RollbackPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req K8sBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -254,12 +258,12 @@ func (h *K8sHandler) RollbackPreview(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -440,13 +444,14 @@ func (h *K8sHandler) FullRollbackExecute(c *gin.Context) {
 }
 
 func (h *K8sHandler) generateFullPreview(c *gin.Context, serverID uint, action string) {
+	ctx := c.Request.Context()
 	var server model.Server
-	if err := h.db.First(&server, serverID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -465,6 +470,7 @@ func (h *K8sHandler) generateFullPreview(c *gin.Context, serverID uint, action s
 }
 
 func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) {
+	ctx := c.Request.Context()
 	preview, ok := h.previewMgr.Get(previewID)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
@@ -477,7 +483,7 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, preview.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
@@ -503,7 +509,7 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	var outputs []string
 	var lastErr error
 	for _, cmd := range commands {
-		output, err := h.sshManager.ExecuteWithPipe(&server, cmd, server.ScriptPassword)
+		output, err := h.sshManager.ExecuteWithPipe(ctx, &server, cmd, server.ScriptPassword)
 		outputs = append(outputs, output)
 		if err != nil {
 			lastErr = err

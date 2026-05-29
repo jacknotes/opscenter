@@ -20,6 +20,8 @@ type Config struct {
 	Redis    RedisConfig    `yaml:"redis"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	Crypto   CryptoConfig   `yaml:"crypto"`
+	Timeouts TimeoutConfig  `yaml:"timeouts"`
+	Nginx    NginxConfig    `yaml:"nginx"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -50,6 +52,24 @@ type JWTConfig struct {
 // CryptoConfig 是 AES-256-GCM 加密配置，密钥长度必须为 16、24 或 32 字节。
 type CryptoConfig struct {
 	Key string `yaml:"key"`
+}
+
+// TimeoutConfig 是运维超时配置，所有字段均有默认值。
+type TimeoutConfig struct {
+	SSHConnect   time.Duration `yaml:"ssh_connect"`   // SSH 连接超时，默认 10s
+	SSHIdle      time.Duration `yaml:"ssh_idle"`      // SSH 连接空闲超时，默认 10m
+	SSHLifetime  time.Duration `yaml:"ssh_lifetime"`  // SSH 连接最大生命周期，默认 1h
+	SSHCleanup   time.Duration `yaml:"ssh_cleanup"`   // SSH 连接清理间隔，默认 5m
+	WSRead       time.Duration `yaml:"ws_read"`       // WebSocket 读超时，默认 60s
+	WSPing       time.Duration `yaml:"ws_ping"`       // WebSocket ping 间隔，默认 30s
+	Lock         time.Duration `yaml:"lock"`          // 分布式锁超时，默认 10m
+	Preview      time.Duration `yaml:"preview"`       // 预览数据过期时间，默认 5m
+	DashboardSSH time.Duration `yaml:"dashboard_ssh"` // Dashboard SSH 命令超时，默认 20s
+}
+
+// NginxConfig 是 Nginx 相关配置。
+type NginxConfig struct {
+	MaxBackups int `yaml:"max_backups"` // 最大备份数量，默认 10
 }
 
 // RedisConfig 是 Redis 连接配置，支持单节点和哨兵两种模式。
@@ -140,6 +160,39 @@ func Load(path string) error {
 	}
 	if Global.Redis.MinIdleConns == 0 {
 		Global.Redis.MinIdleConns = 2
+	}
+
+	// 超时默认值
+	if Global.Timeouts.SSHConnect == 0 {
+		Global.Timeouts.SSHConnect = 10 * time.Second
+	}
+	if Global.Timeouts.SSHIdle == 0 {
+		Global.Timeouts.SSHIdle = 10 * time.Minute
+	}
+	if Global.Timeouts.SSHLifetime == 0 {
+		Global.Timeouts.SSHLifetime = 1 * time.Hour
+	}
+	if Global.Timeouts.SSHCleanup == 0 {
+		Global.Timeouts.SSHCleanup = 5 * time.Minute
+	}
+	if Global.Timeouts.WSRead == 0 {
+		Global.Timeouts.WSRead = 60 * time.Second
+	}
+	if Global.Timeouts.WSPing == 0 {
+		Global.Timeouts.WSPing = 30 * time.Second
+	}
+	if Global.Timeouts.Lock == 0 {
+		Global.Timeouts.Lock = 10 * time.Minute
+	}
+	if Global.Timeouts.Preview == 0 {
+		Global.Timeouts.Preview = 5 * time.Minute
+	}
+	if Global.Timeouts.DashboardSSH == 0 {
+		Global.Timeouts.DashboardSSH = 20 * time.Second
+	}
+	// Nginx 默认值
+	if Global.Nginx.MaxBackups == 0 {
+		Global.Nginx.MaxBackups = 10
 	}
 
 	if Global.JWT.Expire == 0 {

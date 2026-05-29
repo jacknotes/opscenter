@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/model"
 	"opscenter/internal/service"
 )
@@ -60,16 +62,17 @@ func NewDashboardHandler(db *gorm.DB, sshManager *service.SSHManager) *Dashboard
 //	@Success		200	{object}	object
 //	@Router			/dashboard/stats [get]
 func (h *DashboardHandler) Stats(c *gin.Context) {
+	ctx := c.Request.Context()
 	result := gin.H{}
 
 	// 服务器统计
 	var total int64
-	if err := h.db.Model(&model.Server{}).Count(&total).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Count(&total).Error; err != nil {
 		log.Printf("查询服务器总数失败: %v", err)
 	}
 
 	var enabled, disabled int64
-	if err := h.db.Model(&model.Server{}).Where("enabled = ?", true).Count(&enabled).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Where("enabled = ?", true).Count(&enabled).Error; err != nil {
 		log.Printf("查询已启用服务器数失败: %v", err)
 	}
 	disabled = total - enabled
@@ -80,7 +83,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count      int64
 	}
 	var byType []typeCount
-	if err := h.db.Model(&model.Server{}).Select("server_type, count(*) as count").Group("server_type").Scan(&byType).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Select("server_type, count(*) as count").Group("server_type").Scan(&byType).Error; err != nil {
 		log.Printf("查询服务器类型统计失败: %v", err)
 	}
 	typeMap := make(map[string]int64)
@@ -94,7 +97,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count int64
 	}
 	var byEnv []envCount
-	if err := h.db.Model(&model.Server{}).Select("env, count(*) as count").Where("env != ?", "").Group("env").Scan(&byEnv).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Select("env, count(*) as count").Where("env != ?", "").Group("env").Scan(&byEnv).Error; err != nil {
 		log.Printf("查询服务器环境统计失败: %v", err)
 	}
 	envMap := make(map[string]int64)
@@ -114,12 +117,12 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	role, _ := c.Get("role")
 	if role == "admin" {
 		var userTotal int64
-		if err := h.db.Model(&model.User{}).Count(&userTotal).Error; err != nil {
+		if err := h.db.WithContext(ctx).Model(&model.User{}).Count(&userTotal).Error; err != nil {
 			log.Printf("查询用户总数失败: %v", err)
 		}
 
 		var userEnabled, userDisabled int64
-		if err := h.db.Model(&model.User{}).Where("enabled = ?", true).Count(&userEnabled).Error; err != nil {
+		if err := h.db.WithContext(ctx).Model(&model.User{}).Where("enabled = ?", true).Count(&userEnabled).Error; err != nil {
 			log.Printf("查询已启用用户数失败: %v", err)
 		}
 		userDisabled = userTotal - userEnabled
@@ -129,7 +132,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			Count int64
 		}
 		var byRole []roleCount
-		if err := h.db.Model(&model.User{}).Select("role, count(*) as count").Group("role").Scan(&byRole).Error; err != nil {
+		if err := h.db.WithContext(ctx).Model(&model.User{}).Select("role, count(*) as count").Group("role").Scan(&byRole).Error; err != nil {
 			log.Printf("查询用户角色统计失败: %v", err)
 		}
 		roleMap := make(map[string]int64)
@@ -158,6 +161,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 //	@Success		200	{object}	object
 //	@Router			/dashboard/remote-stats [get]
 func (h *DashboardHandler) RemoteStats(c *gin.Context) {
+	ctx := c.Request.Context()
 	type moduleResult struct {
 		LVS     interface{} `json:"lvs"`
 		Nginx   interface{} `json:"nginx"`
@@ -173,7 +177,7 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stats, err := h.fetchLVSStats()
+		stats, err := h.fetchLVSStats(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -188,7 +192,7 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stats, err := h.fetchNginxStats()
+		stats, err := h.fetchNginxStats(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -203,7 +207,7 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stats, err := h.fetchK8sStats()
+		stats, err := h.fetchK8sStats(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -218,7 +222,7 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stats, err := h.fetchPreprodStats()
+		stats, err := h.fetchPreprodStats(ctx)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -246,9 +250,9 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 }
 
 // fetchLVSStats 并行查询所有 LVS 服务器，聚合 VS/RS 统计。
-func (h *DashboardHandler) fetchLVSStats() (gin.H, error) {
+func (h *DashboardHandler) fetchLVSStats(ctx context.Context) (gin.H, error) {
 	var servers []model.Server
-	if err := h.db.Where("server_type = ? AND enabled = ?", "lvs", true).Find(&servers).Error; err != nil {
+	if err := h.db.WithContext(ctx).Where("server_type = ? AND enabled = ?", "lvs", true).Find(&servers).Error; err != nil {
 		return nil, fmt.Errorf("查询 LVS 服务器失败: %w", err)
 	}
 	if len(servers) == 0 {
@@ -264,7 +268,7 @@ func (h *DashboardHandler) fetchLVSStats() (gin.H, error) {
 		wg.Add(1)
 		go func(idx int, server model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSingleLVS(&server)
+			d, err := h.fetchSingleLVS(ctx, &server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -299,10 +303,10 @@ func (h *DashboardHandler) fetchLVSStats() (gin.H, error) {
 	}, nil
 }
 
-func (h *DashboardHandler) fetchSingleLVS(server *model.Server) (lvsData, error) {
+func (h *DashboardHandler) fetchSingleLVS(ctx context.Context, server *model.Server) (lvsData, error) {
 	var d lvsData
 
-	output, err := h.sshManager.ExecuteWithTimeout(server, server.ScriptPath+" list", 20*time.Second)
+	output, err := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
 	if err != nil {
 		return d, fmt.Errorf("执行 list 失败: %w", err)
 	}
@@ -310,7 +314,7 @@ func (h *DashboardHandler) fetchSingleLVS(server *model.Server) (lvsData, error)
 	vsList := h.lvsService.ParseListOutput(output)
 
 	// 获取 status 补充离线 RS
-	statusOutput, statusErr := h.sshManager.ExecuteWithTimeout(server, server.ScriptPath+" status", 20*time.Second)
+	statusOutput, statusErr := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" status", config.Global.Timeouts.DashboardSSH)
 	if statusErr == nil && statusOutput != "" {
 		statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
 		vsList = h.lvsService.MergeOfflineRS(vsList, statusGroups)
@@ -332,9 +336,9 @@ func (h *DashboardHandler) fetchSingleLVS(server *model.Server) (lvsData, error)
 }
 
 // fetchNginxStats 并行查询所有 Nginx 服务器，聚合 upstream 统计。
-func (h *DashboardHandler) fetchNginxStats() (gin.H, error) {
+func (h *DashboardHandler) fetchNginxStats(ctx context.Context) (gin.H, error) {
 	var servers []model.Server
-	if err := h.db.Where("server_type = ? AND enabled = ?", "nginx", true).Find(&servers).Error; err != nil {
+	if err := h.db.WithContext(ctx).Where("server_type = ? AND enabled = ?", "nginx", true).Find(&servers).Error; err != nil {
 		return nil, fmt.Errorf("查询 Nginx 服务器失败: %w", err)
 	}
 	if len(servers) == 0 {
@@ -350,7 +354,7 @@ func (h *DashboardHandler) fetchNginxStats() (gin.H, error) {
 		wg.Add(1)
 		go func(idx int, server model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSingleNginx(&server)
+			d, err := h.fetchSingleNginx(ctx, &server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -381,7 +385,7 @@ func (h *DashboardHandler) fetchNginxStats() (gin.H, error) {
 	}, nil
 }
 
-func (h *DashboardHandler) fetchSingleNginx(server *model.Server) (nginxData, error) {
+func (h *DashboardHandler) fetchSingleNginx(ctx context.Context, server *model.Server) (nginxData, error) {
 	var d nginxData
 
 	configPath := ensureTrailingSlash(server.ConfigPath)
@@ -409,7 +413,7 @@ func (h *DashboardHandler) fetchSingleNginx(server *model.Server) (nginxData, er
 	seen := make(map[string]bool)
 	for _, pattern := range includePatterns {
 		cmd := fmt.Sprintf("ls %s%s", configPath, pattern)
-		output, err := h.sshManager.ExecuteWithTimeout(server, cmd, 15*time.Second)
+		output, err := h.sshManager.ExecuteWithTimeout(ctx, server, cmd, config.Global.Timeouts.DashboardSSH)
 		if err != nil {
 			continue
 		}
@@ -448,7 +452,7 @@ func (h *DashboardHandler) fetchSingleNginx(server *model.Server) (nginxData, er
 	// 读取每个配置文件并解析 upstream
 	for _, fileName := range fileNames {
 		cmd := fmt.Sprintf("cat %s%s", configPath, fileName)
-		output, err := h.sshManager.ExecuteWithTimeout(server, cmd, 15*time.Second)
+		output, err := h.sshManager.ExecuteWithTimeout(ctx, server, cmd, config.Global.Timeouts.DashboardSSH)
 		if err != nil {
 			continue
 		}
@@ -469,9 +473,9 @@ func (h *DashboardHandler) fetchSingleNginx(server *model.Server) (nginxData, er
 }
 
 // fetchK8sStats 并行查询所有 K8s 服务器，聚合 Rollout 统计。
-func (h *DashboardHandler) fetchK8sStats() (gin.H, error) {
+func (h *DashboardHandler) fetchK8sStats(ctx context.Context) (gin.H, error) {
 	var servers []model.Server
-	if err := h.db.Where("server_type = ? AND enabled = ?", "kubernetes", true).Find(&servers).Error; err != nil {
+	if err := h.db.WithContext(ctx).Where("server_type = ? AND enabled = ?", "kubernetes", true).Find(&servers).Error; err != nil {
 		return nil, fmt.Errorf("查询 K8s 服务器失败: %w", err)
 	}
 	if len(servers) == 0 {
@@ -487,7 +491,7 @@ func (h *DashboardHandler) fetchK8sStats() (gin.H, error) {
 		wg.Add(1)
 		go func(server model.Server) {
 			defer wg.Done()
-			output, err := h.sshManager.ExecuteWithTimeout(&server, server.ScriptPath+" list", 20*time.Second)
+			output, err := h.sshManager.ExecuteWithTimeout(ctx, &server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Sprintf("%s: %v", server.Name, err))
@@ -528,9 +532,9 @@ func (h *DashboardHandler) fetchK8sStats() (gin.H, error) {
 }
 
 // fetchPreprodStats 并行查询所有 Preprod 服务器，聚合资源统计。
-func (h *DashboardHandler) fetchPreprodStats() (gin.H, error) {
+func (h *DashboardHandler) fetchPreprodStats(ctx context.Context) (gin.H, error) {
 	var servers []model.Server
-	if err := h.db.Where("server_type = ? AND enabled = ?", "preprod", true).Find(&servers).Error; err != nil {
+	if err := h.db.WithContext(ctx).Where("server_type = ? AND enabled = ?", "preprod", true).Find(&servers).Error; err != nil {
 		return nil, fmt.Errorf("查询 Preprod 服务器失败: %w", err)
 	}
 	if len(servers) == 0 {
@@ -550,7 +554,7 @@ func (h *DashboardHandler) fetchPreprodStats() (gin.H, error) {
 		wg.Add(1)
 		go func(idx int, server model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSinglePreprod(&server)
+			d, err := h.fetchSinglePreprod(ctx, &server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -593,8 +597,8 @@ func (h *DashboardHandler) fetchPreprodStats() (gin.H, error) {
 	}, nil
 }
 
-func (h *DashboardHandler) fetchSinglePreprod(server *model.Server) ([]service.PreprodResource, error) {
-	listOutput, err := h.sshManager.ExecuteWithTimeout(server, server.ScriptPath+" list", 20*time.Second)
+func (h *DashboardHandler) fetchSinglePreprod(ctx context.Context, server *model.Server) ([]service.PreprodResource, error) {
+	listOutput, err := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
 	if err != nil {
 		return nil, fmt.Errorf("执行 list 失败: %w", err)
 	}
@@ -602,7 +606,7 @@ func (h *DashboardHandler) fetchSinglePreprod(server *model.Server) ([]service.P
 	resources := h.preprodService.ParseListOutput(listOutput)
 
 	// 获取 target 信息
-	targetOutput, targetErr := h.sshManager.ExecuteWithTimeout(server, server.ScriptPath+" list-targets", 15*time.Second)
+	targetOutput, targetErr := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list-targets", config.Global.Timeouts.DashboardSSH)
 	if targetErr == nil && targetOutput != "" {
 		targets := h.preprodService.ParseTargetOutput(targetOutput)
 		resources = h.preprodService.MergeTargets(resources, targets)

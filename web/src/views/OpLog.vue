@@ -77,13 +77,14 @@ import { ref, computed, onMounted } from 'vue'
 import { getLogs } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
+import { DEFAULT_PAGE_SIZE } from '../constants'
 
 const userStore = useUserStore()
 
 const logs = ref([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const module = ref('all')
 const keyword = ref('')
 const status = ref('all')

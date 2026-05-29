@@ -140,6 +140,14 @@ func verifyWSToken(c *gin.Context, msgToken string, db *gorm.DB) (*middleware.Cl
 	return claims, nil
 }
 
+// Handle WebSocket命令执行
+//
+//	@Summary		WebSocket命令执行
+//	@Description	通过WebSocket流式执行命令
+//	@Tags			WebSocket
+//	@Param			token		query		string	true	"JWT Token"
+//	@Param			preview_id	query		string	true	"预览ID"
+//	@Router			/ws/exec [get]
 func (h *WSHandler) Handle(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -159,16 +167,16 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}()
 
 	// Ping/pong heartbeat
-	sc.SetReadDeadline(time.Now().Add(60 * time.Second))
+	sc.SetReadDeadline(time.Now().Add(config.Global.Timeouts.WSRead))
 	sc.SetPongHandler(func(string) error {
-		sc.SetReadDeadline(time.Now().Add(60 * time.Second))
+		sc.SetReadDeadline(time.Now().Add(config.Global.Timeouts.WSRead))
 		return nil
 	})
 
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(config.Global.Timeouts.WSPing)
 		defer ticker.Stop()
 		for {
 			select {
@@ -236,7 +244,7 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	}
 
 	// Acquire lock
-	locked, holder := h.lockManager.TryLock(preview.ServerID, usernameStr, 10*time.Minute)
+	locked, holder := h.lockManager.TryLock(preview.ServerID, usernameStr, config.Global.Timeouts.Lock)
 	if !locked {
 		sc.WriteJSON(WSMessage{
 			Type:    "lock_error",

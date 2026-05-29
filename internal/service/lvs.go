@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -236,7 +237,7 @@ func (s *LVSService) DetectRoles(vsIPs []string, server *model.Server) map[strin
 	}
 	grepPattern := strings.Join(escapedIPs, "|")
 	checkCmd := fmt.Sprintf("ip -4 a show | grep -oE '%s' || true", grepPattern)
-	checkOutput, checkErr := s.sshManager.Execute(server, checkCmd)
+	checkOutput, checkErr := s.sshManager.Execute(context.Background(), server, checkCmd)
 	if checkErr != nil {
 		return roles
 	}

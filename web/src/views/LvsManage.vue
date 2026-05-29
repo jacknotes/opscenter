@@ -313,17 +313,18 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag, updateLvsVSTag, deleteLvsVSTag, checkLvsOnlineForPreprod } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, ArrowDown } from '@element-plus/icons-vue'
+import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../constants'
 
 const servers = ref([])
 const serverId = ref(null)
 const lvsData = ref([])
 const groupedData = ref([])
-const vsFilter = ref(localStorage.getItem('lvs_vs_filter') || '')
+const vsFilter = ref(localStorage.getItem(STORAGE_KEYS.LVS_VS_FILTER) || '')
 watch(vsFilter, (val) => {
   if (val) {
-    localStorage.setItem('lvs_vs_filter', val)
+    localStorage.setItem(STORAGE_KEYS.LVS_VS_FILTER, val)
   } else {
-    localStorage.removeItem('lvs_vs_filter')
+    localStorage.removeItem(STORAGE_KEYS.LVS_VS_FILTER)
   }
 })
 const allExpanded = ref(false)
@@ -535,7 +536,7 @@ onMounted(async () => {
   try {
     servers.value = (await getServers('lvs')) || []
     if (servers.value.length > 0) {
-      const saved = localStorage.getItem('lvs_server')
+      const saved = localStorage.getItem(STORAGE_KEYS.LVS_SERVER)
       if (saved && servers.value.some(s => s.id === Number(saved))) {
         serverId.value = Number(saved)
       } else {
@@ -551,14 +552,14 @@ onMounted(async () => {
 })
 
 async function onServerChange() {
-  localStorage.removeItem('lvs_vs_filter')
+  localStorage.removeItem(STORAGE_KEYS.LVS_VS_FILTER)
   vsFilter.value = ''
   await loadData()
 }
 
 async function loadData() {
   if (!serverId.value) return
-  localStorage.setItem('lvs_server', serverId.value)
+  localStorage.setItem(STORAGE_KEYS.LVS_SERVER, serverId.value)
   loading.value = true
   try {
     lvsData.value = await getLvsList(serverId.value)
@@ -603,7 +604,7 @@ async function silentRefresh() {
 // 自动刷新定时器管理
 function startAutoRefresh() {
   stopAutoRefresh()
-  autoRefreshTimer = setInterval(silentRefresh, 300000)
+  autoRefreshTimer = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL_MS)
 }
 
 function stopAutoRefresh() {

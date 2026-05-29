@@ -61,6 +61,7 @@ type PreviewExecuteRequest struct {
 //	@Failure		500			{object}	object
 //	@Router			/lvs/list [get]
 func (h *LVSHandler) List(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -68,12 +69,12 @@ func (h *LVSHandler) List(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, serverID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	output, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	output, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		// keepalived 服务器可能宕机或服务不可用，返回空列表而非报错
 		c.Header("X-Warning", url.PathEscape(fmt.Sprintf("无法连接服务器或执行命令失败: %v", err)))
@@ -87,7 +88,7 @@ func (h *LVSHandler) List(c *gin.Context) {
 	}
 
 	// 获取 status 输出，补充下线的 RS
-	statusOutput, statusErr := h.sshManager.Execute(&server, server.ScriptPath+" status")
+	statusOutput, statusErr := h.sshManager.Execute(ctx, &server, server.ScriptPath+" status")
 	if statusErr == nil && statusOutput != "" {
 		statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
 		servers = h.lvsService.MergeOfflineRS(servers, statusGroups)
@@ -181,6 +182,7 @@ func (h *LVSHandler) List(c *gin.Context) {
 //	@Failure		500			{object}	object
 //	@Router			/lvs/status [get]
 func (h *LVSHandler) Status(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -188,12 +190,12 @@ func (h *LVSHandler) Status(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, serverID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, serverID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	output, err := h.sshManager.Execute(&server, server.ScriptPath+" status")
+	output, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" status")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
 		return
@@ -217,6 +219,7 @@ func (h *LVSHandler) Status(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/lvs/op/preview [post]
 func (h *LVSHandler) OpPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req LVSOpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -240,13 +243,13 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
 	// Get current status
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -281,6 +284,7 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/lvs/op/execute [post]
 func (h *LVSHandler) OpExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -299,7 +303,7 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, preview.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
@@ -314,7 +318,7 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 	}
 	command, _ := h.lvsService.GenerateOpPreview(server.ScriptPath, vsIP, rsIP, state)
 
-	output, err := h.sshManager.Execute(&server, command)
+	output, err := h.sshManager.Execute(ctx, &server, command)
 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
@@ -350,6 +354,7 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 //	@Failure		404		{object}	object
 //	@Router			/lvs/swap/preview [post]
 func (h *LVSHandler) SwapPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req LVSSwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -372,12 +377,12 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, req.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, req.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
 
-	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(ctx, &server, server.ScriptPath+" list")
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
@@ -412,6 +417,7 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/lvs/swap/execute [post]
 func (h *LVSHandler) SwapExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -430,7 +436,7 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	}
 
 	var server model.Server
-	if err := h.db.First(&server, preview.ServerID).Error; err != nil {
+	if err := h.db.WithContext(ctx).First(&server, preview.ServerID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "服务器不存在"})
 		return
 	}
@@ -445,7 +451,7 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	}
 	command, _ := h.lvsService.GenerateSwapPreview(server.ScriptPath, vsIP, rsIP1, rsIP2)
 
-	output, err := h.sshManager.Execute(&server, command)
+	output, err := h.sshManager.Execute(ctx, &server, command)
 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)

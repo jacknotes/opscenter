@@ -10,12 +10,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/model"
 	"opscenter/internal/service"
 )
 
 const nginxCmd = "PATH=$PATH:/usr/local/nginx/sbin:/usr/sbin:/opt/nginx/sbin nginx"
-const maxBackups = 10
 
 type NginxHandler struct {
 	db           *gorm.DB
@@ -137,6 +137,7 @@ func validateConfigFile(file string) error {
 //	@Failure		404			{object}	object
 //	@Router			/nginx/configs [get]
 func (h *NginxHandler) Configs(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -173,7 +174,7 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 	seen := make(map[string]bool)
 	for _, pattern := range includePatterns {
 		cmd := fmt.Sprintf("ls %s%s", configPath, pattern)
-		output, err := h.sshManager.Execute(&server, cmd)
+		output, err := h.sshManager.Execute(ctx, &server, cmd)
 		if err != nil {
 			continue // 该模式无匹配，跳过
 		}
@@ -226,6 +227,7 @@ func (h *NginxHandler) Configs(c *gin.Context) {
 //	@Failure		500			{object}	object
 //	@Router			/nginx/upstreams [get]
 func (h *NginxHandler) Upstreams(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	configFile := c.Query("config_file")
 
@@ -249,7 +251,7 @@ func (h *NginxHandler) Upstreams(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, configFile)
-	output, err := h.sshManager.Execute(&server, cmd)
+	output, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v, 输出: %s", err, output)})
 		return
@@ -277,6 +279,7 @@ func (h *NginxHandler) Upstreams(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/online/preview [post]
 func (h *NginxHandler) OnlinePreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -300,7 +303,7 @@ func (h *NginxHandler) OnlinePreview(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	config, err := h.sshManager.Execute(&server, cmd)
+	config, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -371,6 +374,7 @@ func (h *NginxHandler) OnlineExecute(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/offline/preview [post]
 func (h *NginxHandler) OfflinePreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxUpstreamRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -394,7 +398,7 @@ func (h *NginxHandler) OfflinePreview(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	config, err := h.sshManager.Execute(&server, cmd)
+	config, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -503,6 +507,7 @@ func (h *NginxHandler) OfflineExecute(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/swap/preview [post]
 func (h *NginxHandler) SwapPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxSwapRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -526,7 +531,7 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	config, err := h.sshManager.Execute(&server, cmd)
+	config, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -613,6 +618,7 @@ func (h *NginxHandler) SwapPreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/swap/execute [post]
 func (h *NginxHandler) SwapExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -654,9 +660,9 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 	backupPath := ensureTrailingSlash(server.BackupPath)
 	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
-	h.sshManager.Execute(&server, backupCmd)
-	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
-	h.sshManager.Execute(&server, cleanupCmd)
+	h.sshManager.Execute(ctx, &server, backupCmd)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, config.Global.Nginx.MaxBackups)
+	h.sshManager.Execute(ctx, &server, cleanupCmd)
 
 	// 对每个 upstream 执行切换
 	var allCommands []string
@@ -664,7 +670,7 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 		commands := h.nginxService.GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP)
 		allCommands = append(allCommands, commands...)
 		for _, cmd := range commands {
-			_, err := h.sshManager.Execute(&server, cmd)
+			_, err := h.sshManager.Execute(ctx, &server, cmd)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
 				return
@@ -673,13 +679,13 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	}
 
 	// 测试并重载
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
 		return
 	}
 
-	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.Execute(ctx, &server, "systemctl reload nginx")
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("切换成功: %v %s 下线 → %s 上线", upstreamNames, offlineIP, onlineIP)
@@ -706,6 +712,7 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/toggle/preview [post]
 func (h *NginxHandler) TogglePreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxToggleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -729,7 +736,7 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	config, err := h.sshManager.Execute(&server, cmd)
+	config, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -796,6 +803,7 @@ func (h *NginxHandler) TogglePreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/toggle/execute [post]
 func (h *NginxHandler) ToggleExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -835,13 +843,13 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 	backupPath := ensureTrailingSlash(server.BackupPath)
 	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
-	h.sshManager.Execute(&server, backupCmd)
-	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
-	h.sshManager.Execute(&server, cleanupCmd)
+	h.sshManager.Execute(ctx, &server, backupCmd)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, config.Global.Nginx.MaxBackups)
+	h.sshManager.Execute(ctx, &server, cleanupCmd)
 
 	// 读取配置并解析 upstream 的 server 列表
 	catCmd := fmt.Sprintf("cat %s%s", configPath, configFile)
-	configContent, err := h.sshManager.Execute(&server, catCmd)
+	configContent, err := h.sshManager.Execute(ctx, &server, catCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -863,7 +871,7 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 		commands := h.nginxService.GenerateToggleModifyCommands(configPath, configFile, upstreamName, u.Servers)
 		allCommands = append(allCommands, commands...)
 		for _, cmd := range commands {
-			_, err := h.sshManager.Execute(&server, cmd)
+			_, err := h.sshManager.Execute(ctx, &server, cmd)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err)})
 				return
@@ -872,13 +880,13 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	}
 
 	// 测试并重载
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
 		return
 	}
 
-	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.Execute(ctx, &server, "systemctl reload nginx")
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("切换成功: %v 中所有服务器状态已反转", upstreamNames)
@@ -905,6 +913,7 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/batch/preview [post]
 func (h *NginxHandler) BatchPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxBatchRequestV2
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -936,7 +945,7 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 
 	cmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	config, err := h.sshManager.Execute(&server, cmd)
+	config, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -1055,6 +1064,7 @@ func (h *NginxHandler) BatchPreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/upstream/batch/execute [post]
 func (h *NginxHandler) BatchExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1120,13 +1130,13 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	configPath := ensureTrailingSlash(server.ConfigPath)
 	backupPath := ensureTrailingSlash(server.BackupPath)
 	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
-	h.sshManager.Execute(&server, backupCmd)
-	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
-	h.sshManager.Execute(&server, cleanupCmd)
+	h.sshManager.Execute(ctx, &server, backupCmd)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, config.Global.Nginx.MaxBackups)
+	h.sshManager.Execute(ctx, &server, cleanupCmd)
 
 	// 读取配置用于 toggle 操作获取 server 列表
 	catCmd := fmt.Sprintf("cat %s%s", configPath, configFile)
-	configContent, err := h.sshManager.Execute(&server, catCmd)
+	configContent, err := h.sshManager.Execute(ctx, &server, catCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取配置失败: %v", err)})
 		return
@@ -1146,7 +1156,7 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 		case "online":
 			cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.BackendIP}, "online")
 			allCommands = append(allCommands, cmd)
-			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+			if _, err := h.sshManager.Execute(ctx, &server, cmd); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] %s 上线失败: %v", item.UpstreamName, item.BackendIP, err)})
 				return
 			}
@@ -1155,7 +1165,7 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 		case "offline":
 			cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, item.UpstreamName, []string{item.BackendIP}, "offline")
 			allCommands = append(allCommands, cmd)
-			if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+			if _, err := h.sshManager.Execute(ctx, &server, cmd); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] %s 下线失败: %v", item.UpstreamName, item.BackendIP, err)})
 				return
 			}
@@ -1170,7 +1180,7 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 			commands := h.nginxService.GenerateToggleModifyCommands(configPath, configFile, item.UpstreamName, u.Servers)
 			allCommands = append(allCommands, commands...)
 			for _, cmd := range commands {
-				if _, err := h.sshManager.Execute(&server, cmd); err != nil {
+				if _, err := h.sshManager.Execute(ctx, &server, cmd); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("[%s] 切换失败: %v (命令: %s)", item.UpstreamName, err, cmd)})
 					return
 				}
@@ -1180,13 +1190,13 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	}
 
 	// 测试并重载
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
 		return
 	}
 
-	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.Execute(ctx, &server, "systemctl reload nginx")
 	h.sshManager.CloseServer(server.ID)
 
 	logOutput := fmt.Sprintf("批量操作成功：%d 个上线，%d 个下线，%d 个切换", actionCounts["online"], actionCounts["offline"], actionCounts["toggle"])
@@ -1224,6 +1234,7 @@ func validateServerStatus(upstream *service.NginxUpstream, ip, expectedStatus st
 //	@Failure		500		{object}	object
 //	@Router			/nginx/rollback/preview [post]
 func (h *NginxHandler) RollbackPreview(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req NginxRollbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1246,7 +1257,7 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 
 	configPath := ensureTrailingSlash(server.ConfigPath)
 	currentCmd := fmt.Sprintf("cat %s%s", configPath, req.ConfigFile)
-	currentConfig, err := h.sshManager.Execute(&server, currentCmd)
+	currentConfig, err := h.sshManager.Execute(ctx, &server, currentCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取当前配置失败: %v", err)})
 		return
@@ -1254,7 +1265,7 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 
 	backupPath := ensureTrailingSlash(server.BackupPath)
 	backupCmd := fmt.Sprintf("cat %s%s", backupPath, req.BackupFile)
-	backupConfig, err := h.sshManager.Execute(&server, backupCmd)
+	backupConfig, err := h.sshManager.Execute(ctx, &server, backupCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("读取备份配置失败: %v", err)})
 		return
@@ -1287,6 +1298,7 @@ func (h *NginxHandler) RollbackPreview(c *gin.Context) {
 //	@Failure		500		{object}	object
 //	@Router			/nginx/rollback/execute [post]
 func (h *NginxHandler) RollbackExecute(c *gin.Context) {
+	ctx := c.Request.Context()
 	var req PreviewExecuteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -1333,7 +1345,7 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 
 	// Copy backup to config
 	copyCmd := fmt.Sprintf("cp %s/%s %s/%s", server.BackupPath, backupFile, server.ConfigPath, configFile)
-	_, err := h.sshManager.Execute(&server, copyCmd)
+	_, err := h.sshManager.Execute(ctx, &server, copyCmd)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("回滚失败: %v", err)})
 		return
@@ -1341,14 +1353,14 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 
 	// Test and reload
 	testCmd := nginxCmd + " -t"
-	testOutput, err := h.sshManager.Execute(&server, testCmd)
+	testOutput, err := h.sshManager.Execute(ctx, &server, testCmd)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误: %s", testOutput)})
 		return
 	}
 
 	reloadCmd := "systemctl reload nginx"
-	h.sshManager.Execute(&server, reloadCmd)
+	h.sshManager.Execute(ctx, &server, reloadCmd)
 
 	// 执行完成后关闭SSH连接，强制下次请求重新连接
 	h.sshManager.CloseServer(server.ID)
@@ -1378,6 +1390,7 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 //	@Failure		500			{object}	object
 //	@Router			/nginx/backups [get]
 func (h *NginxHandler) Backups(c *gin.Context) {
+	ctx := c.Request.Context()
 	serverID := c.Query("server_id")
 	if serverID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定服务器"})
@@ -1391,7 +1404,7 @@ func (h *NginxHandler) Backups(c *gin.Context) {
 	}
 
 	cmd := fmt.Sprintf("ls -t %s 2>/dev/null", server.BackupPath)
-	output, err := h.sshManager.Execute(&server, cmd)
+	output, err := h.sshManager.Execute(ctx, &server, cmd)
 	if err != nil {
 		log.Printf("获取备份列表失败: %v", err)
 	}
@@ -1401,6 +1414,7 @@ func (h *NginxHandler) Backups(c *gin.Context) {
 }
 
 func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action string) {
+	ctx := c.Request.Context()
 	preview, ok := h.previewMgr.Get(previewID)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "预览已过期或不存在"})
@@ -1435,9 +1449,9 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	configPath := ensureTrailingSlash(server.ConfigPath)
 	backupPath := ensureTrailingSlash(server.BackupPath)
 	backupCmd := h.nginxService.GenerateBackupCommand(configPath, backupPath, configFile)
-	h.sshManager.Execute(&server, backupCmd)
-	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, maxBackups)
-	h.sshManager.Execute(&server, cleanupCmd)
+	h.sshManager.Execute(ctx, &server, backupCmd)
+	cleanupCmd := h.nginxService.GenerateCleanupCommand(backupPath, configFile, config.Global.Nginx.MaxBackups)
+	h.sshManager.Execute(ctx, &server, cleanupCmd)
 
 	// 支持多个 IP，用逗号分隔
 	backendIPs := splitIPs(backendIP)
@@ -1448,7 +1462,7 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 	for _, upstreamName := range upstreamNames {
 		cmd := h.nginxService.GenerateModifyCommand(configPath, configFile, upstreamName, backendIPs, action)
 		commands = append(commands, cmd)
-		_, err := h.sshManager.Execute(&server, cmd)
+		_, err := h.sshManager.Execute(ctx, &server, cmd)
 		if err != nil {
 			lastErr = err
 			break
@@ -1460,13 +1474,13 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 		return
 	}
 
-	testOutput, err := h.sshManager.Execute(&server, nginxCmd+" -t")
+	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
 		return
 	}
 
-	h.sshManager.Execute(&server, "systemctl reload nginx")
+	h.sshManager.Execute(ctx, &server, "systemctl reload nginx")
 
 	h.sshManager.CloseServer(server.ID)
 

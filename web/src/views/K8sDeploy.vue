@@ -97,11 +97,11 @@ import {
   k8sFullRollbackPreview, k8sFullRollbackExecute
 } from '../api'
 import { ElMessage } from 'element-plus'
+import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../constants'
 
 const servers = ref([])
 const serverId = ref(null)
 const rollouts = ref([])
-const selected = ref([])
 const selectedIds = ref(new Set())
 const previewVisible = ref(false)
 const previewData = ref(null)
@@ -116,7 +116,7 @@ const statusFilterLabels = { all: '全部', pending: '待发布', online: '已�
 const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 const tableRef = ref(null)
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const skipSelectionSync = ref(false)
 
 const filteredRollouts = computed(() => {
@@ -213,7 +213,7 @@ onMounted(async () => {
   try {
     servers.value = (await getServers('kubernetes')) || []
     if (servers.value.length > 0) {
-      const saved = localStorage.getItem('k8s_server')
+      const saved = localStorage.getItem(STORAGE_KEYS.K8S_SERVER)
       if (saved && servers.value.some(s => s.id === Number(saved))) {
         serverId.value = Number(saved)
       } else {
@@ -228,7 +228,7 @@ onMounted(async () => {
 
 async function loadData() {
   if (!serverId.value) return
-  localStorage.setItem('k8s_server', serverId.value)
+  localStorage.setItem(STORAGE_KEYS.K8S_SERVER, serverId.value)
 
   try {
     const data = await getK8sRollouts(serverId.value)
@@ -243,7 +243,6 @@ async function loadData() {
 }
 
 function handleSelectionChange(val) {
-  selected.value = val
   // 数据变化导致的选中清空，跳过同步，由 restoreSelection 恢复
   if (skipSelectionSync.value) return
   // 同步当前页选中状态到 selectedIds
