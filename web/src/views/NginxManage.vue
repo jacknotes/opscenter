@@ -33,7 +33,7 @@
             </template>
           </el-dropdown>
           <span style="margin-left: auto;"></span>
-          <span class="stat-chip">Upstream <b>{{ filteredUpstreams.length }}</b></span>
+          <span class="stat-chip stat-chip-warning">Upstream <b>{{ filteredUpstreams.length }}</b></span>
           <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
           <span class="stat-chip stat-chip-danger" :class="{ 'stat-chip-active': statusFilter === 'down' }" @click="toggleStatusFilter('down')">离线 <b>{{ totalDownCount }}</b></span>
           <span class="stat-chip stat-chip-primary">已选 <b>{{ selectedServers.length }}</b></span>
@@ -1171,6 +1171,9 @@ async function executePreview() {
 .stat-chip-danger.stat-chip-active b { color: #fff; }
 
 .stat-chip-primary b { color: #409eff; }
+.stat-chip-success b { color: #67c23a; }
+.stat-chip-danger b { color: #f56c6c; }
+.stat-chip-warning b { color: #e6a23c; }
 
 /* ===== Toolbar ===== */
 .toolbar {
