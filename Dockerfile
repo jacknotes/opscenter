@@ -21,6 +21,9 @@ RUN go mod download
 
 COPY . .
 
+# 生成 swagger 文档（docs/ 在 .gitignore 中，需要在构建时生成）
+RUN go install github.com/swaggo/swag/cmd/swag@latest && swag init -d ./cmd/server -o ./docs --parseDependency --parseInternal
+
 RUN CGO_ENABLED=0 GOOS=linux go build -o opscenter ./cmd/server/
 
 # Stage 3: Final minimal image
