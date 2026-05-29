@@ -396,6 +396,9 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// 清理同名的软删除用户，避免唯一索引冲突
+	h.db.Unscoped().Where("username = ? AND deleted_at IS NOT NULL", req.Username).Delete(&model.User{})
+
 	user := model.User{
 		Username: req.Username,
 		Password: string(hashedPwd),
