@@ -35,7 +35,7 @@
           <span style="margin-left: auto;"></span>
           <span class="stat-chip">Upstream <b>{{ filteredUpstreams.length }}</b></span>
           <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
-          <span class="stat-chip stat-chip-danger">离线 <b>{{ totalDownCount }}</b></span>
+          <span class="stat-chip stat-chip-danger" :class="{ 'stat-chip-active': statusFilter === 'down' }" @click="toggleStatusFilter('down')">离线 <b>{{ totalDownCount }}</b></span>
           <span class="stat-chip stat-chip-primary">已选 <b>{{ selectedServers.length }}</b></span>
         </div>
       </template>
@@ -189,6 +189,9 @@
         <div class="batch-hint">
           <el-button size="small" @click="toggleBatchSelectAll">
             {{ isBatchAllSelected ? '取消全选' : '全选' }}
+          </el-button>
+          <el-button size="small" @click="toggleBatchExpandAll">
+            {{ batchAllExpanded ? '折叠' : '展开' }}
           </el-button>
           <el-input v-model="batchSearch" placeholder="搜索 IP / 端口" size="small" clearable style="width: 160px;" />
         </div>
@@ -364,6 +367,7 @@ const outputMeta = ref({ actionType: 'info', actionLabel: '', upstreamNames: [],
 const currentAction = ref('')
 const expandedUpstreams = ref([])
 const filterKeyword = ref('')
+const statusFilter = ref('all') // 'all' | 'up' | 'down'
 const rawConfig = ref('')
 const configDialogVisible = ref(false)
 const loadingUpstreams = ref(false)
@@ -376,6 +380,7 @@ const batchDialogVisible = ref(false)
 const batchItems = ref([])
 const batchSearch = ref('')
 const batchTableRef = ref(null)
+const batchAllExpanded = ref(false)
 
 const selectedMap = ref({})
 
@@ -460,12 +465,17 @@ const selectedServers = computed(() => {
 
 const filteredUpstreams = computed(() => {
   const kw = filterKeyword.value.trim().toLowerCase()
-  const list = kw
+  let list = kw
     ? upstreams.value.filter(u => {
         if (u.name.toLowerCase().includes(kw)) return true
         return u.servers.some(s => s.ip.toLowerCase().includes(kw) || (s.port && s.port.includes(kw)))
       })
     : upstreams.value
+  if (statusFilter.value === 'up') {
+    list = list.filter(u => u.servers.some(s => s.status === 'up'))
+  } else if (statusFilter.value === 'down') {
+    list = list.filter(u => u.servers.some(s => s.status === 'down'))
+  }
   return list.map(u => {
     const upCount = u.servers.filter(s => s.status === 'up').length
     const downCount = u.servers.length - upCount
@@ -517,6 +527,10 @@ function toggleExpandAll() {
   } else {
     expandedUpstreams.value = filteredUpstreams.value.map(u => u.name)
   }
+}
+
+function toggleStatusFilter(type) {
+  statusFilter.value = statusFilter.value === type ? 'all' : type
 }
 
 function getLinePrefix(type) {
@@ -626,6 +640,7 @@ async function handleRefresh() {
     ElMessage.warning('请先选择服务器和配置文件')
     return
   }
+  statusFilter.value = 'all'
   await loadUpstreams()
   ElMessage.success('刷新成功')
 }
@@ -820,6 +835,14 @@ function toggleBatchSelectAll() {
 
 function toggleBatchExpand(row) {
   batchTableRef.value?.toggleRowExpansion(row)
+}
+
+function toggleBatchExpandAll() {
+  const newState = !batchAllExpanded.value
+  filteredBatchItems.value.forEach(row => {
+    batchTableRef.value?.toggleRowExpansion(row, newState)
+  })
+  batchAllExpanded.value = newState
 }
 
 const batchValidCount = computed(() => {
@@ -1115,8 +1138,19 @@ async function executePreview() {
   color: #303133;
 }
 
-.stat-chip-success b { color: #67c23a; }
-.stat-chip-danger b { color: #f56c6c; }
+.stat-chip-danger {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.stat-chip-danger:hover {
+  background: #fde2e2;
+}
+.stat-chip-danger.stat-chip-active {
+  background: #f56c6c;
+  color: #fff;
+}
+.stat-chip-danger.stat-chip-active b { color: #fff; }
+
 .stat-chip-primary b { color: #409eff; }
 
 /* ===== Toolbar ===== */
