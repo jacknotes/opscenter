@@ -88,7 +88,7 @@ MySQL + GORM 自动迁移。三张表：`users`、`servers`、`operation_logs`�
 - admin 用户受保护，不能通过 UI 删除、禁用或重置密码
 - 重置 admin 密码：修改 `config.yaml` 的 `server.admin_password` 后重启服务，密码自动同步
 - 支持环境变量 `ADMIN_PASSWORD` 覆盖
-- 首次启动未配置时默认密码为 `admin123`
+- 首次启动未配置时默认密码为 `Admin@123`
 
 ## 部署
 

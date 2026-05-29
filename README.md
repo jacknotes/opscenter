@@ -211,7 +211,7 @@ server:
   admin_password: your-new-password
 ```
 
-也可通过环境变量 `ADMIN_PASSWORD` 覆盖。首次启动未配置时默认密码为 `admin123`（建议首次登录后立即修改）。
+也可通过环境变量 `ADMIN_PASSWORD` 覆盖。首次启动未配置时默认密码为 `Admin@123`（建议首次登录后立即修改）。
 
 > **注意**：密码必须至少 8 位，包含大写字母、小写字母、数字和特殊符号。
 

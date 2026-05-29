@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,6 +55,14 @@ func validatePassword(pwd string) string {
 		return "密码必须包含" + strings.Join(missing, "、")
 	}
 	return ""
+}
+
+// emailRegex 邮箱格式正则
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+// validateEmail 校验邮箱格式
+func validateEmail(email string) bool {
+	return emailRegex.MatchString(email)
 }
 
 // loginAttempt 用于记录登录尝试信息
@@ -255,9 +264,18 @@ func (h *AuthHandler) GetUserInfo(c *gin.Context) {
 
 func (h *AuthHandler) InitAdmin() {
 	adminPwd := config.Global.Server.AdminPassword
+	isDefault := false
 	if adminPwd == "" {
-		adminPwd = "admin123"
-		log.Println("警告: 未配置 admin_password，使用默认密码 admin123，请尽快修改")
+		adminPwd = "Admin@123"
+		isDefault = true
+		log.Println("警告: 未配置 admin_password，使用默认密码 Admin@123，请尽快修改")
+	}
+
+	// 校验密码强度（默认密码跳过校验）
+	if !isDefault {
+		if errMsg := validatePassword(adminPwd); errMsg != "" {
+			log.Fatalf("admin_password 密码强度不足: %s，请修改 config.yaml 后重启", errMsg)
+		}
 	}
 
 	var admin model.User
@@ -276,7 +294,7 @@ func (h *AuthHandler) InitAdmin() {
 			Role:     "admin",
 		})
 		log.Println("管理员账户已初始化")
-	} else if adminPwd != "admin123" {
+	} else if !isDefault {
 		// admin 已存在且配置了非默认密码，检查是否需要同步
 		if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(adminPwd)); err != nil {
 			// 密码不一致，同步更新
@@ -362,6 +380,11 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	if !validateEmail(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "邮箱格式无效"})
+		return
+	}
+
 	if errMsg := validatePassword(req.Password); errMsg != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 		return
@@ -439,6 +462,11 @@ func (h *AuthHandler) UpdateUser(c *gin.Context) {
 
 	if req.Role != "admin" && req.Role != "user" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "角色只能是 admin 或 user"})
+		return
+	}
+
+	if !validateEmail(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "邮箱格式无效"})
 		return
 	}
 
