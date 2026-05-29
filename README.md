@@ -11,6 +11,7 @@
 - **实时输出**：WebSocket 流式传输命令执行结果
 - **操作审计**：完整的操作日志记录
 - **安全认证**：JWT 认证，admin/user 两级权限
+- **安全防护**：登录限流、密码强度校验、敏感字段 AES-256-GCM 加密
 
 ## 技术栈
 
@@ -84,6 +85,8 @@ cp config.yaml.example config.yaml
 - `database` — MySQL 连接信息（host、port、username、password、dbname）
 - `jwt.secret` — JWT 签名密钥（请修改为随机字符串）
 - `crypto.key` — AES 加密密钥（32 字符）
+- `timeouts` — 运维超时配置（可选，均有默认值）
+- `nginx` — Nginx 相关配置（可选，均有默认值）
 
 ### Shell 脚本配置
 
@@ -190,6 +193,9 @@ http://localhost:18080/swagger/index.html
 - Shell 脚本内置密码验证机制
 - 操作日志完整记录所有变更
 - 敏感配置文件（`config.yaml`、含密码的 Shell 脚本）已加入 `.gitignore`，不会提交到仓库
+- **登录限流**：同一 IP 每分钟最多 10 次登录尝试，超限返回 429
+- **密码强度**：密码必须至少 8 位，包含大写字母、小写字母、数字、特殊符号
+- **请求取消传播**：客户端断开连接时，后端 SSH 命令和数据库查询自动取消
 
 ### Admin 账户保护
 
@@ -205,7 +211,9 @@ server:
   admin_password: your-new-password
 ```
 
-也可通过环境变量 `ADMIN_PASSWORD` 覆盖。首次启动未配置时默认密码为 `admin123`。
+也可通过环境变量 `ADMIN_PASSWORD` 覆盖。首次启动未配置时默认密码为 `admin123`（建议首次登录后立即修改）。
+
+> **注意**：密码必须至少 8 位，包含大写字母、小写字母、数字和特殊符号。
 
 ### 密码加密存储
 
@@ -255,6 +263,28 @@ openssl rand -base64 32
 - 相同密码每次加密结果不同（随机 nonce），无法通过密文反推原文
 - 密钥一旦配置并有数据入库后不可随意更换，否则已有加密数据将无法解密
 - 应用启动时会校验密钥长度，不符合要求（非 16/24/32 字节）将拒绝启动
+
+### 超时配置
+
+`config.yaml` 中的 `timeouts` 段用于调整各运维操作的超时时间，所有配置项均可选，不配置则使用默认值：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `ssh_connect` | SSH 连接超时 | 10s |
+| `ssh_idle` | SSH 连接空闲超时 | 10m |
+| `ssh_lifetime` | SSH 连接最大生命周期 | 1h |
+| `ssh_cleanup` | SSH 连接清理间隔 | 5m |
+| `ws_read` | WebSocket 读超时 | 60s |
+| `ws_ping` | WebSocket ping 间隔 | 30s |
+| `lock` | 分布式锁超时 | 10m |
+| `preview` | 预览数据过期时间 | 5m |
+| `dashboard_ssh` | Dashboard SSH 命令超时 | 20s |
+
+`nginx` 段：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `max_backups` | Nginx 配置最大备份数量 | 10 |
 
 ## License
 
