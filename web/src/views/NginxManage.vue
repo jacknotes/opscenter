@@ -338,7 +338,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   getServers, getNginxConfigs, getNginxUpstreams,
   nginxOnlinePreview, nginxOnlineExecute,
@@ -364,6 +364,7 @@ const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
 const outputMeta = ref({ actionType: 'info', actionLabel: '', upstreamNames: [], ipCount: 0, success: true, time: '' })
+const outputCache = new Map()
 const currentAction = ref('')
 const expandedUpstreams = ref([])
 const filterKeyword = ref('')
@@ -540,6 +541,23 @@ function getLinePrefix(type) {
     default: return ' '
   }
 }
+
+// 切换服务器或配置文件时，缓存/恢复执行结果
+watch([serverId, configFile], ([newServer, newFile], [oldServer, oldFile]) => {
+  if (oldServer != null) {
+    const oldKey = `${oldServer}:${oldFile}`
+    outputCache.set(oldKey, { output: output.value, meta: outputMeta.value })
+  }
+  const newKey = `${newServer}:${newFile}`
+  const cached = outputCache.get(newKey)
+  if (cached) {
+    output.value = cached.output
+    outputMeta.value = cached.meta
+  } else {
+    output.value = ''
+    outputMeta.value = { actionType: 'info', actionLabel: '', upstreamNames: [], ipCount: 0, success: true, time: '' }
+  }
+})
 
 onMounted(async () => {
   try {

@@ -262,6 +262,7 @@ const currentAction = ref('')
 // Streaming state
 const userStore = useUserStore()
 const { outputLines, status: streamStatus, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket()
+const outputCache = new Map()
 const search = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -411,6 +412,15 @@ async function handleRefresh() {
     // loadData 已处理错误提示
   }
 }
+
+// 切换服务器时，缓存/恢复执行结果
+watch(serverId, (newVal, oldVal) => {
+  if (oldVal != null) {
+    outputCache.set(oldVal, [...outputLines.value])
+  }
+  const cached = outputCache.get(newVal)
+  outputLines.value = cached ? [...cached] : []
+})
 
 onMounted(async () => {
   try {

@@ -332,6 +332,7 @@ const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
+const outputCache = new Map()
 const currentAction = ref('')
 const batchPreviews = ref([])
 const statusVisible = ref(false)
@@ -518,6 +519,17 @@ function mainSpanMethod({ rowIndex, columnIndex }) {
     return [count, 1]
   }
 }
+
+// 切换服务器或虚拟服务器时，缓存/恢复执行结果
+watch([serverId, vsFilter], ([newServer, newVs], [oldServer, oldVs]) => {
+  if (oldServer != null) {
+    const oldKey = `${oldServer}:${oldVs}`
+    outputCache.set(oldKey, output.value)
+  }
+  const newKey = `${newServer}:${newVs}`
+  const cached = outputCache.get(newKey)
+  output.value = cached || ''
+})
 
 onMounted(async () => {
   try {

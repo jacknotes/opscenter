@@ -108,6 +108,7 @@ const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
+const outputCache = new Map()
 const currentAction = ref('')
 const search = ref('')
 const statusFilter = ref('all')
@@ -199,6 +200,14 @@ async function handleRefresh() {
     // loadData 已经处理了错误提示
   }
 }
+
+// 切换服务器时，缓存/恢复执行结果
+watch(serverId, (newVal, oldVal) => {
+  if (oldVal != null) {
+    outputCache.set(oldVal, output.value)
+  }
+  output.value = outputCache.get(newVal) || ''
+})
 
 onMounted(async () => {
   try {
