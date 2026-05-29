@@ -244,7 +244,7 @@ import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPr
 import { useWebSocket } from '../composables/useWebSocket'
 import { useUserStore } from '../stores/user'
 import StreamOutput from '../components/StreamOutput.vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const BATCH_THRESHOLD = 10
 
@@ -435,7 +435,7 @@ onMounted(async () => {
       await loadData()
     }
   } catch (e) {
-    console.error('Failed to load servers:', e)
+    ElMessage.error('加载服务器列表失败')
   }
 })
 
@@ -519,6 +519,15 @@ async function handleAddBinding() {
 }
 
 async function handleDeleteBinding(id) {
+  try {
+    await ElMessageBox.confirm('确定要删除该绑定吗？', '确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   try {
     await deleteLvsBinding(id)
     ElMessage.success('绑定已删除')

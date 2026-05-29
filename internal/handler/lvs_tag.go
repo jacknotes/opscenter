@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"opscenter/internal/model"
+	"opscenter/internal/service"
 )
 
 type LVSTagHandler struct {
@@ -72,6 +73,11 @@ func (h *LVSTagHandler) CreateOrUpdate(c *gin.Context) {
 	var req LvsTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if !service.ValidateIP(req.RSIP) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "IP地址格式无效"})
 		return
 	}
 

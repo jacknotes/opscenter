@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -79,7 +80,10 @@ func (h *PreprodHandler) Status(c *gin.Context) {
 		return
 	}
 
-	targetOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list-targets")
+	targetOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list-targets")
+	if err != nil {
+		log.Printf("获取 target 状态失败: %v", err)
+	}
 
 	resources := h.preprodService.ParseListOutput(output)
 	if resources == nil {
@@ -122,7 +126,10 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaledown", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaledown", req.ServerID, map[string]interface{}{
@@ -191,7 +198,10 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaleup", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaleup", req.ServerID, map[string]interface{}{
@@ -440,7 +450,10 @@ func (h *PreprodHandler) CheckLvsOnline(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"need_warning": false})
 		return
 	}
-	targetOutput, _ := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list-targets")
+	targetOutput, err := h.sshManager.Execute(&preprodServer, preprodServer.ScriptPath+" list-targets")
+	if err != nil {
+		log.Printf("获取 target 状态失败: %v", err)
+	}
 
 	resources := h.preprodService.ParseListOutput(output)
 	if resources == nil {

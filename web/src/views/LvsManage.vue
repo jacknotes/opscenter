@@ -311,7 +311,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getServers, getLvsList, getLvsStatus, lvsOpPreview, lvsOpExecute, lvsSwapPreview, lvsSwapExecute, updateLvsTag, deleteLvsTag, updateLvsVSTag, deleteLvsVSTag, checkLvsOnlineForPreprod } from '../api'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, ArrowDown } from '@element-plus/icons-vue'
 
 const servers = ref([])
@@ -544,7 +544,7 @@ onMounted(async () => {
       await loadData()
     }
   } catch (e) {
-    console.error('Failed to load servers:', e)
+    ElMessage.error('加载服务器列表失败')
   }
   // 页面加载后自动启动 300 秒定时刷新
   startAutoRefresh()
@@ -951,6 +951,15 @@ async function handleSaveTag() {
 }
 
 async function handleDeleteTag() {
+  try {
+    await ElMessageBox.confirm('确定要删除该标签吗？', '确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   tagSaving.value = true
   try {
     await deleteLvsTag(tagForm.value.rs_ip)
@@ -987,6 +996,15 @@ async function handleSaveVSTag() {
 }
 
 async function handleDeleteVSTag() {
+  try {
+    await ElMessageBox.confirm('确定要删除该标签吗？', '确认', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
   vsTagSaving.value = true
   try {
     await deleteLvsVSTag(vsTagForm.value.vs_ip)

@@ -222,7 +222,7 @@ onMounted(async () => {
       await loadData()
     }
   } catch (e) {
-    console.error('Failed to load servers:', e)
+    ElMessage.error('加载服务器列表失败')
   }
 })
 

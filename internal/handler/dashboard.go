@@ -64,10 +64,14 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 
 	// 服务器统计
 	var total int64
-	h.db.Model(&model.Server{}).Count(&total)
+	if err := h.db.Model(&model.Server{}).Count(&total).Error; err != nil {
+		log.Printf("查询服务器总数失败: %v", err)
+	}
 
 	var enabled, disabled int64
-	h.db.Model(&model.Server{}).Where("enabled = ?", true).Count(&enabled)
+	if err := h.db.Model(&model.Server{}).Where("enabled = ?", true).Count(&enabled).Error; err != nil {
+		log.Printf("查询已启用服务器数失败: %v", err)
+	}
 	disabled = total - enabled
 
 	// 按类型分组
@@ -76,7 +80,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count      int64
 	}
 	var byType []typeCount
-	h.db.Model(&model.Server{}).Select("server_type, count(*) as count").Group("server_type").Scan(&byType)
+	if err := h.db.Model(&model.Server{}).Select("server_type, count(*) as count").Group("server_type").Scan(&byType).Error; err != nil {
+		log.Printf("查询服务器类型统计失败: %v", err)
+	}
 	typeMap := make(map[string]int64)
 	for _, tc := range byType {
 		typeMap[tc.ServerType] = tc.Count
@@ -88,7 +94,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count int64
 	}
 	var byEnv []envCount
-	h.db.Model(&model.Server{}).Select("env, count(*) as count").Where("env != ?", "").Group("env").Scan(&byEnv)
+	if err := h.db.Model(&model.Server{}).Select("env, count(*) as count").Where("env != ?", "").Group("env").Scan(&byEnv).Error; err != nil {
+		log.Printf("查询服务器环境统计失败: %v", err)
+	}
 	envMap := make(map[string]int64)
 	for _, ec := range byEnv {
 		envMap[ec.Env] = ec.Count
@@ -106,10 +114,14 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	role, _ := c.Get("role")
 	if role == "admin" {
 		var userTotal int64
-		h.db.Model(&model.User{}).Count(&userTotal)
+		if err := h.db.Model(&model.User{}).Count(&userTotal).Error; err != nil {
+			log.Printf("查询用户总数失败: %v", err)
+		}
 
 		var userEnabled, userDisabled int64
-		h.db.Model(&model.User{}).Where("enabled = ?", true).Count(&userEnabled)
+		if err := h.db.Model(&model.User{}).Where("enabled = ?", true).Count(&userEnabled).Error; err != nil {
+			log.Printf("查询已启用用户数失败: %v", err)
+		}
 		userDisabled = userTotal - userEnabled
 
 		type roleCount struct {
@@ -117,7 +129,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			Count int64
 		}
 		var byRole []roleCount
-		h.db.Model(&model.User{}).Select("role, count(*) as count").Group("role").Scan(&byRole)
+		if err := h.db.Model(&model.User{}).Select("role, count(*) as count").Group("role").Scan(&byRole).Error; err != nil {
+			log.Printf("查询用户角色统计失败: %v", err)
+		}
 		roleMap := make(map[string]int64)
 		for _, rc := range byRole {
 			roleMap[rc.Role] = rc.Count
@@ -215,7 +229,19 @@ func (h *DashboardHandler) RemoteStats(c *gin.Context) {
 		}
 	}()
 
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// all completed normally
+	case <-time.After(60 * time.Second):
+		log.Printf("[Dashboard] 远程统计获取超时")
+	}
+
 	c.JSON(http.StatusOK, result)
 }
 

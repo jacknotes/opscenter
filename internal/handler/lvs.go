@@ -2,7 +2,9 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -74,7 +76,7 @@ func (h *LVSHandler) List(c *gin.Context) {
 	output, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
 	if err != nil {
 		// keepalived 服务器可能宕机或服务不可用，返回空列表而非报错
-		c.Header("X-Warning", fmt.Sprintf("无法连接服务器或执行命令失败: %v", err))
+		c.Header("X-Warning", url.PathEscape(fmt.Sprintf("无法连接服务器或执行命令失败: %v", err)))
 		c.JSON(http.StatusOK, []interface{}{})
 		return
 	}
@@ -104,7 +106,9 @@ func (h *LVSHandler) List(c *gin.Context) {
 	}
 	var rsTags []model.LvsRSTag
 	if len(rsIPList) > 0 {
-		h.db.Where("rs_ip IN ?", rsIPList).Find(&rsTags)
+		if err := h.db.Where("rs_ip IN ?", rsIPList).Find(&rsTags).Error; err != nil {
+			log.Printf("查询 RS 标签失败: %v", err)
+		}
 	}
 	rsTagMap := make(map[string]*model.LvsRSTag)
 	for i := range rsTags {
@@ -133,7 +137,9 @@ func (h *LVSHandler) List(c *gin.Context) {
 	}
 	var vsTags []model.LvsVSTag
 	if len(vsIPList) > 0 {
-		h.db.Where("vs_ip IN ?", vsIPList).Find(&vsTags)
+		if err := h.db.Where("vs_ip IN ?", vsIPList).Find(&vsTags).Error; err != nil {
+			log.Printf("查询 VS 标签失败: %v", err)
+		}
 	}
 	vsTagMap := make(map[string]*model.LvsVSTag)
 	for i := range vsTags {
@@ -240,7 +246,10 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 	}
 
 	// Get current status
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	command, description := h.lvsService.GenerateOpPreview(server.ScriptPath, req.VSIP, req.RSIP, req.State)
 
 	previewID := h.previewMgr.Create("lvs", "op", req.ServerID, map[string]interface{}{
@@ -368,7 +377,10 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	command, description := h.lvsService.GenerateSwapPreview(server.ScriptPath, req.VSIP, req.RSIP1, req.RSIP2)
 
 	previewID := h.previewMgr.Create("lvs", "swap", req.ServerID, map[string]interface{}{

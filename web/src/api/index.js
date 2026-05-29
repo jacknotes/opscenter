@@ -27,7 +27,7 @@ api.interceptors.response.use(
   response => {
     const warning = response.headers['x-warning']
     if (warning) {
-      ElMessage({ message: warning, type: 'warning', duration: 5000 })
+      ElMessage({ message: decodeURIComponent(warning), type: 'warning', duration: 5000 })
     }
     return response.data
   },

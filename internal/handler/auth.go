@@ -5,6 +5,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -14,6 +18,114 @@ import (
 	"opscenter/internal/middleware"
 	"opscenter/internal/model"
 )
+
+// validatePassword 校验密码强度：至少8位，包含大写、小写、数字、特殊符号
+func validatePassword(pwd string) string {
+	if len(pwd) < 8 {
+		return "密码长度不能少于8位"
+	}
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, ch := range pwd {
+		switch {
+		case unicode.IsUpper(ch):
+			hasUpper = true
+		case unicode.IsLower(ch):
+			hasLower = true
+		case unicode.IsDigit(ch):
+			hasDigit = true
+		case strings.ContainsRune("!@#$%^&*()_+-=[]{}|;':\",./<>?~`", ch):
+			hasSpecial = true
+		}
+	}
+	var missing []string
+	if !hasUpper {
+		missing = append(missing, "大写字母")
+	}
+	if !hasLower {
+		missing = append(missing, "小写字母")
+	}
+	if !hasDigit {
+		missing = append(missing, "数字")
+	}
+	if !hasSpecial {
+		missing = append(missing, "特殊符号(!@#$%^&*等)")
+	}
+	if len(missing) > 0 {
+		return "密码必须包含" + strings.Join(missing, "、")
+	}
+	return ""
+}
+
+// loginAttempt 用于记录登录尝试信息
+type loginAttempt struct {
+	Count     int
+	FirstTime time.Time
+}
+
+// LoginRateLimiter 基于 IP 的登录速率限制器
+type LoginRateLimiter struct {
+	attempts sync.Map // key: IP string, value: *loginAttempt
+}
+
+var loginRateLimiter = &LoginRateLimiter{}
+
+const (
+	maxLoginAttempts = 10
+	rateLimitWindow  = 1 * time.Minute
+)
+
+// Allow 检查指定 IP 是否允许登录，同时清理过期条目
+func (rl *LoginRateLimiter) Allow(ip string) bool {
+	now := time.Now()
+
+	// 清理过期条目
+	rl.attempts.Range(func(key, value interface{}) bool {
+		if entry, ok := value.(*loginAttempt); ok {
+			if now.Sub(entry.FirstTime) > rateLimitWindow {
+				rl.attempts.Delete(key)
+			}
+		}
+		return true
+	})
+
+	val, loaded := rl.attempts.Load(ip)
+	if !loaded {
+		return true
+	}
+
+	entry := val.(*loginAttempt)
+	if now.Sub(entry.FirstTime) > rateLimitWindow {
+		// 窗口已过期，重置
+		rl.attempts.Delete(ip)
+		return true
+	}
+
+	return entry.Count < maxLoginAttempts
+}
+
+// Record 记录一次登录尝试
+func (rl *LoginRateLimiter) Record(ip string) {
+	now := time.Now()
+	val, loaded := rl.attempts.Load(ip)
+	if !loaded {
+		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		return
+	}
+
+	entry := val.(*loginAttempt)
+	if now.Sub(entry.FirstTime) > rateLimitWindow {
+		// 窗口已过期，重置
+		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		return
+	}
+
+	entry.Count++
+}
+
+// Reset 重置指定 IP 的登录计数
+func (rl *LoginRateLimiter) Reset(ip string) {
+	rl.attempts.Delete(ip)
+}
 
 type AuthHandler struct {
 	db *gorm.DB
@@ -46,6 +158,14 @@ type LoginResponse struct {
 //	@Failure		401		{object}	object
 //	@Router			/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
+	clientIP := c.ClientIP()
+
+	// 检查登录速率限制
+	if !loginRateLimiter.Allow(clientIP) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "登录尝试过于频繁，请稍后再试"})
+		return
+	}
+
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
@@ -54,18 +174,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	var user model.User
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	if !user.Enabled {
+		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
@@ -77,6 +200,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	loginRateLimiter.Reset(clientIP)
 	createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "登录成功", 0, "")
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 }
@@ -235,6 +359,11 @@ func (h *AuthHandler) CreateUser(c *gin.Context) {
 
 	if req.Role != "admin" && req.Role != "user" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "角色只能是 admin 或 user"})
+		return
+	}
+
+	if errMsg := validatePassword(req.Password); errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 		return
 	}
 
@@ -464,6 +593,11 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	if errMsg := validatePassword(req.Password); errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+
 	hashedPwd, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
@@ -528,6 +662,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "原密码错误"})
+		return
+	}
+
+	if errMsg := validatePassword(req.NewPassword); errMsg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 		return
 	}
 

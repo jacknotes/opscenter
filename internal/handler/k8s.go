@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -114,7 +115,10 @@ func (h *K8sHandler) OnlinePreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	commands := h.k8sService.GenerateBatchPreview(server.ScriptPath, "online", req.Projects)
 
 	previewID := h.previewMgr.Create("k8s", "online", req.ServerID, map[string]interface{}{
@@ -183,7 +187,10 @@ func (h *K8sHandler) SyncPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	commands := h.k8sService.GenerateBatchPreview(server.ScriptPath, "sync", req.Projects)
 
 	previewID := h.previewMgr.Create("k8s", "sync", req.ServerID, map[string]interface{}{
@@ -252,7 +259,10 @@ func (h *K8sHandler) RollbackPreview(c *gin.Context) {
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	commands := h.k8sService.GenerateBatchPreview(server.ScriptPath, "rollback", req.Projects)
 
 	previewID := h.previewMgr.Create("k8s", "rollback", req.ServerID, map[string]interface{}{
@@ -436,7 +446,10 @@ func (h *K8sHandler) generateFullPreview(c *gin.Context, serverID uint, action s
 		return
 	}
 
-	currentOutput, _ := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	currentOutput, err := h.sshManager.Execute(&server, server.ScriptPath+" list")
+	if err != nil {
+		log.Printf("获取当前状态失败: %v", err)
+	}
 	command, description := h.k8sService.GenerateFullPreview(server.ScriptPath, action)
 
 	previewID := h.previewMgr.Create("k8s", "full_"+action, serverID, map[string]interface{}{

@@ -278,6 +278,7 @@
 import { ref, onMounted, markRaw } from 'vue'
 import { getLogs, getDashboardStats, getDashboardRemoteStats } from '../api'
 import { useUserStore } from '../stores/user'
+import { ElMessage } from 'element-plus'
 import { Connection, Document, Box, ZoomOut, Monitor, User, ArrowRight, Refresh } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -318,7 +319,7 @@ async function loadStats() {
     serverStats.value = res.servers || null
     userStats.value = res.users || null
   } catch (e) {
-    console.error('加载 MySQL 统计失败:', e)
+    ElMessage.error('加载 MySQL 统计失败')
   } finally {
     statsLoading.value = false
   }
@@ -334,7 +335,7 @@ async function loadRemoteStats() {
     k8sStats.value = res.k8s || null
     preprodStats.value = res.preprod || null
   } catch (e) {
-    console.error('加载远程统计失败:', e)
+    ElMessage.error('加载远程统计失败')
     remoteError.value = '远程数据加载失败'
   } finally {
     remoteLoading.value = false
@@ -349,7 +350,7 @@ onMounted(async () => {
     const res = await getLogs({ page: 1, size: 10 })
     logs.value = res.data || []
   } catch (e) {
-    console.error('Failed to load logs:', e)
+    ElMessage.error('加载日志失败')
   }
 })
 </script>

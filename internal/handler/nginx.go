@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -1321,6 +1322,15 @@ func (h *NginxHandler) RollbackExecute(c *gin.Context) {
 		return
 	}
 
+	if err := validateConfigFile(configFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名参数无效"})
+		return
+	}
+	if err := validateConfigFile(backupFile); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件名参数无效"})
+		return
+	}
+
 	// Copy backup to config
 	copyCmd := fmt.Sprintf("cp %s/%s %s/%s", server.BackupPath, backupFile, server.ConfigPath, configFile)
 	_, err := h.sshManager.Execute(&server, copyCmd)
@@ -1381,7 +1391,10 @@ func (h *NginxHandler) Backups(c *gin.Context) {
 	}
 
 	cmd := fmt.Sprintf("ls -t %s 2>/dev/null", server.BackupPath)
-	output, _ := h.sshManager.Execute(&server, cmd)
+	output, err := h.sshManager.Execute(&server, cmd)
+	if err != nil {
+		log.Printf("获取备份列表失败: %v", err)
+	}
 
 	files := splitLines(output)
 	c.JSON(http.StatusOK, files)
