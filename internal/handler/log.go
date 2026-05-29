@@ -62,6 +62,13 @@ func (h *LogHandler) List(c *gin.Context) {
 	var logs []model.OperationLog
 
 	query := h.db.Model(&model.OperationLog{})
+
+	// 非管理员只能查看 lvs/nginx/k8s/preprod 模块的日志
+	role, _ := c.Get("role")
+	if role != "admin" {
+		query = query.Where("module NOT IN ?", []string{"auth", "server"})
+	}
+
 	if module != "" {
 		query = query.Where("module = ?", module)
 	}

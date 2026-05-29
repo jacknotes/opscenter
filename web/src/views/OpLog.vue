@@ -10,8 +10,8 @@
             <el-option label="Nginx" value="nginx" />
             <el-option label="k8s" value="k8s" />
             <el-option label="k8s-prepro" value="preprod" />
-            <el-option label="认证" value="auth" />
-            <el-option label="服务器" value="server" />
+            <el-option v-if="userStore.isAdmin" label="认证" value="auth" />
+            <el-option v-if="userStore.isAdmin" label="服务器" value="server" />
           </el-select>
           <span class="filter-label">状态:</span>
           <el-select v-model="status" style="width: 150px" @change="loadData">
@@ -75,7 +75,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { getLogs } from '../api'
+import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
+
+const userStore = useUserStore()
 
 const logs = ref([])
 const total = ref(0)
