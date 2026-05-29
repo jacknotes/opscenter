@@ -212,7 +212,7 @@
           </el-table-column>
           <el-table-column label="Upstream 组" min-width="150">
             <template #default="{ row }">
-              <span class="batch-upstream-name" @click="toggleBatchExpand(row)">{{ row.upstreamName }}</span>
+              <span class="batch-upstream-name" @mousedown.prevent @click="toggleBatchExpand(row)">{{ row.upstreamName }}</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="130">
@@ -1276,6 +1276,12 @@ async function executePreview() {
 :deep(.batch-table .el-table__expand-column .el-table__expand-icon) {
   display: none;
 }
+:deep(.batch-table td:focus),
+:deep(.batch-table th:focus),
+:deep(.batch-table *:focus),
+:deep(.batch-table *:focus-visible) {
+  outline: none !important;
+}
 
 :deep(.server-table .el-table__header th) {
   background: #f5f7fa !important;
@@ -1658,7 +1664,7 @@ async function executePreview() {
 }
 
 .batch-expand-servers {
-  padding: 8px 12px;
+  padding: 8px 12px 8px 76px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
