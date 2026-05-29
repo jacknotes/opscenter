@@ -78,19 +78,15 @@ type LoginRateLimiter struct {
 
 var loginRateLimiter = &LoginRateLimiter{}
 
-const (
-	maxLoginAttempts = 10
-	rateLimitWindow  = 1 * time.Minute
-)
-
 // Allow 检查指定 IP 是否允许登录，同时清理过期条目
 func (rl *LoginRateLimiter) Allow(ip string) bool {
 	now := time.Now()
+	lockDuration := config.Global.Auth.LoginLockDuration
 
 	// 清理过期条目
 	rl.attempts.Range(func(key, value interface{}) bool {
 		if entry, ok := value.(*loginAttempt); ok {
-			if now.Sub(entry.FirstTime) > rateLimitWindow {
+			if now.Sub(entry.FirstTime) > lockDuration {
 				rl.attempts.Delete(key)
 			}
 		}
@@ -103,18 +99,19 @@ func (rl *LoginRateLimiter) Allow(ip string) bool {
 	}
 
 	entry := val.(*loginAttempt)
-	if now.Sub(entry.FirstTime) > rateLimitWindow {
+	if now.Sub(entry.FirstTime) > lockDuration {
 		// 窗口已过期，重置
 		rl.attempts.Delete(ip)
 		return true
 	}
 
-	return entry.Count < maxLoginAttempts
+	return entry.Count < config.Global.Auth.MaxLoginAttempts
 }
 
 // Record 记录一次登录尝试
 func (rl *LoginRateLimiter) Record(ip string) {
 	now := time.Now()
+	lockDuration := config.Global.Auth.LoginLockDuration
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
 		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
@@ -122,7 +119,7 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	}
 
 	entry := val.(*loginAttempt)
-	if now.Sub(entry.FirstTime) > rateLimitWindow {
+	if now.Sub(entry.FirstTime) > lockDuration {
 		// 窗口已过期，重置
 		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
 		return

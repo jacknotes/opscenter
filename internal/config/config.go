@@ -22,6 +22,7 @@ type Config struct {
 	Crypto   CryptoConfig   `yaml:"crypto"`
 	Timeouts TimeoutConfig  `yaml:"timeouts"`
 	Nginx    NginxConfig    `yaml:"nginx"`
+	Auth     AuthConfig     `yaml:"auth"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -70,6 +71,12 @@ type TimeoutConfig struct {
 // NginxConfig 是 Nginx 相关配置。
 type NginxConfig struct {
 	MaxBackups int `yaml:"max_backups"` // 最大备份数量，默认 10
+}
+
+// AuthConfig 是认证相关配置。
+type AuthConfig struct {
+	MaxLoginAttempts  int           `yaml:"max_login_attempts"`  // 最大失败尝试次数，默认 10
+	LoginLockDuration time.Duration `yaml:"login_lock_duration"` // 登录锁定时长，默认 1m
 }
 
 // RedisConfig 是 Redis 连接配置，支持单节点和哨兵两种模式。
@@ -193,6 +200,13 @@ func Load(path string) error {
 	// Nginx 默认值
 	if Global.Nginx.MaxBackups == 0 {
 		Global.Nginx.MaxBackups = 10
+	}
+	// Auth 默认值
+	if Global.Auth.MaxLoginAttempts == 0 {
+		Global.Auth.MaxLoginAttempts = 10
+	}
+	if Global.Auth.LoginLockDuration == 0 {
+		Global.Auth.LoginLockDuration = 1 * time.Minute
 	}
 
 	if Global.JWT.Expire == 0 {

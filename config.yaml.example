@@ -66,3 +66,10 @@ timeouts:
 nginx:
   # 最大备份数量（默认 10）
   max_backups: 10
+
+# 认证相关配置（可选，不配置则使用默认值）
+auth:
+  # 登录限流：最大失败尝试次数（默认 10）
+  max_login_attempts: 10
+  # 登录限流：锁定时长（默认 1m）
+  login_lock_duration: 1m
