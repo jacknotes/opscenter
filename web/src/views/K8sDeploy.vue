@@ -121,9 +121,9 @@ const skipSelectionSync = ref(false)
 const filteredRollouts = computed(() => {
   let list = rollouts.value.filter(r => r.status === 'Paused')
   if (statusFilter.value === 'pending') {
-    list = list.filter(r => r.step === '1/5')
+    list = list.filter(r => r.step.startsWith('1/'))
   } else if (statusFilter.value === 'online') {
-    list = list.filter(r => r.step === '3/5')
+    list = list.filter(r => !r.step.startsWith('1/'))
   }
   if (search.value) {
     const q = search.value.toLowerCase()
@@ -244,6 +244,21 @@ function handleSelectionChange(val) {
 }
 
 async function handleAction(action) {
+  if (action === 'sync' || action === 'rollback') {
+    const onlineList = filteredRollouts.value.filter(r => !r.step.startsWith('1/'))
+    if (selectedIds.value.size > 0) {
+      const selectedOnline = onlineList.filter(r => selectedIds.value.has(r.namespace + '/' + r.name))
+      if (selectedOnline.length === 0) {
+        ElMessage.warning('所选项目尚未上线，请先执行上线操作')
+        return
+      }
+    } else {
+      if (onlineList.length === 0) {
+        ElMessage.warning('当前没有已上线的项目，请先执行上线操作')
+        return
+      }
+    }
+  }
   if (selectedIds.value.size > 0) {
     await handleBatch(action)
   } else {
