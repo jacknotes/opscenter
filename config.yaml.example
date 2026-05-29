@@ -40,3 +40,29 @@ jwt:
 
 crypto:
   key: your-32-char-aes-key-here---!!!!
+
+# 运维超时配置（可选，不配置则使用默认值）
+timeouts:
+  # SSH 连接超时（默认 10s）
+  ssh_connect: 10s
+  # SSH 连接空闲超时（默认 10m）
+  ssh_idle: 10m
+  # SSH 连接最大生命周期（默认 1h）
+  ssh_lifetime: 1h
+  # SSH 连接清理间隔（默认 5m）
+  ssh_cleanup: 5m
+  # WebSocket 读超时（默认 60s）
+  ws_read: 60s
+  # WebSocket ping 间隔（默认 30s）
+  ws_ping: 30s
+  # 分布式锁超时（默认 10m）
+  lock: 10m
+  # 预览数据过期时间（默认 5m）
+  preview: 5m
+  # Dashboard SSH 命令超时（默认 20s）
+  dashboard_ssh: 20s
+
+# Nginx 相关配置（可选，不配置则使用默认值）
+nginx:
+  # 最大备份数量（默认 10）
+  max_backups: 10
