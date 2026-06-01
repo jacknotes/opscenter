@@ -104,7 +104,7 @@
     </el-drawer>
 
     <el-container>
-      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); background: var(--card-bg);">
+      <el-header style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); background: var(--card-bg);">
         <div style="display: flex; align-items: center; gap: 10px;">
           <el-icon class="mobile-menu-btn" :size="22" @click="drawerVisible = true"><Fold /></el-icon>
           <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
@@ -235,7 +235,7 @@ async function submitChangePwd() {
   overflow: hidden;
 }
 
-/* 侧边栏 active 状态增强 */
+/* Sidebar active indicator */
 :deep(.el-menu-item.is-active) {
   background-color: var(--sidebar-active-bg) !important;
   position: relative;
@@ -254,10 +254,10 @@ async function submitChangePwd() {
 }
 
 :deep(.el-menu-item:hover) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
 }
 
-/* 手机端：隐藏桌面侧边栏，显示汉堡按钮 */
+/* Mobile: hide desktop sidebar, show hamburger */
 .mobile-menu-btn { display: none; }
 
 @media (max-width: 768px) {
@@ -267,7 +267,7 @@ async function submitChangePwd() {
 
 :deep(.mobile-drawer .el-drawer__header) {
   background: var(--sidebar-bg);
-  color: #fff;
+  color: #E2E8F0;
   margin-bottom: 0;
   padding: 16px 20px;
 }
@@ -287,27 +287,34 @@ async function submitChangePwd() {
   padding: 6px 0;
   cursor: pointer;
   font-size: 13px;
-  color: var(--text-primary);
+  color: #94A3B8;
   transition: background 0.2s;
   text-align: center;
+  border-radius: 4px;
 }
 
 .user-menu-item:hover {
-  background: var(--content-bg);
+  background: rgba(6, 182, 212, 0.1);
+  color: #06B6D4;
 }
 
 .user-menu-item--danger {
-  color: #F56C6C;
+  color: #EF4444;
+}
+
+.user-menu-item--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
 }
 </style>
 
 <style>
 .user-popover.el-popover {
   padding: 4px 0 !important;
-  min-width: 100px !important;
-  width: 100px !important;
-  background: var(--card-bg) !important;
-  border: 1px solid var(--border-color) !important;
-  box-shadow: var(--card-shadow) !important;
+  min-width: 120px !important;
+  width: 120px !important;
+  background: #1A1D2E !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
 }
 </style>
