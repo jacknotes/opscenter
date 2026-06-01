@@ -42,12 +42,12 @@
                     <el-checkbox :model-value="isBatchSelected(row.group.ip, rs.ip)" :disabled="rs.disabled" @change="(val) => toggleBatch(row.group.ip, rs.ip, val)" />
                   </template>
                 </el-table-column>
-                <el-table-column label="Real Server" min-width="130">
+                <el-table-column label="Real Server" min-width="100">
                   <template #default="{ row: rs }">
                     <span :style="rs.disabled ? 'color: #c0c4cc; text-decoration: line-through;' : ''">{{ rs.ip }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="标签" width="120" align="center">
+                <el-table-column label="标签" min-width="100" align="center">
                   <template #default="{ row: rs }">
                     <template v-if="rs.disabled">
                       <el-tooltip :content="rs.disabledReason" placement="top" :disabled="!rs.disabledReason">
@@ -70,24 +70,24 @@
                     >设置标签</el-button>
                   </template>
                 </el-table-column>
-                <el-table-column label="端口" width="80" align="center">
+                <el-table-column label="端口" min-width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.port }}</template>
                 </el-table-column>
-                <el-table-column label="状态" width="80" align="center">
+                <el-table-column label="状态" min-width="100" align="center">
                   <template #default="{ row: rs }">
                     <el-tag :type="rs.status === 'up' ? 'success' : 'danger'" size="small">{{ rs.status }}</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="转发" width="80" align="center">
+                <el-table-column label="转发" min-width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.forward }}</template>
                 </el-table-column>
-                <el-table-column label="Weight" width="80" align="center">
+                <el-table-column label="Weight" min-width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.weight }}</template>
                 </el-table-column>
-                <el-table-column label="ActiveConn" width="100" align="center">
+                <el-table-column label="ActiveConn" min-width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.activeConn }}</template>
                 </el-table-column>
-                <el-table-column label="InActConn" width="100" align="center">
+                <el-table-column label="InActConn" min-width="100" align="center">
                   <template #default="{ row: rs }">{{ rs.inactConn }}</template>
                 </el-table-column>
               </el-table>
