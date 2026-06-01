@@ -277,7 +277,7 @@
                   至少保留 1 台在线服务器
                 </div>
               </template>
-              <span v-else-if="row.action === 'toggle'" style="color: #909399; font-size: 12px;">全部反转</span>
+              <span v-else-if="row.action === 'toggle'" style="color: #64748B; font-size: 12px;">全部反转</span>
             </template>
           </el-table-column>
         </el-table>

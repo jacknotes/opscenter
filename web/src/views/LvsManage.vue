@@ -211,7 +211,7 @@
     <el-dialog v-model="statusVisible" title="Keepalived 配置状态" width="900px">
       <div v-if="statusGroups.length > 0" style="max-height: 600px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 16px;">
         <div v-for="group in statusGroups" :key="group.vs_ip + ':' + group.vs_port" style="width: calc(50% - 8px); box-sizing: border-box;">
-          <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #409eff; color: #303133;">
+          <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #06B6D4; color: #E2E8F0;">
             {{ group.vs_ip }}:{{ group.vs_port }}
           </div>
           <el-table :data="group.real_servers" stripe size="small" border>
