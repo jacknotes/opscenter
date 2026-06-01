@@ -97,12 +97,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="Virtual Server" width="140">
+        <el-table-column label="Virtual Server" min-width="100">
           <template #default="{ row }">
             <div v-if="!row.isDetail" style="font-weight: bold;">{{ row.ip }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="角色" width="70" align="center">
+        <el-table-column label="角色" min-width="100" align="center">
           <template #default="{ row }">
             <template v-if="!row.isDetail">
               <el-tag v-if="row.role === 'master'" type="success" size="small">主</el-tag>
@@ -110,7 +110,7 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="标签" width="120" align="center">
+        <el-table-column label="标签" min-width="100" align="center">
           <template #default="{ row }">
             <template v-if="row.isFirst && !row.isDetail">
               <el-tag
@@ -130,37 +130,37 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column label="端口" width="80" align="center">
+        <el-table-column label="端口" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.port }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="调度算法" width="90" align="center">
+        <el-table-column label="调度算法" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.scheduler }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Flags" min-width="150">
+        <el-table-column label="Flags" min-width="100">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.flags }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="协议" width="70" align="center">
+        <el-table-column label="协议" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.protocol }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="RS 数量" width="80" align="center">
+        <el-table-column label="RS 数量" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail">{{ row.rsCount }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="在线" width="60" align="center">
+        <el-table-column label="在线" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail" style="color: #67c23a; font-weight: bold;">{{ row.upCount }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="离线" width="60" align="center">
+        <el-table-column label="离线" min-width="100" align="center">
           <template #default="{ row }">
             <span v-if="!row.isDetail" style="color: #f56c6c; font-weight: bold;">{{ row.downCount }}</span>
           </template>
