@@ -65,18 +65,19 @@ async function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0B0D13 0%, #141722 50%, #0F1219 100%);
 }
 
 .login-card {
   width: 400px;
   max-width: 90vw;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(20, 23, 34, 0.9);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-radius: 16px;
   padding: 40px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
 }
 
 .login-brand {
@@ -87,7 +88,7 @@ async function handleLogin() {
 .login-logo {
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%);
   border-radius: 16px;
   display: inline-flex;
   align-items: center;
@@ -96,19 +97,19 @@ async function handleLogin() {
   font-size: 24px;
   font-weight: 700;
   margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.3);
 }
 
 .login-title {
   font-size: 24px;
   font-weight: 700;
-  color: #303133;
+  color: #E2E8F0;
   margin: 0 0 8px 0;
 }
 
 .login-subtitle {
   font-size: 14px;
-  color: #909399;
+  color: #64748B;
   margin: 0;
 }
 
@@ -118,16 +119,17 @@ async function handleLogin() {
 
 .login-form :deep(.el-input__wrapper) {
   border-radius: 8px;
-  box-shadow: 0 0 0 1px #dcdfe6 inset;
-  transition: box-shadow 0.2s, transform 0.2s;
+  background-color: #1A1D2E;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  transition: box-shadow 0.2s;
 }
 
 .login-form :deep(.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px #c0c4cc inset;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
 }
 
 .login-form :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #409eff inset, 0 0 0 3px rgba(64, 158, 255, 0.1);
+  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 3px rgba(6, 182, 212, 0.15);
 }
 
 .login-form :deep(.el-button--primary) {
