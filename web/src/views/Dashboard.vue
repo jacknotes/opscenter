@@ -6,8 +6,8 @@
       <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
         <div class="stat-card" @click="$router.push('/servers')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(144,147,153,0.1)">
-              <el-icon :size="22" color="#909399"><Monitor /></el-icon>
+            <div class="stat-icon" style="background: rgba(100,116,139,0.1)">
+              <el-icon :size="22" color="#64748B"><Monitor /></el-icon>
             </div>
             <span class="stat-title">服务器管理</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -45,8 +45,8 @@
       <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
         <div class="stat-card" @click="$router.push('/users')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(144,147,153,0.1)">
-              <el-icon :size="22" color="#909399"><User /></el-icon>
+            <div class="stat-icon" style="background: rgba(100,116,139,0.1)">
+              <el-icon :size="22" color="#64748B"><User /></el-icon>
             </div>
             <span class="stat-title">用户管理</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -84,8 +84,8 @@
       <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
         <div class="stat-card" @click="$router.push('/lvs')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(64,158,255,0.1)">
-              <el-icon :size="22" color="#409EFF"><Connection /></el-icon>
+            <div class="stat-icon" style="background: rgba(6,182,212,0.1)">
+              <el-icon :size="22" color="#06B6D4"><Connection /></el-icon>
             </div>
             <span class="stat-title">LVS 管理</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -126,8 +126,8 @@
       <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
         <div class="stat-card" @click="$router.push('/nginx')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(103,194,58,0.1)">
-              <el-icon :size="22" color="#67C23A"><Document /></el-icon>
+            <div class="stat-icon" style="background: rgba(34,197,94,0.1)">
+              <el-icon :size="22" color="#22C55E"><Document /></el-icon>
             </div>
             <span class="stat-title">Nginx 管理</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -160,8 +160,8 @@
       <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
         <div class="stat-card" @click="$router.push('/k8s')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(230,162,60,0.1)">
-              <el-icon :size="22" color="#E6A23C"><Box /></el-icon>
+            <div class="stat-icon" style="background: rgba(245,158,11,0.1)">
+              <el-icon :size="22" color="#F59E0B"><Box /></el-icon>
             </div>
             <span class="stat-title">K8S 发布</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -199,8 +199,8 @@
       <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
         <div class="stat-card" @click="$router.push('/preprod')">
           <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(245,108,108,0.1)">
-              <el-icon :size="22" color="#F56C6C"><ZoomOut /></el-icon>
+            <div class="stat-icon" style="background: rgba(239,68,68,0.1)">
+              <el-icon :size="22" color="#EF4444"><ZoomOut /></el-icon>
             </div>
             <span class="stat-title">预生产扩缩容</span>
             <el-icon class="stat-arrow"><ArrowRight /></el-icon>
@@ -363,16 +363,16 @@ onMounted(async () => {
 .stat-card {
   background: var(--card-bg);
   border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
+  border: var(--card-border);
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, border-color 0.2s;
   margin-bottom: 20px;
   overflow: hidden;
 }
 
 .stat-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: rgba(6, 182, 212, 0.2);
 }
 
 .stat-card:active {
@@ -399,12 +399,12 @@ onMounted(async () => {
 .stat-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #E2E8F0;
   flex: 1;
 }
 
 .stat-arrow {
-  color: var(--text-secondary);
+  color: #64748B;
   font-size: 14px;
 }
 
@@ -422,18 +422,18 @@ onMounted(async () => {
 
 .stat-label {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: #64748B;
 }
 
 .stat-value {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: #E2E8F0;
 }
 
 .stat-divider {
   margin: 0 4px;
-  color: var(--text-secondary);
+  color: #64748B;
   font-weight: 400;
 }
 
@@ -452,11 +452,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-secondary);
+  color: #64748B;
   font-size: 13px;
 }
 
-.text-success { color: #67C23A; }
-.text-danger { color: #F56C6C; }
-.text-warning { color: #E6A23C; }
+.text-success { color: #22C55E; }
+.text-danger { color: #EF4444; }
+.text-warning { color: #F59E0B; }
 </style>
