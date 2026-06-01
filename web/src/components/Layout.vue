@@ -110,6 +110,9 @@
           <div style="font-size: 16px; font-weight: 500;">{{ route.meta.title }}</div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
+          <div class="theme-toggle" @click="appStore.toggleTheme()" :title="appStore.theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'">
+            <el-icon :size="18"><Sunny v-if="appStore.theme === 'dark'" /><Moon v-else /></el-icon>
+          </div>
           <el-popover placement="bottom-end" trigger="click" :width="100" popper-class="user-popover" :show-after="0" :hide-after="0">
             <template #reference>
               <span style="cursor: pointer;">{{ userStore.userInfo?.username }} <el-icon><ArrowDown /></el-icon></span>
@@ -170,7 +173,7 @@ import { useUserStore } from '../stores/user'
 import { useAppStore } from '../stores/app'
 import { getUserInfo, changePassword, logout } from '../api'
 import { ElMessage } from 'element-plus'
-import { Monitor, Connection, Document, Box, ZoomOut, List, Setting, Fold, Expand, UserFilled, ArrowDown } from '@element-plus/icons-vue'
+import { Monitor, Connection, Document, Box, ZoomOut, List, Setting, Fold, Expand, UserFilled, ArrowDown, Sunny, Moon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -267,7 +270,7 @@ async function submitChangePwd() {
 
 :deep(.mobile-drawer .el-drawer__header) {
   background: var(--sidebar-bg);
-  color: #E2E8F0;
+  color: #fff;
   margin-bottom: 0;
   padding: 16px 20px;
 }
@@ -287,7 +290,7 @@ async function submitChangePwd() {
   padding: 6px 0;
   cursor: pointer;
   font-size: 13px;
-  color: #94A3B8;
+  color: var(--text-regular);
   transition: background 0.2s;
   text-align: center;
   border-radius: 4px;
@@ -295,7 +298,7 @@ async function submitChangePwd() {
 
 .user-menu-item:hover {
   background: rgba(6, 182, 212, 0.1);
-  color: #06B6D4;
+  color: var(--color-primary);
 }
 
 .user-menu-item--danger {
@@ -306,6 +309,24 @@ async function submitChangePwd() {
   background: rgba(239, 68, 68, 0.1);
   color: #EF4444;
 }
+
+/* 主题切换按钮 */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #94A3B8;
+  transition: background 0.2s, color 0.2s;
+}
+
+.theme-toggle:hover {
+  background: rgba(6, 182, 212, 0.1);
+  color: #06B6D4;
+}
 </style>
 
 <style>
@@ -313,8 +334,17 @@ async function submitChangePwd() {
   padding: 4px 0 !important;
   min-width: 120px !important;
   width: 120px !important;
+}
+
+html.dark .user-popover.el-popover {
   background: #1A1D2E !important;
   border: 1px solid rgba(255, 255, 255, 0.06) !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
+}
+
+html:not(.dark) .user-popover.el-popover {
+  background: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
 }
 </style>
