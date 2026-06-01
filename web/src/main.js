@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import './assets/global.css'
+import './assets/theme-dark.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 import { forceReflow } from './directives/forceReflow'
 
@@ -15,5 +16,7 @@ app.use(createPinia())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 app.directive('force-reflow', forceReflow)
+
+document.documentElement.classList.add('dark')
 
 app.mount('#app')
