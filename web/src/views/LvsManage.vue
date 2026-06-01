@@ -44,7 +44,7 @@
                 </el-table-column>
                 <el-table-column label="Real Server" min-width="100">
                   <template #default="{ row: rs }">
-                    <span :style="rs.disabled ? 'color: #c0c4cc; text-decoration: line-through;' : ''">{{ rs.ip }}</span>
+                    <span :style="rs.disabled ? 'color: #475569; text-decoration: line-through;' : ''">{{ rs.ip }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="标签" min-width="100" align="center">
@@ -157,12 +157,12 @@
         </el-table-column>
         <el-table-column label="在线" min-width="100" align="center">
           <template #default="{ row }">
-            <span v-if="!row.isDetail" style="color: #67c23a; font-weight: bold;">{{ row.upCount }}</span>
+            <span v-if="!row.isDetail" style="color: #22C55E; font-weight: bold;">{{ row.upCount }}</span>
           </template>
         </el-table-column>
         <el-table-column label="离线" min-width="100" align="center">
           <template #default="{ row }">
-            <span v-if="!row.isDetail" style="color: #f56c6c; font-weight: bold;">{{ row.downCount }}</span>
+            <span v-if="!row.isDetail" style="color: #EF4444; font-weight: bold;">{{ row.downCount }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -193,7 +193,7 @@
         </div>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
+        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>
@@ -226,7 +226,7 @@
         </div>
       </div>
       <div v-else>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 500px; overflow-y: auto; font-size: 13px;">{{ statusRaw }}</pre>
+        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; max-height: 500px; overflow-y: auto; font-size: 13px;">{{ statusRaw }}</pre>
       </div>
     </el-dialog>
 
@@ -1024,30 +1024,30 @@ async function handleDeleteVSTag() {
 /* ===== Stat Chips ===== */
 .stat-chip {
   font-size: 13px;
-  color: #606266;
-  background: #f4f4f5;
+  color: #94A3B8;
+  background: rgba(255, 255, 255, 0.05);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   white-space: nowrap;
 }
 
 .stat-chip b {
   margin-left: 4px;
   font-size: 14px;
-  color: #303133;
+  color: #E2E8F0;
 }
 
-.stat-chip-success b { color: #67c23a; }
-.stat-chip-danger b { color: #f56c6c; }
-.stat-chip-primary b { color: #409eff; }
+.stat-chip-success b { color: #22C55E; }
+.stat-chip-danger b { color: #EF4444; }
+.stat-chip-primary b { color: #06B6D4; }
 
 :deep(.rs-disabled-row) {
-  background-color: #f5f7fa !important;
+  background-color: rgba(255, 255, 255, 0.02) !important;
   opacity: 0.6;
 }
 
 :deep(.rs-disabled-row:hover > td) {
-  background-color: #f5f7fa !important;
+  background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
 /* ===== Card Header ===== */
@@ -1063,11 +1063,12 @@ async function handleDeleteVSTag() {
   gap: 8px;
   margin-bottom: 3px;
   padding: 10px 14px;
-  background: #fff;
+  background: var(--card-bg, #141722);
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   flex-wrap: wrap;
 }
+
 .toolbar :deep(.el-dropdown) {
   display: inline-flex;
 }
