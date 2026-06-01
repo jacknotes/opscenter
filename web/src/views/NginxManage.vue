@@ -193,7 +193,7 @@
           <el-button size="small" @click="toggleBatchExpandAll">
             {{ batchAllExpanded ? '折叠' : '展开' }}
           </el-button>
-          <el-input v-model="batchSearch" placeholder="搜索 IP / 端口" size="small" clearable style="width: 160px;" />
+          <el-input v-model="batchSearch" placeholder="搜索 IP / 端口" size="small" clearable style="width: 160px; margin-left: 12px;" />
         </div>
         <el-table ref="batchTableRef" :data="filteredBatchItems" size="small" max-height="500" class="batch-table" v-force-reflow row-key="upstreamName">
           <el-table-column type="expand" width="1">
