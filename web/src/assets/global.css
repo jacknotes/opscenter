@@ -1,55 +1,12 @@
 :root {
-  /* Primary Colors - 引用 Element Plus 变量保持一致 */
-  --color-primary: var(--el-color-primary, #409EFF);
-  --color-primary-light: var(--el-color-primary-light-3, #66b1ff);
-  --color-primary-dark: var(--el-color-primary-dark-2, #3a8ee6);
-  --color-success: var(--el-color-success, #67C23A);
-  --color-warning: var(--el-color-warning, #E6A23C);
-  --color-danger: var(--el-color-danger, #F56C6C);
-  --color-info: var(--el-color-info, #909399);
-
-  /* Sidebar */
-  --sidebar-bg: #304156;
-  --sidebar-text: #bfcbd9;
-  --sidebar-active-text: #409EFF;
-  --sidebar-active-bg: rgba(64, 158, 255, 0.15);
-  --sidebar-active-indicator: #409EFF;
-
-  /* Content */
-  --content-bg: #f5f7fa;
-  --card-bg: #fff;
-  --card-border: none;
-  --card-radius: 12px;
-  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-
-  /* Text */
-  --text-primary: #303133;
-  --text-regular: #606266;
-  --text-secondary: #909399;
-  --text-placeholder: #c0c4cc;
-
-  /* Border */
-  --border-color: #e4e7ed;
-  --border-color-light: #ebeef5;
-  --border-radius-sm: 6px;
-  --border-radius-md: 8px;
-  --border-radius-lg: 12px;
-
-  /* Toolbar */
-  --toolbar-bg: #fff;
-  --toolbar-border: 1px solid #e4e7ed;
-
-  /* Terminal */
-  --terminal-bg: #1e1e1e;
-  --terminal-text: #d4d4d4;
-  --terminal-radius: 8px;
-
-  /* Spacing */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 12px;
-  --spacing-lg: 16px;
-  --spacing-xl: 20px;
+  /* Primary Colors - reference theme-dark.css tokens */
+  --color-primary: var(--el-color-primary, #06B6D4);
+  --color-primary-light: var(--el-color-primary-light-3, #22D3EE);
+  --color-primary-dark: var(--el-color-primary-dark-2, #0891B2);
+  --color-success: var(--el-color-success, #22C55E);
+  --color-warning: var(--el-color-warning, #F59E0B);
+  --color-danger: var(--el-color-danger, #EF4444);
+  --color-info: var(--el-color-info, #94A3B8);
 }
 
 .filter-label {
@@ -73,7 +30,7 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--el-bg-color, #fff);
+  background: var(--card-bg, #141722);
   border-bottom: none;
   padding-bottom: 0;
 }
