@@ -217,7 +217,7 @@ html:not(.dark) .el-input__wrapper:hover {
 }
 
 html:not(.dark) .el-input__wrapper.is-focus {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 2px rgba(6, 182, 212, 0.15) !important;
+  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0) !important;
 }
 
 html:not(.dark) .el-textarea__inner {
@@ -228,7 +228,7 @@ html:not(.dark) .el-textarea__inner {
 }
 
 html:not(.dark) .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 2px rgba(6, 182, 212, 0.15);
+  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0);
 }
 
 /* Select */
@@ -243,7 +243,7 @@ html:not(.dark) .el-select__wrapper:hover {
 }
 
 html:not(.dark) .el-select__wrapper.is-focused {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 2px rgba(6, 182, 212, 0.15) !important;
+  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0) !important;
 }
 
 html:not(.dark) .el-select-dropdown {
@@ -509,6 +509,5 @@ html:not(.dark) ::selection {
 
 /* Focus visible */
 html:not(.dark) :focus-visible {
-  outline: 2px solid rgba(6, 182, 212, 0.4);
-  outline-offset: 2px;
+  outline: none;
 }

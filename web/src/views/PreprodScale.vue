@@ -100,7 +100,7 @@
           </template>
         </el-alert>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 14px; color: #E2E8F0;">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
+          <span style="font-size: 14px; color: var(--text-primary);">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
           <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
         </div>
         <el-scrollbar max-height="320px">

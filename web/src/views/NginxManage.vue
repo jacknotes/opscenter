@@ -1134,7 +1134,7 @@ async function executePreview() {
 .stat-chip b {
   margin-left: 4px;
   font-size: 14px;
-  color: #E2E8F0;
+  color: var(--text-primary);
 }
 
 .stat-chip-danger {
@@ -1201,7 +1201,7 @@ async function executePreview() {
   line-height: 48px;
   font-size: 14px;
   transition: background 0.2s;
-  color: #E2E8F0;
+  color: var(--text-primary);
 }
 
 :deep(.upstream-collapse .el-collapse-item.is-active .el-collapse-item__header) {
@@ -1227,7 +1227,7 @@ async function executePreview() {
 
 .upstream-name {
   font-weight: 700;
-  color: #E2E8F0;
+  color: var(--text-primary);
   font-size: 14px;
   letter-spacing: 0.3px;
 }
@@ -1355,7 +1355,7 @@ async function executePreview() {
 /* ===== Preview ===== */
 .preview-desc {
   font-size: 14px;
-  color: #E2E8F0;
+  color: var(--text-primary);
   margin-bottom: 16px;
   padding: 10px 14px;
   background: #1A1D2E;
@@ -1531,7 +1531,7 @@ async function executePreview() {
 
 .output-meta-value {
   font-size: 13px;
-  color: #E2E8F0;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -1595,7 +1595,7 @@ async function executePreview() {
 
 .swap-upstream-item .upstream-name {
   font-weight: 600;
-  color: #E2E8F0;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -1673,7 +1673,7 @@ async function executePreview() {
 
 .batch-server-ip {
   font-family: monospace;
-  color: #E2E8F0;
+  color: var(--text-primary);
 }
 
 .batch-server-port {

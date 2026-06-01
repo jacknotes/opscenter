@@ -129,7 +129,7 @@ async function handleLogin() {
 }
 
 .login-form :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 3px rgba(6, 182, 212, 0.15);
+  box-shadow: 0 0 0 1px #06B6D4 inset;
 }
 
 .login-form :deep(.el-button--primary) {

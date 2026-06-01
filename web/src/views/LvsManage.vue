@@ -29,7 +29,7 @@
       </template>
 
       <!-- 主表格：按 VIP 分组，每端口一行，展开后 RS 表格插入在组下方 -->
-      <el-table :data="flattenedMainData" :span-method="mainSpanMethod" stripe border v-force-reflow max-height="calc(100vh - 240px)" row-key="uid">
+      <el-table :data="flattenedMainData" :span-method="mainSpanMethod" :row-class-name="({ rowIndex }) => 'vip-group-' + (flattenedMainData[rowIndex]?.groupIdx % 2)" border v-force-reflow max-height="calc(100vh - 240px)" row-key="uid">
         <el-table-column label="" width="45" align="center">
           <template #default="{ row }">
             <template v-if="row.isDetail">
@@ -211,7 +211,7 @@
     <el-dialog v-model="statusVisible" title="Keepalived 配置状态" width="900px">
       <div v-if="statusGroups.length > 0" style="max-height: 600px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 16px;">
         <div v-for="group in statusGroups" :key="group.vs_ip + ':' + group.vs_port" style="width: calc(50% - 8px); box-sizing: border-box;">
-          <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #06B6D4; color: #E2E8F0;">
+          <div style="font-weight: bold; font-size: 14px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 2px solid #06B6D4; color: var(--text-primary);">
             {{ group.vs_ip }}:{{ group.vs_port }}
           </div>
           <el-table :data="group.real_servers" stripe size="small" border>
@@ -486,17 +486,19 @@ function countDown(row) {
 // 主表格：将 VIP 分组展平为每端口一行，展开时插入 RS 详情行
 const flattenedMainData = computed(() => {
   const rows = []
+  let groupIdx = 0
   for (const group of filteredGroups.value) {
     const rsCount = group.realServers.length
     const upCount = countUp(group)
     const downCount = countDown(group)
     group.entries.forEach((entry, i) => {
-      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group, role: group.role, tag: group.tag })
+      rows.push({ uid: group.ip + ':' + entry.port, ...entry, ip: group.ip, rsCount, upCount, downCount, isFirst: i === 0, isLast: i === group.entries.length - 1, group, role: group.role, tag: group.tag, groupIdx })
     })
     // 展开时在组末尾插入 RS 详情行
     if (expandedVIPs.value.has(group.ip)) {
-      rows.push({ uid: group.ip + ':detail', ip: group.ip, isDetail: true, group })
+      rows.push({ uid: group.ip + ':detail', ip: group.ip, isDetail: true, group, groupIdx })
     }
+    groupIdx++
   }
   return rows
 })
@@ -1034,7 +1036,7 @@ async function handleDeleteVSTag() {
 .stat-chip b {
   margin-left: 4px;
   font-size: 14px;
-  color: #E2E8F0;
+  color: var(--text-primary);
 }
 
 .stat-chip-success b { color: #22C55E; }
@@ -1071,5 +1073,27 @@ async function handleDeleteVSTag() {
 
 .toolbar :deep(.el-dropdown) {
   display: inline-flex;
+}
+
+/* ===== VIP 分组交替背景色 ===== */
+:deep(.vip-group-0 td) {
+  background-color: var(--card-bg, #141722);
+}
+
+:deep(.vip-group-1 td) {
+  background-color: var(--bg-elevated, #1A1D2E);
+}
+
+html:not(.dark) :deep(.vip-group-0 td) {
+  background-color: #ffffff;
+}
+
+html:not(.dark) :deep(.vip-group-1 td) {
+  background-color: #fafafa;
+}
+
+:deep(.vip-group-0:hover > td),
+:deep(.vip-group-1:hover > td) {
+  background-color: rgba(6, 182, 212, 0.04) !important;
 }
 </style>

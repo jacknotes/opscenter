@@ -32,7 +32,7 @@
           <template #default="{ row }">
             <div style="padding: 10px;">
               <p><strong>命令：</strong></p>
-              <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px;">{{ row.detail }}</pre>
+              <pre style="background: #1A1D2E; color: #E2E8F0; padding: 10px; border-radius: 4px;">{{ row.detail }}</pre>
               <p style="margin-top: 10px;"><strong>输出：</strong></p>
               <pre style="background: #0B0D13; color: #22D3EE; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ row.output }}</pre>
             </div>

@@ -399,12 +399,12 @@ onMounted(async () => {
 .stat-title {
   font-size: 15px;
   font-weight: 600;
-  color: #E2E8F0;
+  color: var(--text-primary);
   flex: 1;
 }
 
 .stat-arrow {
-  color: #64748B;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -422,18 +422,18 @@ onMounted(async () => {
 
 .stat-label {
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-secondary);
 }
 
 .stat-value {
   font-size: 14px;
   font-weight: 600;
-  color: #E2E8F0;
+  color: var(--text-primary);
 }
 
 .stat-divider {
   margin: 0 4px;
-  color: #64748B;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
