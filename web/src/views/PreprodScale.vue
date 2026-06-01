@@ -31,7 +31,7 @@
         </el-button>
         <el-button type="info" class="el-button--cyan" @click="openBindingDialog">依赖配置</el-button>
         <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
-        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
+        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #64748B;">
           已选 {{ selectedIds.size }} 项
         </span>
       </div>
@@ -83,7 +83,7 @@
         <p><strong>命令：</strong><code>{{ previewData.command }}</code></p>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
+        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>
@@ -100,14 +100,14 @@
           </template>
         </el-alert>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 14px; color: #303133;">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
+          <span style="font-size: 14px; color: #E2E8F0;">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
           <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
         </div>
         <el-scrollbar max-height="320px">
-          <div style="background: #f5f7fa; padding: 8px 12px; border-radius: 6px; border: 1px solid #e4e7ed;">
+          <div style="background: #1A1D2E; padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.06);">
             <div v-for="(name, idx) in batchConfirmNames" :key="name"
-              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed #ebeef5;">
-              <span style="color: #909399; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
+              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed rgba(255, 255, 255, 0.04);">
+              <span style="color: #64748B; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
               <span>{{ name }}</span>
             </div>
           </div>
@@ -136,21 +136,21 @@
             <div style="color: #f56c6c; font-weight: bold; font-size: 14px; line-height: 1.6; margin-bottom: 8px;">
               {{ depWarningText }}
             </div>
-            <div style="color: #606266; font-size: 13px; line-height: 1.6;">
+            <div style="color: #94A3B8; font-size: 13px; line-height: 1.6;">
               涉及资源：
             </div>
           </div>
         </div>
         <el-scrollbar max-height="200px">
-          <div style="background: #fef0f0; padding: 8px 12px; border-radius: 6px; border: 1px solid #fbc4c4;">
+          <div style="background: rgba(245, 108, 108, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.3);">
             <div v-for="(name, idx) in depWarningAffected" :key="name"
-              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed #f9d7d7;">
-              <span style="color: #909399; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
+              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed rgba(245, 108, 108, 0.2);">
+              <span style="color: #64748B; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
               <span>{{ name }}</span>
             </div>
           </div>
         </el-scrollbar>
-        <div style="margin-top: 12px; color: #909399; font-size: 12px;">
+        <div style="margin-top: 12px; color: #64748B; font-size: 12px;">
           如果确认执行，请在下方输入框中输入 <b>确认执行</b>
         </div>
         <el-input v-model="depWarningConfirmText" placeholder='请输入"确认执行"' style="margin-top: 8px;" />
@@ -164,7 +164,7 @@
     <!-- Binding Config Dialog -->
     <el-dialog v-model="bindingDialogVisible" title="LVS-Preprod 依赖配置" width="min(650px, 90vw)" align-center>
       <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 14px; color: #606266;">配置 VS 标签和 RS 环境标签的绑定关系</span>
+        <span style="font-size: 14px; color: #94A3B8;">配置 VS 标签和 RS 环境标签的绑定关系</span>
         <el-button type="primary" size="small" @click="showAddBinding">新增绑定</el-button>
       </div>
       <el-table :data="bindings" stripe size="small" border max-height="400">
@@ -178,7 +178,7 @@
       </el-table>
 
       <!-- Add binding sub-form -->
-      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: #f5f7fa; border-radius: 6px; border: 1px solid #e4e7ed;">
+      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: #1A1D2E; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.06);">
         <el-form label-width="100px" size="small">
           <el-form-item label="VS 标签">
             <el-select v-model="newBinding.vs_tag" filterable allow-create clearable placeholder="选择或输入 VS 标签" style="width: 100%">

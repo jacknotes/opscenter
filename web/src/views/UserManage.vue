@@ -279,16 +279,16 @@ async function handleSubmitResetPwd() {
   gap: 8px;
   margin-top: 12px;
   padding: 10px 14px;
-  background: #fff;
+  background: var(--card-bg, #141722);
   border-radius: 8px;
-  border: 1px solid #e4e7ed;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   flex-wrap: wrap;
 }
 :deep(.disabled-row) {
-  background-color: #fafafa !important;
+  background-color: rgba(255, 255, 255, 0.03) !important;
   opacity: 0.6;
 }
 :deep(.disabled-row:hover > td) {
-  background-color: #f5f5f5 !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
 }
 </style>

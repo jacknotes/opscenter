@@ -26,7 +26,7 @@
         <el-button type="warning" @click="handleAction('sync')">{{ selectedIds.size > 0 ? '批量同步' : '全量同步' }}</el-button>
         <el-button type="danger" @click="handleAction('rollback')">{{ selectedIds.size > 0 ? '批量回滚' : '全量回滚' }}</el-button>
         <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
-        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #909399;">
+        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #64748B;">
           已选 {{ selectedIds.size }} 项
         </span>
       </div>
@@ -69,7 +69,7 @@
         </ul>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all;">{{ previewData.current_status }}</pre>
+        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all;">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>
