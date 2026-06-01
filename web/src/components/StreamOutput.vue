@@ -57,10 +57,11 @@ watch(
 
 <style scoped>
 .stream-output {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: #0B0D13;
+  color: #22D3EE;
   padding: 15px;
-  border-radius: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   max-height: 500px;
   overflow-y: auto;
   font-family: 'Courier New', Consolas, monospace;
@@ -74,17 +75,17 @@ watch(
 }
 
 .output-line.stderr {
-  color: #f48771;
+  color: #FB7185;
 }
 
 .output-line.stdout {
-  color: #d4d4d4;
+  color: #22D3EE;
 }
 
 .cursor {
   display: inline-block;
   animation: blink 1s step-end infinite;
-  color: #d4d4d4;
+  color: #22D3EE;
 }
 
 @keyframes blink {
