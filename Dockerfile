@@ -21,8 +21,9 @@ RUN go mod download
 
 COPY . .
 
-# 生成 swagger 文档（docs/ 在 .gitignore 中，需要在构建时生成）
-RUN go install github.com/swaggo/swag/cmd/swag@latest && swag init -d ./cmd/server -o ./docs --parseDependency --parseInternal
+# 生成 swagger 文档
+RUN go install github.com/swaggo/swag/cmd/swag@latest && \
+    swag init -d cmd/server,internal/handler,internal/model,internal/service -o docs
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o opscenter ./cmd/server/
 
