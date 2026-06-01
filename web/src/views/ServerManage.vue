@@ -308,16 +308,16 @@ async function handleTest() {
   gap: 8px;
   margin-top: 12px;
   padding: 10px 14px;
-  background: var(--card-bg, #141722);
+  background: var(--bg-elevated);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   flex-wrap: wrap;
 }
 :deep(.disabled-row) {
-  background-color: rgba(255, 255, 255, 0.03) !important;
+  background-color: var(--bg-elevated) !important;
   opacity: 0.6;
 }
 :deep(.disabled-row:hover > td) {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-color: var(--bg-elevated) !important;
 }
 </style>

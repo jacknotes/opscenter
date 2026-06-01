@@ -1109,7 +1109,7 @@ async function executePreview() {
 
 /* ===== Main Card ===== */
 .main-card {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   box-shadow: none;
   overflow-y: auto;
@@ -1125,7 +1125,7 @@ async function executePreview() {
 .stat-chip {
   font-size: 13px;
   color: #94A3B8;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-elevated);
   padding: 4px 10px;
   border-radius: 6px;
   white-space: nowrap;
@@ -1165,9 +1165,9 @@ async function executePreview() {
   gap: 8px;
   margin-bottom: 0;
   padding: 10px 14px;
-  background: var(--card-bg, #141722);
+  background: var(--bg-elevated);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   flex-wrap: wrap;
 }
 
@@ -1184,17 +1184,17 @@ async function executePreview() {
   margin-bottom: 10px;
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: #141722;
+  border: 1px solid var(--border-default);
+  background: var(--card-bg);
   transition: border-color 0.2s;
 }
 
 :deep(.upstream-collapse .el-collapse-item:hover) {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border-strong);
 }
 
 :deep(.upstream-collapse .el-collapse-item__header) {
-  background: #1A1D2E;
+  background: var(--bg-elevated);
   border-bottom: 1px solid transparent;
   padding: 0 16px;
   height: 48px;
@@ -1205,7 +1205,7 @@ async function executePreview() {
 }
 
 :deep(.upstream-collapse .el-collapse-item.is-active .el-collapse-item__header) {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
+  border-bottom-color: var(--border-default);
 }
 
 :deep(.upstream-collapse .el-collapse-item__wrap) {
@@ -1301,7 +1301,7 @@ async function executePreview() {
 }
 
 :deep(.server-table .el-table__header th) {
-  background: #1A1D2E !important;
+  background: var(--bg-elevated) !important;
   color: #94A3B8;
   font-weight: 600;
   font-size: 12px;
@@ -1358,14 +1358,14 @@ async function executePreview() {
   color: var(--text-primary);
   margin-bottom: 16px;
   padding: 10px 14px;
-  background: #1A1D2E;
+  background: var(--bg-elevated);
   border-radius: 8px;
   border-left: 3px solid #06B6D4;
 }
 
 /* ===== Diff Viewer ===== */
 .diff-container {
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   overflow: hidden;
   font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
@@ -1373,9 +1373,9 @@ async function executePreview() {
 }
 
 .diff-header {
-  background: #1A1D2E;
+  background: var(--bg-elevated);
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .diff-filename {
@@ -1512,9 +1512,9 @@ async function executePreview() {
   flex-wrap: wrap;
   gap: 16px;
   padding: 12px 16px;
-  background: #1A1D2E;
+  background: var(--bg-elevated);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
 }
 
 .output-meta-item {
@@ -1583,14 +1583,14 @@ async function executePreview() {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   margin-bottom: 8px;
   transition: background 0.15s;
 }
 
 .swap-upstream-item:hover {
-  background: rgba(6, 182, 212, 0.04);
+  background: var(--bg-elevated);
 }
 
 .swap-upstream-item .upstream-name {
@@ -1624,7 +1624,7 @@ async function executePreview() {
   color: #64748B;
   margin-bottom: 12px;
   padding: 8px 12px;
-  background: #1A1D2E;
+  background: var(--bg-elevated);
   border-radius: 6px;
 }
 
@@ -1695,7 +1695,7 @@ async function executePreview() {
 
 /* ===== Backup Table ===== */
 :deep(.backup-table .el-table__header th) {
-  background: #1A1D2E !important;
+  background: var(--bg-elevated) !important;
   font-weight: 600;
 }
 </style>

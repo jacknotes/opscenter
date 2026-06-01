@@ -1027,7 +1027,7 @@ async function handleDeleteVSTag() {
 .stat-chip {
   font-size: 13px;
   color: #94A3B8;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-elevated);
   padding: 4px 10px;
   border-radius: 6px;
   white-space: nowrap;
@@ -1065,9 +1065,9 @@ async function handleDeleteVSTag() {
   gap: 8px;
   margin-bottom: 3px;
   padding: 10px 14px;
-  background: var(--card-bg, #141722);
+  background: var(--bg-elevated);
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default);
   flex-wrap: wrap;
 }
 

@@ -104,9 +104,9 @@
           <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
         </div>
         <el-scrollbar max-height="320px">
-          <div style="background: #1A1D2E; padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.06);">
+          <div style="background: var(--bg-elevated); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-default);">
             <div v-for="(name, idx) in batchConfirmNames" :key="name"
-              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed rgba(255, 255, 255, 0.04);">
+              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed var(--border-default);">
               <span style="color: #64748B; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
               <span>{{ name }}</span>
             </div>
@@ -178,7 +178,7 @@
       </el-table>
 
       <!-- Add binding sub-form -->
-      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: #1A1D2E; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.06);">
+      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: var(--bg-elevated); border-radius: 6px; border: 1px solid var(--border-default);">
         <el-form label-width="100px" size="small">
           <el-form-item label="VS 标签">
             <el-select v-model="newBinding.vs_tag" filterable allow-create clearable placeholder="选择或输入 VS 标签" style="width: 100%">
