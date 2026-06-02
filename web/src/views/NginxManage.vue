@@ -188,7 +188,7 @@
       <div class="batch-dialog-body">
         <div class="batch-hint">
           <el-button size="small" @click="toggleBatchSelectAll">
-            {{ isBatchAllSelected ? '取消全选' : '全选' }}
+            {{ isBatchAllSelected ? '取消' : '全选' }}
           </el-button>
           <el-button size="small" @click="toggleBatchExpandAll">
             {{ batchAllExpanded ? '折叠' : '展开' }}

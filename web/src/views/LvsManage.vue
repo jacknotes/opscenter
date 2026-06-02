@@ -20,7 +20,7 @@
         <el-button type="danger" :disabled="!canBatchOffline" @click="handleBatchOffline">下线</el-button>
         <el-button type="primary" :disabled="!canSwap" @click="handleSwap">切换</el-button>
         <el-button type="success" @click="loadStatus" :loading="statusLoading">查看配置</el-button>
-        <el-button type="info" class="el-button--cyan" @click="loadData" :loading="loading">刷新</el-button>
+        <el-button type="info" class="el-button--cyan" @click="handleRefresh" :loading="loading">刷新</el-button>
         <span style="margin-left: auto;"></span>
         <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
         <span class="stat-chip stat-chip-danger">离线 <b>{{ totalDownCount }}</b></span>
@@ -559,6 +559,15 @@ async function onServerChange() {
   await loadData()
 }
 
+async function handleRefresh() {
+  try {
+    await loadData()
+    ElMessage.success('刷新成功')
+  } catch (e) {
+    // loadData 已经处理了错误提示
+  }
+}
+
 async function loadData() {
   if (!serverId.value) return
   localStorage.setItem(STORAGE_KEYS.LVS_SERVER, serverId.value)
@@ -1075,21 +1084,15 @@ async function handleDeleteVSTag() {
   display: inline-flex;
 }
 
-/* ===== VIP 分组交替背景色 ===== */
-:deep(.vip-group-0 td) {
+/* ===== VIP 行统一背景色 ===== */
+:deep(.vip-group-0 td),
+:deep(.vip-group-1 td) {
   background-color: var(--card-bg, #141722);
 }
 
-:deep(.vip-group-1 td) {
-  background-color: var(--bg-elevated, #1A1D2E);
-}
-
-html:not(.dark) :deep(.vip-group-0 td) {
-  background-color: #ffffff;
-}
-
+html:not(.dark) :deep(.vip-group-0 td),
 html:not(.dark) :deep(.vip-group-1 td) {
-  background-color: #fafafa;
+  background-color: #ffffff;
 }
 
 :deep(.vip-group-0:hover > td),
