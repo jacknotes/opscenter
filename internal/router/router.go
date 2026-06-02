@@ -35,7 +35,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 
 	// Serve static files (frontend)
 	r.StaticFS("/assets", http.Dir("web/dist/assets"))
-	r.StaticFile("/favicon.ico", "web/dist/favicon.ico")
+	r.StaticFile("/favicon.svg", "web/dist/favicon.svg")
 	r.NoRoute(func(c *gin.Context) {
 		c.File("web/dist/index.html")
 	})

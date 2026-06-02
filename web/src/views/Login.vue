@@ -132,6 +132,14 @@ async function handleLogin() {
   box-shadow: 0 0 0 1px #06B6D4 inset;
 }
 
+.login-form :deep(.el-input__inner) {
+  color: #fff;
+}
+
+.login-form :deep(.el-input__inner::placeholder) {
+  color: #64748B;
+}
+
 .login-form :deep(.el-button--primary) {
   border-radius: 8px;
   height: 44px;
