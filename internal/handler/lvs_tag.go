@@ -22,6 +22,7 @@ func NewLVSTagHandler(db *gorm.DB) *LVSTagHandler {
 
 type LvsTagRequest struct {
 	RSIP           string `json:"rs_ip" binding:"required"`
+	VSIP           string `json:"vs_ip" binding:"required"`
 	Tag            string `json:"tag"`
 	Disabled       bool   `json:"disabled"`
 	DisabledReason string `json:"disabled_reason"`
@@ -47,6 +48,9 @@ func (h *LVSTagHandler) List(c *gin.Context) {
 			ips[i] = strings.TrimSpace(ips[i])
 		}
 		query = query.Where("rs_ip IN ?", ips)
+	}
+	if vsIP := c.Query("vs_ip"); vsIP != "" {
+		query = query.Where("vs_ip = ?", vsIP)
 	}
 
 	if err := query.Find(&tags).Error; err != nil {
@@ -77,7 +81,11 @@ func (h *LVSTagHandler) CreateOrUpdate(c *gin.Context) {
 	}
 
 	if !service.ValidateIP(req.RSIP) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "IP地址格式无效"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "RS IP地址格式无效"})
+		return
+	}
+	if !service.ValidateIP(req.VSIP) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "VS IP地址格式无效"})
 		return
 	}
 
@@ -92,17 +100,17 @@ func (h *LVSTagHandler) CreateOrUpdate(c *gin.Context) {
 		"disabled_reason": req.DisabledReason,
 	}
 
-	tag := model.LvsRSTag{RSIP: req.RSIP}
-	if err := h.db.Where("rs_ip = ?", req.RSIP).Assign(updates).FirstOrCreate(&tag).Error; err != nil {
+	tag := model.LvsRSTag{RSIP: req.RSIP, VSIP: req.VSIP}
+	if err := h.db.Where("rs_ip = ? AND vs_ip = ?", req.RSIP, req.VSIP).Assign(updates).FirstOrCreate(&tag).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存标签失败"})
 		return
 	}
 
 	action := "update_tag"
-	detail := fmt.Sprintf("更新RS标签: %s -> %s", req.RSIP, req.Tag)
+	detail := fmt.Sprintf("更新RS标签: VS=%s RS=%s -> %s", req.VSIP, req.RSIP, req.Tag)
 	if req.Disabled {
 		action = "disable_rs"
-		detail = fmt.Sprintf("禁用RS: %s, 原因: %s", req.RSIP, req.DisabledReason)
+		detail = fmt.Sprintf("禁用RS: VS=%s RS=%s, 原因: %s", req.VSIP, req.RSIP, req.DisabledReason)
 	}
 	createAuditLog(h.db, c, "lvs", action, detail, "", "success", "", 0, "")
 
@@ -112,22 +120,24 @@ func (h *LVSTagHandler) CreateOrUpdate(c *gin.Context) {
 // Delete godoc
 //
 //	@Summary		删除 LVS RS 标签
-//	@Description	删除指定 RS IP 的环境标签
+//	@Description	删除指定 VS 下 RS 的环境标签
 //	@Tags			LVS
 //	@Produce		json
 //	@Security		BearerAuth
+//	@Param			vs_ip	path		string	true	"VS IP"
 //	@Param			rs_ip	path		string	true	"RS IP"
 //	@Success		200		{object}	object
 //	@Failure		404		{object}	object
-//	@Router			/lvs/tags/{rs_ip} [delete]
+//	@Router			/lvs/tags/{vs_ip}/{rs_ip} [delete]
 func (h *LVSTagHandler) Delete(c *gin.Context) {
+	vsIP := c.Param("vs_ip")
 	rsIP := c.Param("rs_ip")
-	if rsIP == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 RS IP"})
+	if vsIP == "" || rsIP == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 VS IP 和 RS IP"})
 		return
 	}
 
-	result := h.db.Where("rs_ip = ?", rsIP).Delete(&model.LvsRSTag{})
+	result := h.db.Where("rs_ip = ? AND vs_ip = ?", rsIP, vsIP).Delete(&model.LvsRSTag{})
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除标签失败"})
 		return
@@ -138,7 +148,7 @@ func (h *LVSTagHandler) Delete(c *gin.Context) {
 	}
 
 	createAuditLog(h.db, c, "lvs", "delete_tag",
-		fmt.Sprintf("删除RS标签: %s", rsIP),
+		fmt.Sprintf("删除RS标签: VS=%s RS=%s", vsIP, rsIP),
 		"", "success", "", 0, "")
 
 	c.JSON(http.StatusOK, gin.H{"message": "标签已删除"})

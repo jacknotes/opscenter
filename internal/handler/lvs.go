@@ -94,7 +94,7 @@ func (h *LVSHandler) List(c *gin.Context) {
 		servers = h.lvsService.MergeOfflineRS(servers, statusGroups)
 	}
 
-	// 查询 RS 标签并注入到 RS 数据
+	// 查询 RS 标签并注入到 RS 数据（按 VS+RS 复合键匹配）
 	rsIPs := make(map[string]bool)
 	for _, vs := range servers {
 		for _, rs := range vs.RealServers {
@@ -111,13 +111,15 @@ func (h *LVSHandler) List(c *gin.Context) {
 			log.Printf("查询 RS 标签失败: %v", err)
 		}
 	}
-	rsTagMap := make(map[string]*model.LvsRSTag)
+	rsTagMap := make(map[string]*model.LvsRSTag) // key: "vs_ip:rs_ip"
 	for i := range rsTags {
-		rsTagMap[rsTags[i].RSIP] = &rsTags[i]
+		rsTagMap[rsTags[i].VSIP+":"+rsTags[i].RSIP] = &rsTags[i]
 	}
 	for i := range servers {
+		vsIP := servers[i].IP
 		for j := range servers[i].RealServers {
-			if t, ok := rsTagMap[servers[i].RealServers[j].IP]; ok {
+			key := vsIP + ":" + servers[i].RealServers[j].IP
+			if t, ok := rsTagMap[key]; ok {
 				servers[i].RealServers[j].Tag = t.Tag
 				servers[i].RealServers[j].Disabled = t.Disabled
 				servers[i].RealServers[j].DisabledReason = t.DisabledReason
@@ -237,7 +239,7 @@ func (h *LVSHandler) OpPreview(c *gin.Context) {
 	}
 
 	// 校验 RS 是否被禁用
-	if reason := h.checkRSDisabled(req.RSIP); reason != "" {
+	if reason := h.checkRSDisabled(req.VSIP, req.RSIP); reason != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP, reason)})
 		return
 	}
@@ -367,11 +369,11 @@ func (h *LVSHandler) SwapPreview(c *gin.Context) {
 	}
 
 	// 校验 RS 是否被禁用
-	if reason := h.checkRSDisabled(req.RSIP1); reason != "" {
+	if reason := h.checkRSDisabled(req.VSIP, req.RSIP1); reason != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP1, reason)})
 		return
 	}
-	if reason := h.checkRSDisabled(req.RSIP2); reason != "" {
+	if reason := h.checkRSDisabled(req.VSIP, req.RSIP2); reason != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("RS %s 已被禁用: %s", req.RSIP2, reason)})
 		return
 	}
@@ -473,10 +475,10 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"output": output, "status": "success"})
 }
 
-// checkRSDisabled 检查 RS 是否被禁用，返回禁用原因；未禁用返回空字符串。
-func (h *LVSHandler) checkRSDisabled(rsIP string) string {
+// checkRSDisabled 检查指定 VS 下的 RS 是否被禁用，返回禁用原因；未禁用返回空字符串。
+func (h *LVSHandler) checkRSDisabled(vsIP, rsIP string) string {
 	var tag model.LvsRSTag
-	if err := h.db.Where("rs_ip = ? AND disabled = ?", rsIP, true).First(&tag).Error; err != nil {
+	if err := h.db.Where("rs_ip = ? AND vs_ip = ? AND disabled = ?", rsIP, vsIP, true).First(&tag).Error; err != nil {
 		return ""
 	}
 	return tag.DisabledReason

@@ -112,7 +112,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			lvsAdmin.Use(middleware.AdminRequired(db))
 			{
 				lvsAdmin.PUT("/tags", lvsTagHandler.CreateOrUpdate)
-				lvsAdmin.DELETE("/tags/:rs_ip", lvsTagHandler.Delete)
+				lvsAdmin.DELETE("/tags/:vs_ip/:rs_ip", lvsTagHandler.Delete)
 				lvsAdmin.PUT("/vs_tags", lvsVSTagHandler.CreateOrUpdate)
 				lvsAdmin.DELETE("/vs_tags/:vs_ip", lvsVSTagHandler.Delete)
 				lvsAdmin.PUT("/bindings", bindingHandler.CreateOrUpdate)

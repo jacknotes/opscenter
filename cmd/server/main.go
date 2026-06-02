@@ -65,6 +65,14 @@ func main() {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
+	// RS 标签索引迁移：旧版以 rs_ip 为唯一键，新版以 (rs_ip, vs_ip) 为联合唯一键
+	// GORM AutoMigrate 已添加 vs_ip 列并创建新索引，此处清理可能残留的旧索引
+	var indexes []string
+	db.Raw("SHOW INDEX FROM lvs_rs_tags WHERE Key_name != 'PRIMARY' AND Key_name != 'idx_rs_vs'").Pluck("Key_name", &indexes)
+	for _, idxName := range indexes {
+		db.Exec(fmt.Sprintf("ALTER TABLE lvs_rs_tags DROP INDEX `%s`", idxName))
+	}
+
 	// Connect Redis
 	var rdb *redis.Client
 	rcfg := config.Global.Redis

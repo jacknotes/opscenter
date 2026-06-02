@@ -361,7 +361,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 				vsTagMap[t.VSIP] = t.Tag
 			}
 
-			// 查询 RS 标签
+			// 查询 RS 标签（按 VS+RS 复合键）
 			rsIPSet := make(map[string]bool)
 			for _, vs := range vsList {
 				for _, rs := range vs.RealServers {
@@ -376,9 +376,9 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			if len(rsIPList) > 0 {
 				h.db.Where("rs_ip IN ?", rsIPList).Find(&rsTags)
 			}
-			rsTagMap := make(map[string]string)
+			rsTagMap := make(map[string]string) // key: "vs_ip:rs_ip"
 			for _, t := range rsTags {
-				rsTagMap[t.RSIP] = t.Tag
+				rsTagMap[t.VSIP+":"+t.RSIP] = t.Tag
 			}
 
 			// 匹配绑定：找 master VS，检查 RS 状态
@@ -393,7 +393,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 				}
 				for _, binding := range bindingsForVS {
 					for _, rs := range vs.RealServers {
-						if rsTagMap[rs.IP] == binding.RSEnvTag && rs.Status == "up" {
+						if rsTagMap[vs.IP+":"+rs.IP] == binding.RSEnvTag && rs.Status == "up" {
 							mu.Lock()
 							if !done {
 								warnings = append(warnings, warningResult{

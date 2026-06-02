@@ -51,7 +51,7 @@
                   <template #default="{ row: rs }">
                     <template v-if="rs.disabled">
                       <el-tooltip :content="rs.disabledReason" placement="top" :disabled="!rs.disabledReason">
-                        <el-tag type="info" size="small" style="cursor: pointer;" @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)">已禁用</el-tag>
+                        <el-tag type="info" size="small" style="cursor: pointer;" @click="openRSTagDialog(rs.vipIp, rs)">已禁用</el-tag>
                       </el-tooltip>
                     </template>
                     <el-tooltip v-else-if="rs.tag" :content="rs.tag" placement="top" :show-after="300">
@@ -60,7 +60,7 @@
                         size="small"
                         class="tag-truncate"
                         style="cursor: pointer; max-width: 140px;"
-                        @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)"
+                        @click="openRSTagDialog(rs.vipIp, rs)"
                       >{{ rs.tag }}</el-tag>
                     </el-tooltip>
                     <el-button
@@ -68,7 +68,7 @@
                       type="info"
                       link
                       size="small"
-                      @click="openTagDialog(rs.ip, '', rs.disabled, rs.disabledReason)"
+                      @click="openRSTagDialog(rs.vipIp, rs)"
                     >设置标签</el-button>
                   </template>
                 </el-table-column>
@@ -348,7 +348,7 @@ const loading = ref(false)
 const batchSelected = ref(new Set())
 let autoRefreshTimer = null
 const tagDialogVisible = ref(false)
-const tagForm = ref({ rs_ip: '', tag: '', disabled: false, disabled_reason: '' })
+const tagForm = ref({ vs_ip: '', rs_ip: '', tag: '', disabled: false, disabled_reason: '' })
 const tagSaving = ref(false)
 const tagOptions = [
   { label: '生产环境', value: '生产环境' },
@@ -414,7 +414,7 @@ function groupByVIP(data) {
 
     for (const rs of vs.real_servers) {
       if (!group.realServersMap.has(rs.ip)) {
-        group.realServersMap.set(rs.ip, { ip: rs.ip, statuses: [], tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabled_reason || '' })
+        group.realServersMap.set(rs.ip, { ip: rs.ip, vipIp: vs.ip, statuses: [], tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabled_reason || '' })
       } else {
         if (rs.tag) group.realServersMap.get(rs.ip).tag = rs.tag
         if (rs.disabled) {
@@ -657,7 +657,7 @@ function flattenRS(group) {
   const rows = []
   for (const rs of group.realServers) {
     for (const s of rs.statuses) {
-      rows.push({ ip: rs.ip, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn, tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabledReason || '' })
+      rows.push({ ip: rs.ip, vipIp: rs.vipIp, port: s.port, status: s.status, forward: s.forward, weight: s.weight, activeConn: s.activeConn, inactConn: s.inactConn, tag: rs.tag || '', disabled: !!rs.disabled, disabledReason: rs.disabledReason || '' })
     }
   }
   return rows
@@ -938,9 +938,14 @@ async function executePreview() {
   }
 }
 
-function openTagDialog(rsIp, currentTag, disabled, disabledReason) {
-  tagForm.value = { rs_ip: rsIp, tag: currentTag || '', disabled: !!disabled, disabled_reason: disabledReason || '' }
+function openTagDialog(vsIp, rsIp, currentTag, disabled, disabledReason) {
+  tagForm.value = { vs_ip: vsIp, rs_ip: rsIp, tag: currentTag || '', disabled: !!disabled, disabled_reason: disabledReason || '' }
   tagDialogVisible.value = true
+}
+
+// 包装函数：从内层表格模板调用时，外层 row.group.ip 通过 vsIp 参数传入
+function openRSTagDialog(vsIp, rs) {
+  openTagDialog(vsIp, rs.ip, rs.tag, rs.disabled, rs.disabledReason)
 }
 
 async function handleSaveTag() {
@@ -951,6 +956,7 @@ async function handleSaveTag() {
   tagSaving.value = true
   try {
     await updateLvsTag({
+      vs_ip: tagForm.value.vs_ip,
       rs_ip: tagForm.value.rs_ip,
       tag: tagForm.value.tag,
       disabled: tagForm.value.disabled,
@@ -978,7 +984,7 @@ async function handleDeleteTag() {
   }
   tagSaving.value = true
   try {
-    await deleteLvsTag(tagForm.value.rs_ip)
+    await deleteLvsTag(tagForm.value.vs_ip, tagForm.value.rs_ip)
     ElMessage.success('标签已删除')
     tagDialogVisible.value = false
     await loadData()
