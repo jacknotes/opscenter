@@ -252,6 +252,21 @@ function handleSelectionChange(val) {
 }
 
 async function handleAction(action) {
+  if (action === 'online') {
+    const pendingList = filteredRollouts.value.filter(r => r.step.startsWith('1/'))
+    if (selectedIds.value.size > 0) {
+      const selectedPending = pendingList.filter(r => selectedIds.value.has(r.namespace + '/' + r.name))
+      if (selectedPending.length === 0) {
+        ElMessage.warning('所选项目中没有待发布的项目')
+        return
+      }
+    } else {
+      if (pendingList.length === 0) {
+        ElMessage.warning('当前没有待发布的项目')
+        return
+      }
+    }
+  }
   if (action === 'sync' || action === 'rollback') {
     const onlineList = filteredRollouts.value.filter(r => !r.step.startsWith('1/'))
     if (selectedIds.value.size > 0) {
