@@ -54,13 +54,15 @@
                         <el-tag type="info" size="small" style="cursor: pointer;" @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)">已禁用</el-tag>
                       </el-tooltip>
                     </template>
-                    <el-tag
-                      v-else-if="rs.tag"
-                      :type="rs.tag.includes('生产') && !rs.tag.includes('预生产') ? 'danger' : 'warning'"
-                      size="small"
-                      style="cursor: pointer;"
-                      @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)"
-                    >{{ rs.tag }}</el-tag>
+                    <el-tooltip v-else-if="rs.tag" :content="rs.tag" placement="top" :show-after="300">
+                      <el-tag
+                        :type="rs.tag.includes('生产') && !rs.tag.includes('预生产') ? 'danger' : 'warning'"
+                        size="small"
+                        class="tag-truncate"
+                        style="cursor: pointer; max-width: 140px;"
+                        @click="openTagDialog(rs.ip, rs.tag, rs.disabled, rs.disabledReason)"
+                      >{{ rs.tag }}</el-tag>
+                    </el-tooltip>
                     <el-button
                       v-else
                       type="info"
@@ -113,13 +115,15 @@
         <el-table-column label="标签" min-width="100" align="center">
           <template #default="{ row }">
             <template v-if="row.isFirst && !row.isDetail">
-              <el-tag
-                v-if="row.tag"
-                type="warning"
-                size="small"
-                style="cursor: pointer;"
-                @click="openVSTagDialog(row.ip, row.tag)"
-              >{{ row.tag }}</el-tag>
+              <el-tooltip v-if="row.tag" :content="row.tag" placement="top" :show-after="300">
+                <el-tag
+                  type="warning"
+                  size="small"
+                  class="tag-truncate"
+                  style="cursor: pointer; max-width: 140px;"
+                  @click="openVSTagDialog(row.ip, row.tag)"
+                >{{ row.tag }}</el-tag>
+              </el-tooltip>
               <el-button
                 v-else
                 type="info"
@@ -1051,6 +1055,12 @@ async function handleDeleteVSTag() {
 .stat-chip-success b { color: #22C55E; }
 .stat-chip-danger b { color: #EF4444; }
 .stat-chip-primary b { color: #06B6D4; }
+
+.tag-truncate :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 :deep(.rs-disabled-row) {
   background-color: rgba(255, 255, 255, 0.02) !important;
