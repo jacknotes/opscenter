@@ -212,10 +212,10 @@
               <el-tag :type="row.status === 'Up' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="vs_tag" label="VS 标签" width="120" />
-          <el-table-column prop="rs_env_tag" label="RS标签" width="150" />
-          <el-table-column prop="rs_ip" label="RS IP" width="140" />
-          <el-table-column prop="lvs_server" label="LVS 服务器" min-width="120" />
+          <el-table-column prop="lvs_server" label="LVS服务器" min-width="100" />
+          <el-table-column prop="vs_tag" label="VS标签" min-width="100" />
+          <el-table-column prop="rs_env_tag" label="RS标签" min-width="100" />
+          <el-table-column prop="rs_ip" label="RS IP" min-width="120" />
         </el-table>
       </div>
       <el-alert type="info" :closable="false" style="margin-top: 12px;">
