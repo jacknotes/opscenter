@@ -57,9 +57,10 @@ make dev-backend    # Go 服务器 :18080
 - **`api/index.js`** — Axios 实例，带 JWT 拦截器。所有 API 函数在此导出。GET 请求自动添加 `_t` 缓存破坏参数。
 - **`router/index.js`** — Vue Router，含认证守卫（检查 `localStorage.token`）和管理员守卫（`localStorage.role`）。
 - **`stores/user.js`** — Pinia 状态管理，管理认证状态。
+- **`stores/websocket.js`** — 全局 WebSocket 状态管理（Pinia store），用于跨页面保持命令执行状态。解决预生产缩扩容页面切换后命令被误判为 failed 的问题。
 - **`views/`** — 页面组件：Dashboard、LvsManage、NginxManage、K8sDeploy、PreprodScale、OpLog、ServerManage、UserManage、Login。
 - **`components/`** — Layout（侧边导航）、StreamOutput（WebSocket 流式输出展示）。
-- **`composables/useWebSocket.js`** — WebSocket 组合式函数，用于实时命令输出。
+- **`composables/useWebSocket.js`** — WebSocket 组合式函数（已迁移到 `stores/websocket.js`，保留用于其他场景）。
 
 ### 核心模式：预览 → 执行
 
@@ -105,3 +106,4 @@ Swagger UI 挂载在 `/swagger/*any`，启动后访问 `http://localhost:18080/s
 - API 响应使用 JSON。服务器列表响应通过 `Server.ToResponse()` 脱敏
 - 命令执行通过 `service/ssh.go:ValidateCommand()` 按服务器类型进行正则白名单校验
 - WebSocket 端点 `/api/ws/exec` 通过 URL query 参数传递 token 认证（非 Header）
+- LVS 和 Nginx 管理页面默认展开所有分组（VIP/upstream）
