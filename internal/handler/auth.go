@@ -642,6 +642,162 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }
 
+type BatchDeleteUsersRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// BatchDeleteUsers godoc
+//
+//	@Summary		批量删除用户
+//	@Description	批量删除用户（管理员，不能删除自己和admin）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchDeleteUsersRequest	true	"用户 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-delete [post]
+func (h *AuthHandler) BatchDeleteUsers(c *gin.Context) {
+	var req BatchDeleteUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要删除的用户"})
+		return
+	}
+
+	currentUserID, _ := getCurrentUserID(c)
+
+	deleted := 0
+	failed := 0
+	var deletedNames []string
+
+	for _, id := range req.IDs {
+		// 不能删除自己
+		if currentUserID == id {
+			failed++
+			continue
+		}
+
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			continue
+		}
+
+		// 不能删除 admin
+		if user.Username == "admin" {
+			failed++
+			continue
+		}
+
+		if err := h.db.Delete(&model.User{}, id).Error; err != nil {
+			failed++
+			continue
+		}
+
+		deleted++
+		deletedNames = append(deletedNames, user.Username)
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_delete_users",
+		fmt.Sprintf("批量删除用户: 成功 %d, 失败 %d", deleted, failed),
+		"", "success", fmt.Sprintf("删除的用户: %v", deletedNames), 0, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("批量删除完成: 成功 %d, 失败 %d", deleted, failed),
+		"deleted": deleted,
+		"failed":  failed,
+	})
+}
+
+type BatchToggleUsersRequest struct {
+	IDs     []uint `json:"ids" binding:"required"`
+	Enabled bool   `json:"enabled"`
+}
+
+// BatchToggleUsers godoc
+//
+//	@Summary		批量启用/禁用用户
+//	@Description	批量切换用户启用状态（管理员，不能操作自己和admin）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchToggleUsersRequest	true	"用户 ID 列表和目标状态"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-toggle [post]
+func (h *AuthHandler) BatchToggleUsers(c *gin.Context) {
+	var req BatchToggleUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要操作的用户"})
+		return
+	}
+
+	currentUserID, _ := getCurrentUserID(c)
+
+	updated := 0
+	failed := 0
+	var updatedNames []string
+
+	for _, id := range req.IDs {
+		// 不能操作自己
+		if currentUserID == id {
+			failed++
+			continue
+		}
+
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			continue
+		}
+
+		// 不能操作 admin
+		if user.Username == "admin" {
+			failed++
+			continue
+		}
+
+		if err := h.db.Model(&user).Update("enabled", req.Enabled).Error; err != nil {
+			failed++
+			continue
+		}
+
+		updated++
+		updatedNames = append(updatedNames, user.Username)
+	}
+
+	action := "启用"
+	if !req.Enabled {
+		action = "禁用"
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_toggle_users",
+		fmt.Sprintf("批量%s用户: 成功 %d, 失败 %d", action, updated, failed),
+		"", "success", fmt.Sprintf("%s的用户: %v", action, updatedNames), 0, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("批量%s完成: 成功 %d, 失败 %d", action, updated, failed),
+		"updated": updated,
+		"failed":  failed,
+	})
+}
+
 // ResetPassword godoc
 //
 //	@Summary		重置用户密码
@@ -865,13 +1021,16 @@ func (h *AuthHandler) ImportLDAPUsers(c *gin.Context) {
 	failed := 0
 
 	for _, u := range req.Users {
-		// 检查用户是否已存在
+		// 检查用户是否已存在（包括未软删除的）
 		var existingUser model.User
 		if err := h.db.Where("username = ?", u.Username).First(&existingUser).Error; err == nil {
 			// 用户已存在，跳过
 			skipped++
 			continue
 		}
+
+		// 清理同名的软删除用户，避免唯一索引冲突
+		h.db.Unscoped().Where("username = ? AND deleted_at IS NOT NULL", u.Username).Delete(&model.User{})
 
 		// 创建用户
 		user := model.User{

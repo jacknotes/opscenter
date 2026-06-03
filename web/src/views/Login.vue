@@ -136,6 +136,16 @@ async function handleLogin() {
   color: #fff;
 }
 
+.login-form :deep(.el-input__inner::selection) {
+  background-color: rgba(6, 182, 212, 0.4);
+  color: #fff;
+}
+
+.login-form :deep(.el-input__inner::-moz-selection) {
+  background-color: rgba(6, 182, 212, 0.4);
+  color: #fff;
+}
+
 .login-form :deep(.el-input__inner::placeholder) {
   color: #64748B;
 }

@@ -193,6 +193,8 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			users.POST("", authHandler.CreateUser)
 			users.PUT("/:id", authHandler.UpdateUser)
 			users.DELETE("/:id", authHandler.DeleteUser)
+			users.POST("/batch-delete", authHandler.BatchDeleteUsers)
+			users.POST("/batch-toggle", authHandler.BatchToggleUsers)
 			users.PUT("/:id/reset-password", authHandler.ResetPassword)
 			users.PUT("/:id/toggle", authHandler.ToggleUserEnabled)
 			// LDAP user management
