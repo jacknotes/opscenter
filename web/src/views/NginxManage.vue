@@ -611,6 +611,8 @@ async function loadUpstreams() {
     upstreams.value = res.upstreams || []
     rawConfig.value = res.raw || ''
     selectedMap.value = {}
+    // 默认展开所有 upstream
+    expandedUpstreams.value = upstreams.value.map(u => u.name)
     if (upstreams.value.length === 0 && res.raw) {
       ElMessage.warning('未解析到upstream配置，请检查配置文件格式')
     }

@@ -331,7 +331,7 @@ watch(vsFilter, (val) => {
     localStorage.removeItem(STORAGE_KEYS.LVS_VS_FILTER)
   }
 })
-const allExpanded = ref(false)
+const allExpanded = ref(true)
 const previewVisible = ref(false)
 const previewData = ref(null)
 const previewId = ref('')
@@ -581,6 +581,10 @@ async function loadData() {
     groupedData.value = groupByVIP(lvsData.value)
     invalidateRSCache()
     batchSelected.value = new Set()
+    // 默认展开所有 VIP
+    if (allExpanded.value) {
+      expandedVIPs.value = new Set(groupedData.value.map(g => g.ip))
+    }
     if (vsFilter.value && !groupedData.value.some(g => g.ip === vsFilter.value)) {
       vsFilter.value = ''
     }
