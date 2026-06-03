@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -434,5 +435,261 @@ func (h *ServerHandler) TestConnection(c *gin.Context) {
 		"success": true,
 		"message": fmt.Sprintf("连接成功 (%s@%s:%d)", server.Username, server.Host, server.Port),
 		"output":  string(output),
+	})
+}
+
+type BatchDeleteServersRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// BatchDeleteServers godoc
+//
+//	@Summary		批量删除服务器
+//	@Description	批量删除服务器（软删除），仅管理员可用
+//	@Tags			服务器
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchDeleteServersRequest	true	"服务器 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/servers/batch-delete [post]
+func (h *ServerHandler) BatchDeleteServers(c *gin.Context) {
+	var req BatchDeleteServersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要删除的服务器"})
+		return
+	}
+
+	deleted := 0
+	failed := 0
+	var deletedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var server model.Server
+		if err := h.db.First(&server, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if err := h.db.Delete(&model.Server{}, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, server.Name)
+			continue
+		}
+
+		deleted++
+		deletedNames = append(deletedNames, server.Name)
+	}
+
+	createAuditLog(h.db, c, "server", "batch_delete_servers",
+		fmt.Sprintf("批量删除服务器: 成功 %d, 失败 %d", deleted, failed),
+		"", "success", fmt.Sprintf("删除的服务器: %v", deletedNames), 0, "")
+
+	message := fmt.Sprintf("批量删除完成: 成功 %d, 失败 %d", deleted, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"deleted": deleted,
+		"failed":  failed,
+	})
+}
+
+type BatchToggleServersRequest struct {
+	IDs     []uint `json:"ids" binding:"required"`
+	Enabled bool   `json:"enabled"`
+}
+
+// BatchToggleServers godoc
+//
+//	@Summary		批量启用/禁用服务器
+//	@Description	批量切换服务器启用状态，仅管理员可用
+//	@Tags			服务器
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchToggleServersRequest	true	"服务器 ID 列表和目标状态"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		500		{object}	object
+//	@Router			/servers/batch-toggle [post]
+func (h *ServerHandler) BatchToggleServers(c *gin.Context) {
+	var req BatchToggleServersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要操作的服务器"})
+		return
+	}
+
+	updated := 0
+	failed := 0
+	var updatedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var server model.Server
+		if err := h.db.First(&server, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if err := h.db.Model(&server).Update("enabled", req.Enabled).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, server.Name)
+			continue
+		}
+
+		updated++
+		updatedNames = append(updatedNames, server.Name)
+	}
+
+	action := "启用"
+	if !req.Enabled {
+		action = "禁用"
+	}
+
+	createAuditLog(h.db, c, "server", "batch_toggle_servers",
+		fmt.Sprintf("批量%s服务器: 成功 %d, 失败 %d", action, updated, failed),
+		"", "success", fmt.Sprintf("%s的服务器: %v", action, updatedNames), 0, "")
+
+	message := fmt.Sprintf("批量%s完成: 成功 %d, 失败 %d", action, updated, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"updated": updated,
+		"failed":  failed,
+	})
+}
+
+type BatchTestServersRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// BatchTestServers godoc
+//
+//	@Summary		批量测试服务器连接
+//	@Description	批量测试 SSH 连接到指定服务器，仅管理员可用
+//	@Tags			服务器
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchTestServersRequest	true	"服务器 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Router			/servers/batch-test [post]
+func (h *ServerHandler) BatchTestServers(c *gin.Context) {
+	var req BatchTestServersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要测试的服务器"})
+		return
+	}
+
+	type TestResult struct {
+		ID      uint   `json:"id"`
+		Name    string `json:"name"`
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+	}
+
+	var results []TestResult
+	success := 0
+	failed := 0
+
+	for _, id := range req.IDs {
+		var server model.Server
+		if err := h.db.First(&server, id).Error; err != nil {
+			results = append(results, TestResult{ID: id, Success: false, Error: "服务器不存在"})
+			failed++
+			continue
+		}
+
+		var auth ssh.AuthMethod
+		switch server.AuthType {
+		case "password":
+			auth = ssh.Password(server.Password)
+		case "key":
+			signer, err := ssh.ParsePrivateKey([]byte(server.PrivateKey))
+			if err != nil {
+				results = append(results, TestResult{ID: id, Name: server.Name, Success: false, Error: fmt.Sprintf("解析私钥失败: %v", err)})
+				failed++
+				continue
+			}
+			auth = ssh.PublicKeys(signer)
+		default:
+			results = append(results, TestResult{ID: id, Name: server.Name, Success: false, Error: "不支持的认证类型"})
+			failed++
+			continue
+		}
+
+		config := &ssh.ClientConfig{
+			User:            server.Username,
+			Auth:            []ssh.AuthMethod{auth},
+			HostKeyCallback: service.GetHostKeyCallback(),
+			Timeout:         10 * time.Second,
+		}
+
+		addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
+		client, err := ssh.Dial("tcp", addr, config)
+		if err != nil {
+			results = append(results, TestResult{ID: id, Name: server.Name, Success: false, Error: fmt.Sprintf("连接失败: %v", err)})
+			failed++
+			continue
+		}
+
+		session, err := client.NewSession()
+		if err != nil {
+			client.Close()
+			results = append(results, TestResult{ID: id, Name: server.Name, Success: false, Error: fmt.Sprintf("创建会话失败: %v", err)})
+			failed++
+			continue
+		}
+
+		_, err = session.CombinedOutput("echo ok")
+		session.Close()
+		client.Close()
+
+		if err != nil {
+			results = append(results, TestResult{ID: id, Name: server.Name, Success: false, Error: fmt.Sprintf("执行命令失败: %v", err)})
+			failed++
+			continue
+		}
+
+		results = append(results, TestResult{ID: id, Name: server.Name, Success: true})
+		success++
+	}
+
+	createAuditLog(h.db, c, "server", "batch_test_servers",
+		fmt.Sprintf("批量测试服务器连接: 成功 %d, 失败 %d", success, failed),
+		"", "success", "", 0, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("批量测试完成: 成功 %d, 失败 %d", success, failed),
+		"success": success,
+		"failed":  failed,
+		"results": results,
 	})
 }

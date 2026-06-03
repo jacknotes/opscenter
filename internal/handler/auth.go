@@ -677,28 +677,33 @@ func (h *AuthHandler) BatchDeleteUsers(c *gin.Context) {
 	deleted := 0
 	failed := 0
 	var deletedNames []string
+	var failedNames []string
 
 	for _, id := range req.IDs {
 		// 不能删除自己
 		if currentUserID == id {
 			failed++
+			failedNames = append(failedNames, "自己")
 			continue
 		}
 
 		var user model.User
 		if err := h.db.First(&user, id).Error; err != nil {
 			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
 			continue
 		}
 
 		// 不能删除 admin
 		if user.Username == "admin" {
 			failed++
+			failedNames = append(failedNames, user.Username)
 			continue
 		}
 
 		if err := h.db.Delete(&model.User{}, id).Error; err != nil {
 			failed++
+			failedNames = append(failedNames, user.Username)
 			continue
 		}
 
@@ -710,8 +715,13 @@ func (h *AuthHandler) BatchDeleteUsers(c *gin.Context) {
 		fmt.Sprintf("批量删除用户: 成功 %d, 失败 %d", deleted, failed),
 		"", "success", fmt.Sprintf("删除的用户: %v", deletedNames), 0, "")
 
+	message := fmt.Sprintf("批量删除完成: 成功 %d, 失败 %d", deleted, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("批量删除完成: 成功 %d, 失败 %d", deleted, failed),
+		"message": message,
 		"deleted": deleted,
 		"failed":  failed,
 	})
@@ -753,28 +763,33 @@ func (h *AuthHandler) BatchToggleUsers(c *gin.Context) {
 	updated := 0
 	failed := 0
 	var updatedNames []string
+	var failedNames []string
 
 	for _, id := range req.IDs {
 		// 不能操作自己
 		if currentUserID == id {
 			failed++
+			failedNames = append(failedNames, "自己")
 			continue
 		}
 
 		var user model.User
 		if err := h.db.First(&user, id).Error; err != nil {
 			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
 			continue
 		}
 
 		// 不能操作 admin
 		if user.Username == "admin" {
 			failed++
+			failedNames = append(failedNames, user.Username)
 			continue
 		}
 
 		if err := h.db.Model(&user).Update("enabled", req.Enabled).Error; err != nil {
 			failed++
+			failedNames = append(failedNames, user.Username)
 			continue
 		}
 
@@ -791,8 +806,13 @@ func (h *AuthHandler) BatchToggleUsers(c *gin.Context) {
 		fmt.Sprintf("批量%s用户: 成功 %d, 失败 %d", action, updated, failed),
 		"", "success", fmt.Sprintf("%s的用户: %v", action, updatedNames), 0, "")
 
+	message := fmt.Sprintf("批量%s完成: 成功 %d, 失败 %d", action, updated, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("批量%s完成: 成功 %d, 失败 %d", action, updated, failed),
+		"message": message,
 		"updated": updated,
 		"failed":  failed,
 	})

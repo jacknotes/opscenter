@@ -183,6 +183,9 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			servers.DELETE("/:id", serverHandler.Delete)
 			servers.POST("/:id/test", serverHandler.TestConnection)
 			servers.PUT("/:id/toggle", serverHandler.ToggleEnabled)
+			servers.POST("/batch-delete", serverHandler.BatchDeleteServers)
+			servers.POST("/batch-toggle", serverHandler.BatchToggleServers)
+			servers.POST("/batch-test", serverHandler.BatchTestServers)
 		}
 
 		// User management (admin only)

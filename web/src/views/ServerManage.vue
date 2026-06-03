@@ -4,16 +4,18 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
-          <el-button type="success" @click="handleTest" :disabled="!selectedRow">测试连接</el-button>
-          <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
-          <el-button type="info" class="el-button--cyan" @click="handleCopySelected" :disabled="!selectedRow">复制</el-button>
-          <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow">删除</el-button>
-          <el-input v-model="searchQuery" placeholder="搜索名称 / IP / 类型" clearable style="width: 250px; margin-left: auto;" />
+          <el-button :type="batchToggleType" @click="handleBatchToggle" :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-button>
+          <el-button type="primary" @click="handleEditSelected" :disabled="selectedRows.length !== 1">编辑</el-button>
+          <el-button type="info" class="el-button--cyan" @click="handleCopySelected" :disabled="selectedRows.length !== 1">复制</el-button>
+          <el-button type="success" @click="handleBatchTest" :disabled="selectedRows.length === 0">测试连接</el-button>
+          <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0">删除</el-button>
+          <el-button type="info" class="el-button--cyan" @click="handleRefresh" :loading="loading">刷新</el-button>
+          <el-input v-model="searchQuery" placeholder="搜索服务器信息" clearable style="width: 300px; margin-left: auto;" />
         </div>
       </template>
 
-      <el-table :data="filteredServers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 200px)">
-        <el-table-column type="selection" width="45" />
+      <el-table :data="paginatedServers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 250px)">
+        <el-table-column type="selection" width="55" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
@@ -31,6 +33,21 @@
         <el-table-column prop="env" label="环境" width="80" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       </el-table>
+
+      <div class="pagination-wrapper">
+        <div class="pagination-left">
+          <span class="selection-count">已选 {{ selectedRows.length }}</span>
+        </div>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[20, 50, 100, 200]"
+          :total="filteredServers.length"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
 
     <!-- Add/Edit Dialog -->
@@ -102,31 +119,64 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { getServers, getServerForEdit, createServer, updateServer, deleteServer, testConnection } from '../api'
+import { ref, computed, watch, onMounted } from 'vue'
+import { getServers, getServerForEdit, createServer, updateServer, deleteServer, testConnection, batchDeleteServers, batchToggleServers, batchTestServers, toggleServerEnabled } from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const servers = ref([])
 const searchQuery = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
 
 const filteredServers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return servers.value
-  return servers.value.filter(s =>
-    s.name.toLowerCase().includes(q) ||
-    s.host.toLowerCase().includes(q) ||
-    s.server_type.toLowerCase().includes(q) ||
-    s.env.toLowerCase().includes(q) ||
-    String(s.port).includes(q)
-  )
+  return servers.value.filter(s => {
+    const statusText = s.enabled ? '已启用' : '已禁用'
+    const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
+
+    return (
+      s.name.toLowerCase().includes(q) ||
+      s.host.toLowerCase().includes(q) ||
+      s.server_type.toLowerCase().includes(q) ||
+      typeText.toLowerCase().includes(q) ||
+      s.env.toLowerCase().includes(q) ||
+      String(s.port).includes(q) ||
+      s.username.toLowerCase().includes(q) ||
+      (s.description && s.description.toLowerCase().includes(q)) ||
+      statusText.includes(q) ||
+      (q === '启用' && s.enabled) ||
+      (q === '禁用' && !s.enabled)
+    )
+  })
 })
+
+const paginatedServers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredServers.value.slice(start, start + pageSize.value)
+})
+
+const batchToggleType = computed(() => {
+  if (selectedRows.value.length === 0) return 'success'
+  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  return allDisabled ? 'success' : 'warning'
+})
+
+const batchToggleLabel = computed(() => {
+  if (selectedRows.value.length === 0) return '启用'
+  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  return allDisabled ? '启用' : '禁用'
+})
+
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const isCopy = ref(false)
 const editId = ref(null)
 const submitting = ref(false)
+const loading = ref(false)
 const form = ref(getDefaultForm())
 const selectedRow = ref(null)
+const selectedRows = ref([])
 const tableRef = ref(null)
 
 function getDefaultForm() {
@@ -155,29 +205,70 @@ function tableRowClassName({ row }) {
   return ''
 }
 
+// 显示批量操作结果消息
+function showBatchResult(res) {
+  const message = res.message || '操作完成'
+  const success = res.deleted || res.updated || 0
+  const failed = res.failed || 0
+
+  // 将消息中的换行符转换为 HTML
+  const htmlMessage = message.replace(/\n/g, '<br>')
+
+  if (failed === 0) {
+    ElMessage({ message: htmlMessage, type: 'success', dangerouslyUseHTMLString: true })
+  } else if (success === 0) {
+    ElMessage({ message: htmlMessage, type: 'error', dangerouslyUseHTMLString: true })
+  } else {
+    ElMessage({ message: htmlMessage, type: 'warning', dangerouslyUseHTMLString: true, duration: 5000 })
+  }
+}
+
 function handleSelectionChange(rows) {
-  if (rows.length > 1) {
-    // 只允许选中一个，取消之前的选择
-    tableRef.value.clearSelection()
-    tableRef.value.toggleRowSelection(rows[rows.length - 1], true)
-    selectedRow.value = rows[rows.length - 1]
-  } else if (rows.length === 1) {
+  selectedRows.value = rows
+  if (rows.length === 1) {
     selectedRow.value = rows[0]
+  } else if (rows.length > 1) {
+    selectedRow.value = rows[rows.length - 1]
   } else {
     selectedRow.value = null
   }
 }
 
+function handleSizeChange() {
+  currentPage.value = 1
+  selectedRows.value = []
+  selectedRow.value = null
+}
+
+function handleCurrentChange() {
+  selectedRows.value = []
+  selectedRow.value = null
+}
+
+watch(searchQuery, () => {
+  currentPage.value = 1
+})
+
 onMounted(() => {
   loadData()
 })
 
-async function loadData() {
+async function loadData(showMessage = false) {
+  loading.value = true
   try {
     servers.value = await getServers(undefined, true)
+    if (showMessage) {
+      ElMessage.success('刷新成功')
+    }
   } catch (e) {
     ElMessage.error('加载服务器列表失败')
+  } finally {
+    loading.value = false
   }
+}
+
+function handleRefresh() {
+  loadData(true)
 }
 
 function handleAdd() {
@@ -224,22 +315,56 @@ async function handleEdit(row) {
   }
 }
 
-function handleDeleteSelected() {
-  if (!selectedRow.value) return
-  handleDelete(selectedRow.value)
-}
+async function handleBatchToggle() {
+  if (selectedRows.value.length === 0) return
 
-async function handleDelete(row) {
+  const enabled = batchToggleLabel.value === '启用'
+  const action = enabled ? '启用' : '禁用'
+
+  const names = selectedRows.value.map(r => r.name).join('、')
   try {
-    await ElMessageBox.confirm(`确定要删除服务器 "${row.name}" 吗？`, '确认删除')
-    await deleteServer(row.id)
-    ElMessage.success('删除成功')
+    await ElMessageBox.confirm(`确定要${action}以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, `批量${action}`, { type: 'warning' })
+    const res = await batchToggleServers(selectedRows.value.map(r => r.id), enabled)
+    showBatchResult(res)
     selectedRow.value = null
+    selectedRows.value = []
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error('删除失败')
+      ElMessage.error(e.response?.data?.error || `批量${action}失败`)
     }
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedRows.value.length === 0) return
+
+  const names = selectedRows.value.map(r => r.name).join('、')
+  try {
+    await ElMessageBox.confirm(`确定要删除以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, '批量删除', { type: 'warning' })
+    const res = await batchDeleteServers(selectedRows.value.map(r => r.id))
+    showBatchResult(res)
+    selectedRow.value = null
+    selectedRows.value = []
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '批量删除失败')
+    }
+  }
+}
+
+async function handleBatchTest() {
+  if (selectedRows.value.length === 0) return
+
+  const loading = ElMessage({ message: `正在测试 ${selectedRows.value.length} 个服务器连接...`, type: 'info', duration: 0 })
+  try {
+    const res = await batchTestServers(selectedRows.value.map(r => r.id))
+    loading.close()
+    showBatchResult(res)
+  } catch (e) {
+    loading.close()
+    ElMessage.error(e.response?.data?.error || '批量测试失败')
   }
 }
 
@@ -278,23 +403,6 @@ async function handleSubmit() {
     submitting.value = false
   }
 }
-
-async function handleTest() {
-  if (!selectedRow.value) return
-  const loading = ElMessage({ message: '正在测试连接...', type: 'info', duration: 0 })
-  try {
-    const res = await testConnection(selectedRow.value.id)
-    loading.close()
-    if (res.success) {
-      ElMessage.success(res.message)
-    } else {
-      ElMessage.error(res.error)
-    }
-  } catch (e) {
-    loading.close()
-    ElMessage.error(e.response?.data?.error || '测试失败')
-  }
-}
 </script>
 
 <style scoped>
@@ -319,5 +427,22 @@ async function handleTest() {
 }
 :deep(.disabled-row:hover > td) {
   background-color: var(--bg-elevated) !important;
+}
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding: 8px 0;
+}
+.pagination-left {
+  display: flex;
+  align-items: center;
+}
+.selection-count {
+  font-size: var(--el-pagination-font-size, 13px);
+  color: var(--el-text-color-regular);
+  white-space: nowrap;
+  line-height: 32px;
 }
 </style>

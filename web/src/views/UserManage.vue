@@ -9,7 +9,8 @@
           <el-button type="primary" @click="handleEditSelected" :disabled="selectedRows.length !== 1">编辑</el-button>
           <el-button type="warning" @click="handleResetPwdSelected" :disabled="selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'">重置密码</el-button>
           <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0">删除</el-button>
-          <el-input v-model="searchQuery" placeholder="搜索用户名 / 姓名 / 邮箱 / 状态 / 角色 / 认证来源" clearable style="width: 300px; margin-left: auto;" />
+          <el-button type="info" class="el-button--cyan" @click="handleRefresh" :loading="loading">刷新</el-button>
+          <el-input v-model="searchQuery" placeholder="搜索用户信息" clearable style="width: 300px; margin-left: auto;" />
         </div>
       </template>
 
@@ -214,6 +215,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const submitting = ref(false)
+const loading = ref(false)
 const form = ref({ username: '', password: '', name: '', email: '', role: 'user', enabled: true })
 const selectedRow = ref(null)
 const selectedRows = ref([])
@@ -263,6 +265,24 @@ function formatTime(t) {
   return new Date(t).toLocaleString('zh-CN')
 }
 
+// 显示批量操作结果消息
+function showBatchResult(res) {
+  const message = res.message || '操作完成'
+  const success = res.deleted || res.updated || 0
+  const failed = res.failed || 0
+
+  // 将消息中的换行符转换为 HTML
+  const htmlMessage = message.replace(/\n/g, '<br>')
+
+  if (failed === 0) {
+    ElMessage({ message: htmlMessage, type: 'success', dangerouslyUseHTMLString: true })
+  } else if (success === 0) {
+    ElMessage({ message: htmlMessage, type: 'error', dangerouslyUseHTMLString: true })
+  } else {
+    ElMessage({ message: htmlMessage, type: 'warning', dangerouslyUseHTMLString: true, duration: 5000 })
+  }
+}
+
 function handleSelectionChange(rows) {
   selectedRows.value = rows
   // 单选逻辑：用于编辑/禁用/重置密码等操作
@@ -297,12 +317,22 @@ onMounted(() => {
   checkLdapEnabled()
 })
 
-async function loadData() {
+async function loadData(showMessage = false) {
+  loading.value = true
   try {
     users.value = await getUsers()
+    if (showMessage) {
+      ElMessage.success('刷新成功')
+    }
   } catch (e) {
     ElMessage.error('加载用户列表失败')
+  } finally {
+    loading.value = false
   }
+}
+
+function handleRefresh() {
+  loadData(true)
 }
 
 async function checkLdapEnabled() {
@@ -371,7 +401,7 @@ async function handleBatchToggle() {
   try {
     await ElMessageBox.confirm(`确定要${action}以下 ${operable.length} 个用户吗？\n${names}`, `批量${action}`, { type: 'warning' })
     const res = await batchToggleUsers(operable.map(r => r.id), enabled)
-    ElMessage.success(res.message || `已${action} ${operable.length} 个用户`)
+    showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
     await loadData()
@@ -396,7 +426,7 @@ async function handleBatchDelete() {
   try {
     await ElMessageBox.confirm(`确定要删除以下 ${deletable.length} 个用户吗？\n${names}`, '批量删除', { type: 'warning' })
     const res = await batchDeleteUsers(deletable.map(r => r.id))
-    ElMessage.success(res.message)
+    showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
     await loadData()
