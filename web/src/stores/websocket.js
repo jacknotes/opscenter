@@ -1,0 +1,131 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+/**
+ * 全局 WebSocket store，用于跨页面保持命令执行状态。
+ * 解决切换页面后命令执行变成 failed 的问题。
+ *
+ * 状态流转：idle → connecting → streaming → done/error
+ * 组件通过 watch status 来响应状态变化，而非回调。
+ */
+export const useWebSocketStore = defineStore('websocket', () => {
+  const outputLines = ref([])
+  const status = ref('idle') // idle, connecting, streaming, done, error
+  const lastError = ref('')  // 最后一次错误信息，组件 watch 时读取后清空
+  const wsRef = ref(null)
+  let connectTimer = null
+
+  function connect(url, previewId, { token } = {}) {
+    cleanup()
+    outputLines.value = []
+    status.value = 'connecting'
+    lastError.value = ''
+
+    let ws
+    try {
+      ws = new WebSocket(url)
+    } catch (e) {
+      status.value = 'error'
+      lastError.value = `连接创建失败: ${e.message}`
+      outputLines.value.push({ text: `[ERROR] ${lastError.value}`, stream: 'stderr' })
+      return
+    }
+    wsRef.value = ws
+
+    // 连接超时：10秒内未建立连接则报错
+    connectTimer = setTimeout(() => {
+      if (status.value === 'connecting') {
+        status.value = 'error'
+        lastError.value = '连接超时'
+        outputLines.value.push({ text: '[ERROR] 连接超时', stream: 'stderr' })
+        if (wsRef.value) {
+          wsRef.value.close()
+          wsRef.value = null
+        }
+      }
+    }, 10000)
+
+    ws.onopen = () => {
+      clearTimeout(connectTimer)
+      status.value = 'streaming'
+      ws.send(JSON.stringify({ type: 'start', preview_id: previewId, token: token || '' }))
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        switch (msg.type) {
+          case 'output':
+            outputLines.value.push({ text: msg.data, stream: msg.stream })
+            break
+          case 'done':
+            status.value = 'done'
+            break
+          case 'error':
+            status.value = 'error'
+            lastError.value = msg.message || '执行失败'
+            outputLines.value.push({ text: `[ERROR] ${msg.message}`, stream: 'stderr' })
+            break
+          case 'lock_error':
+            status.value = 'error'
+            lastError.value = msg.message
+            outputLines.value.push({ text: `[LOCK] ${msg.message}`, stream: 'stderr' })
+            break
+        }
+      } catch (e) {
+        console.error('Failed to parse WS message:', e)
+      }
+    }
+
+    ws.onerror = () => {
+      console.error('WebSocket error, current status:', status.value)
+    }
+
+    ws.onclose = (event) => {
+      clearTimeout(connectTimer)
+      console.log('WebSocket closed, code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean, 'status:', status.value)
+      if (status.value === 'streaming' || status.value === 'connecting') {
+        status.value = 'error'
+        if (event.code === 1006) {
+          lastError.value = '连接失败，请检查认证状态或服务器是否可达'
+        } else if (!event.wasClean) {
+          lastError.value = `连接异常断开 (code: ${event.code})`
+        } else {
+          lastError.value = '连接已断开'
+        }
+        outputLines.value.push({ text: `[ERROR] ${lastError.value}`, stream: 'stderr' })
+      }
+      wsRef.value = null
+    }
+  }
+
+  function cleanup() {
+    clearTimeout(connectTimer)
+    if (wsRef.value) {
+      wsRef.value.onclose = null
+      wsRef.value.close()
+      wsRef.value = null
+    }
+  }
+
+  function disconnect() {
+    cleanup()
+  }
+
+  /** 重置为 idle 状态（组件 mount 时如果已完成/出错，可调用此方法清理） */
+  function reset() {
+    cleanup()
+    outputLines.value = []
+    status.value = 'idle'
+    lastError.value = ''
+  }
+
+  return {
+    outputLines,
+    status,
+    lastError,
+    connect,
+    disconnect,
+    reset,
+  }
+})

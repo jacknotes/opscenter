@@ -230,18 +230,18 @@
 
     <!-- Streaming Output Area -->
     <StreamOutput
-      v-if="streamStatus !== 'idle'"
-      :lines="outputLines"
-      :status="streamStatus"
+      v-if="wsStore.status !== 'idle'"
+      :lines="wsStore.outputLines"
+      :status="wsStore.status"
       :showCancel="false"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl, getLvsBindings, updateLvsBinding, deleteLvsBinding, getLvsVSTags, getLvsTags, checkLvsForScaleDown } from '../api'
-import { useWebSocket } from '../composables/useWebSocket'
+import { useWebSocketStore } from '../stores/websocket'
 import { useUserStore } from '../stores/user'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -262,8 +262,20 @@ const currentAction = ref('')
 
 // Streaming state
 const userStore = useUserStore()
-const { outputLines, status: streamStatus, connect: wsConnect, disconnect: wsDisconnect } = useWebSocket()
+const wsStore = useWebSocketStore()
 const outputCache = new Map()
+
+// 监听 WebSocket 状态变化（支持页面切换后继续执行）
+watch(() => wsStore.status, async (newStatus, oldStatus) => {
+  if (newStatus === 'done') {
+    executing.value = false
+    ElMessage.success('执行成功')
+    await loadData()
+  } else if (newStatus === 'error') {
+    executing.value = false
+    ElMessage.error(wsStore.lastError || '执行失败')
+  }
+}, { immediate: true })
 const search = ref('')
 const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
@@ -417,10 +429,14 @@ async function handleRefresh() {
 // 切换服务器时，缓存/恢复执行结果
 watch(serverId, (newVal, oldVal) => {
   if (oldVal != null) {
-    outputCache.set(oldVal, [...outputLines.value])
+    outputCache.set(oldVal, [...wsStore.outputLines])
   }
   const cached = outputCache.get(newVal)
-  outputLines.value = cached ? [...cached] : []
+  if (cached) {
+    wsStore.outputLines.splice(0, wsStore.outputLines.length, ...cached)
+  } else {
+    wsStore.outputLines.splice(0, wsStore.outputLines.length)
+  }
 })
 
 onMounted(async () => {
@@ -438,10 +454,6 @@ onMounted(async () => {
   } catch (e) {
     ElMessage.error('加载服务器列表失败')
   }
-})
-
-onBeforeUnmount(() => {
-  wsDisconnect()
 })
 
 async function loadData() {
@@ -679,21 +691,8 @@ function executePreview() {
   previewVisible.value = false
 
   const url = getWebSocketUrl('/api/ws/exec', userStore.token)
-  wsConnect(url, previewId.value, {
+  wsStore.connect(url, previewId.value, {
     token: userStore.token,
-    onDone: async () => {
-      executing.value = false
-      ElMessage.success('执行成功')
-      await loadData()
-    },
-    onError: (msg) => {
-      executing.value = false
-      ElMessage.error(msg || '执行失败')
-    },
-    onLockError: (msg) => {
-      executing.value = false
-      ElMessage.error(msg)
-    },
   })
 }
 </script>

@@ -34,7 +34,7 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑服务器' : (isCopy ? '复制服务器' : '添加服务器')" width="600px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑服务器' : (isCopy ? '复制服务器' : '添加服务器')" width="600px" align-center>
       <el-form :model="form" label-width="120px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />

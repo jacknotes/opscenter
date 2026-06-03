@@ -32,9 +32,9 @@
           <template #default="{ row }">
             <div style="padding: 10px;">
               <p><strong>命令：</strong></p>
-              <pre style="background: #1A1D2E; color: #E2E8F0; padding: 10px; border-radius: 4px;">{{ row.detail }}</pre>
+              <pre class="command-block">{{ row.detail }}</pre>
               <p style="margin-top: 10px;"><strong>输出：</strong></p>
-              <pre style="background: #0B0D13; color: #22D3EE; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ row.output }}</pre>
+              <pre class="output-block">{{ row.output }}</pre>
             </div>
           </template>
         </el-table-column>
@@ -163,4 +163,30 @@ async function loadData() {
 </script>
 
 <style scoped>
+.command-block {
+  background: #1A1D2E;
+  color: #E2E8F0;
+  padding: 10px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.command-block::selection {
+  background: rgba(59, 130, 246, 0.5);
+  color: #fff;
+}
+.output-block {
+  background: #0B0D13;
+  color: #22D3EE;
+  padding: 10px;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.output-block::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
 </style>
