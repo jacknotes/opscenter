@@ -248,3 +248,72 @@ func (s *LDAPService) TestConnection() error {
 	log.Printf("[LDAP] 连接测试成功: %s:%d", s.config.Host, s.config.Port)
 	return nil
 }
+
+// ListUsers 获取 LDAP 用户列表。
+func (s *LDAPService) ListUsers() ([]LDAPUserInfo, error) {
+	if !s.config.Enabled {
+		return nil, fmt.Errorf("LDAP 未启用")
+	}
+
+	conn, err := s.connect()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	if err := s.bindAdmin(conn); err != nil {
+		return nil, err
+	}
+
+	attrUsername := s.config.Attributes.Username
+	if attrUsername == "" {
+		attrUsername = "sAMAccountName"
+	}
+	attrName := s.config.Attributes.Name
+	if attrName == "" {
+		attrName = "displayName"
+	}
+	attrEmail := s.config.Attributes.Email
+	if attrEmail == "" {
+		attrEmail = "mail"
+	}
+
+	// 搜索所有用户
+	filter := "(&(objectClass=user)(objectCategory=person))"
+	if s.config.UserFilter != "" {
+		filter = s.config.UserFilter
+	}
+
+	searchReq := ldap.NewSearchRequest(
+		s.config.BaseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		0, // 不限制数量
+		0,
+		false,
+		filter,
+		[]string{"dn", attrUsername, attrName, attrEmail},
+		nil,
+	)
+
+	sr, err := conn.Search(searchReq)
+	if err != nil {
+		return nil, fmt.Errorf("LDAP 搜索失败: %w", err)
+	}
+
+	var users []LDAPUserInfo
+	for _, entry := range sr.Entries {
+		username := entry.GetAttributeValue(attrUsername)
+		if username == "" {
+			continue
+		}
+		users = append(users, LDAPUserInfo{
+			Username: username,
+			Name:     entry.GetAttributeValue(attrName),
+			Email:    entry.GetAttributeValue(attrEmail),
+			DN:       entry.DN,
+		})
+	}
+
+	return users, nil
+}

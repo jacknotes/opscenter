@@ -187,44 +187,29 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	// 优先尝试 LDAP 认证（非 admin 用户）
 	if config.Global.LDAP.Enabled && req.Username != "admin" {
-		ldapInfo, err := h.ldapSvc.Authenticate(req.Username, req.Password)
-		if err == nil {
-			// LDAP 认证成功，查找或创建本地用户
-			if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
-				// 用户不存在，自动创建
-				user = model.User{
-					Username:   ldapInfo.Username,
-					Name:       ldapInfo.Name,
-					Email:      ldapInfo.Email,
-					Role:       "user",
-					Enabled:    true,
-					AuthSource: "ldap",
-					LDAPDN:     ldapInfo.DN,
-				}
-				if user.Name == "" {
-					user.Name = ldapInfo.Username
-				}
-				if err := h.db.Create(&user).Error; err != nil {
-					log.Printf("[LDAP] 自动创建用户失败: %v", err)
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
-					return
-				}
-				log.Printf("[LDAP] 自动创建用户: %s", ldapInfo.Username)
-			} else {
-				// 用户存在，检查是否被禁用
-				if !user.Enabled {
-					loginRateLimiter.Record(clientIP)
-					createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
-					return
-				}
-				// 更新 LDAP 信息
-				if user.AuthSource != "ldap" {
-					h.db.Model(&user).Updates(map[string]interface{}{
-						"auth_source": "ldap",
-						"ldap_dn":     ldapInfo.DN,
-					})
-				}
+		// 先检查用户是否已导入到系统
+		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "ldap").First(&user).Error; err == nil {
+			// 用户已导入，进行 LDAP 认证
+			ldapInfo, ldapErr := h.ldapSvc.Authenticate(req.Username, req.Password)
+			if ldapErr != nil {
+				// LDAP 认证失败
+				loginRateLimiter.Record(clientIP)
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+				return
+			}
+
+			// 检查用户是否被禁用
+			if !user.Enabled {
+				loginRateLimiter.Record(clientIP)
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+				return
+			}
+
+			// 更新 LDAP 信息（如果变化）
+			if user.LDAPDN != ldapInfo.DN {
+				h.db.Model(&user).Update("ldap_dn", ldapInfo.DN)
 			}
 
 			token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
@@ -238,8 +223,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 			return
 		}
-		// LDAP 认证失败，回退到本地认证
-		log.Printf("[LDAP] 认证失败，回退到本地认证: %v", err)
+
+		// 用户未导入，提示联系管理员
+		loginRateLimiter.Record(clientIP)
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户未授权", 0, "")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权，请联系管理员导入 LDAP 账户"})
+		return
 	}
 
 	// 本地密码认证
@@ -811,6 +800,123 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 //	@Failure		403	{object}	object
 //	@Failure		404	{object}	object
 //	@Router			/users/{id}/toggle [put]
+
+// ListLDAPUsers godoc
+//
+//	@Summary		获取 LDAP 用户列表
+//	@Description	从 LDAP 获取 OU 下的用户列表（管理员）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{array}		service.LDAPUserInfo
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		500	{object}	object
+//	@Router			/users/ldap [get]
+func (h *AuthHandler) ListLDAPUsers(c *gin.Context) {
+	if !config.Global.LDAP.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "LDAP 未启用"})
+		return
+	}
+
+	users, err := h.ldapSvc.ListUsers()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("获取 LDAP 用户失败: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, users)
+}
+
+// ImportLDAPUsers godoc
+//
+//	@Summary		导入 LDAP 用户
+//	@Description	批量导入 LDAP 用户到系统（管理员）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		ImportLDAPUsersRequest	true	"导入参数"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/ldap/import [post]
+func (h *AuthHandler) ImportLDAPUsers(c *gin.Context) {
+	if !config.Global.LDAP.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "LDAP 未启用"})
+		return
+	}
+
+	var req ImportLDAPUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.Users) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要导入的用户"})
+		return
+	}
+
+	imported := 0
+	skipped := 0
+	failed := 0
+
+	for _, u := range req.Users {
+		// 检查用户是否已存在
+		var existingUser model.User
+		if err := h.db.Where("username = ?", u.Username).First(&existingUser).Error; err == nil {
+			// 用户已存在，跳过
+			skipped++
+			continue
+		}
+
+		// 创建用户
+		user := model.User{
+			Username:   u.Username,
+			Name:       u.Name,
+			Email:      u.Email,
+			Role:       "user",
+			Enabled:    true,
+			AuthSource: "ldap",
+			LDAPDN:     u.DN,
+		}
+		if user.Name == "" {
+			user.Name = u.Username
+		}
+
+		if err := h.db.Create(&user).Error; err != nil {
+			log.Printf("[LDAP] 导入用户 %s 失败: %v", u.Username, err)
+			failed++
+			continue
+		}
+		imported++
+	}
+
+	createAuditLog(h.db, c, "auth", "import_ldap_users",
+		fmt.Sprintf("导入 LDAP 用户: 成功 %d, 跳过 %d, 失败 %d", imported, skipped, failed),
+		"", "success", "", 0, "")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  fmt.Sprintf("导入完成: 成功 %d, 跳过 %d, 失败 %d", imported, skipped, failed),
+		"imported": imported,
+		"skipped":  skipped,
+		"failed":   failed,
+	})
+}
+
+type ImportLDAPUsersRequest struct {
+	Users []ImportLDAPUser `json:"users" binding:"required"`
+}
+
+type ImportLDAPUser struct {
+	Username string `json:"username" binding:"required"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	DN       string `json:"dn" binding:"required"`
+}
 func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

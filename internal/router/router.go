@@ -195,6 +195,9 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			users.DELETE("/:id", authHandler.DeleteUser)
 			users.PUT("/:id/reset-password", authHandler.ResetPassword)
 			users.PUT("/:id/toggle", authHandler.ToggleUserEnabled)
+			// LDAP user management
+			users.GET("/ldap", authHandler.ListLDAPUsers)
+			users.POST("/ldap/import", authHandler.ImportLDAPUsers)
 		}
 
 		// Change password (any authenticated user, for self only)

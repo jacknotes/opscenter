@@ -4,6 +4,7 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
+          <el-button type="success" @click="showLdapImport" v-if="ldapEnabled">导入 LDAP 用户</el-button>
           <el-button :type="selectedRow?.enabled ? 'warning' : 'success'" @click="handleToggleSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">{{ selectedRow?.enabled ? '禁用' : '启用' }}</el-button>
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
           <el-button type="warning" @click="handleResetPwdSelected" :disabled="!selectedRow || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'">重置密码</el-button>
@@ -84,14 +85,47 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmitResetPwd">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- LDAP Import Dialog -->
+    <el-dialog v-model="ldapImportVisible" title="导入 LDAP 用户" width="800px" @close="ldapUsers = []">
+      <div v-if="ldapLoading" style="text-align: center; padding: 40px;">
+        <el-icon class="is-loading" :size="32"><Loading /></el-icon>
+        <p style="margin-top: 12px; color: #94A3B8;">正在从 LDAP 获取用户列表...</p>
+      </div>
+      <div v-else>
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 14px; color: #94A3B8;">选择要导入的用户，已导入的用户将自动跳过</span>
+          <el-input v-model="ldapSearch" placeholder="搜索用户" clearable style="width: 200px;" />
+        </div>
+        <el-table :data="filteredLdapUsers" stripe border max-height="400" @selection-change="handleLdapSelectionChange" ref="ldapTableRef">
+          <el-table-column type="selection" width="55" :selectable="(row) => !row.imported" />
+          <el-table-column prop="username" label="用户名" width="120" />
+          <el-table-column prop="name" label="姓名" min-width="120" />
+          <el-table-column prop="email" label="邮箱" min-width="180" />
+          <el-table-column label="状态" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.imported" type="success" size="small">已导入</el-tag>
+              <el-tag v-else type="info" size="small">未导入</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="ldapImportVisible = false">取消</el-button>
+        <el-button type="primary" :loading="importing" :disabled="selectedLdapUsers.length === 0" @click="handleImportLdapUsers">
+          导入 ({{ selectedLdapUsers.length }})
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getUsers, createUser, updateUser, deleteUser, resetPassword, toggleUserEnabled } from '../api'
+import { getUsers, createUser, updateUser, deleteUser, resetPassword, toggleUserEnabled, getLdapUsers, importLdapUsers } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const currentUserId = computed(() => userStore.userInfo?.id)
@@ -121,6 +155,26 @@ const tableRef = ref(null)
 const resetPwdVisible = ref(false)
 const resetPwdForm = ref({ id: null, username: '', password: '' })
 
+// LDAP 导入相关
+const ldapEnabled = ref(false)
+const ldapImportVisible = ref(false)
+const ldapLoading = ref(false)
+const importing = ref(false)
+const ldapUsers = ref([])
+const ldapSearch = ref('')
+const selectedLdapUsers = ref([])
+const ldapTableRef = ref(null)
+
+const filteredLdapUsers = computed(() => {
+  const q = ldapSearch.value.trim().toLowerCase()
+  if (!q) return ldapUsers.value
+  return ldapUsers.value.filter(u =>
+    u.username.toLowerCase().includes(q) ||
+    (u.name && u.name.toLowerCase().includes(q)) ||
+    (u.email && u.email.toLowerCase().includes(q))
+  )
+})
+
 function formatTime(t) {
   if (!t) return ''
   return new Date(t).toLocaleString('zh-CN')
@@ -140,6 +194,7 @@ function handleSelectionChange(rows) {
 
 onMounted(() => {
   loadData()
+  checkLdapEnabled()
 })
 
 async function loadData() {
@@ -147,6 +202,15 @@ async function loadData() {
     users.value = await getUsers()
   } catch (e) {
     ElMessage.error('加载用户列表失败')
+  }
+}
+
+async function checkLdapEnabled() {
+  try {
+    await getLdapUsers()
+    ldapEnabled.value = true
+  } catch (e) {
+    ldapEnabled.value = false
   }
 }
 
@@ -269,6 +333,48 @@ async function handleSubmitResetPwd() {
     ElMessage.error(e.response?.data?.error || '重置失败')
   } finally {
     submitting.value = false
+  }
+}
+
+// LDAP 导入
+async function showLdapImport() {
+  ldapImportVisible.value = true
+  ldapLoading.value = true
+  ldapSearch.value = ''
+  selectedLdapUsers.value = []
+  try {
+    const ldapList = await getLdapUsers()
+    // 标记已导入的用户
+    const importedUsernames = new Set(users.value.filter(u => u.auth_source === 'ldap').map(u => u.username))
+    ldapUsers.value = (ldapList || []).map(u => ({
+      ...u,
+      imported: importedUsernames.has(u.username)
+    }))
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '获取 LDAP 用户失败')
+    ldapImportVisible.value = false
+  } finally {
+    ldapLoading.value = false
+  }
+}
+
+function handleLdapSelectionChange(rows) {
+  selectedLdapUsers.value = rows
+}
+
+async function handleImportLdapUsers() {
+  if (selectedLdapUsers.value.length === 0) return
+
+  importing.value = true
+  try {
+    const res = await importLdapUsers(selectedLdapUsers.value)
+    ElMessage.success(res.message)
+    ldapImportVisible.value = false
+    await loadData()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.error || '导入失败')
+  } finally {
+    importing.value = false
   }
 }
 </script>
