@@ -95,7 +95,10 @@
       <div v-else>
         <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
           <span style="font-size: 14px; color: #94A3B8;">选择要导入的用户，已导入的用户将自动跳过</span>
-          <el-input v-model="ldapSearch" placeholder="搜索用户" clearable style="width: 200px;" />
+          <div style="display: flex; gap: 8px;">
+            <el-input v-model="ldapSearch" placeholder="搜索用户" clearable style="width: 200px;" />
+            <el-button type="info" class="el-button--cyan" @click="showLdapImport" :loading="ldapLoading">刷新</el-button>
+          </div>
         </div>
         <el-table :data="filteredLdapUsers" stripe border max-height="400" @selection-change="handleLdapSelectionChange" ref="ldapTableRef">
           <el-table-column type="selection" width="55" :selectable="(row) => !row.imported" />

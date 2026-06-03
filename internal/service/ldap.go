@@ -12,10 +12,10 @@ import (
 
 // LDAPUserInfo 从 LDAP 获取的用户信息。
 type LDAPUserInfo struct {
-	Username string // 用户名（sAMAccountName）
-	Name     string // 姓名（displayName）
-	Email    string // 邮箱（mail）
-	DN       string // 用户 DN
+	Username string `json:"username"` // 用户名（sAMAccountName）
+	Name     string `json:"name"`     // 姓名（displayName）
+	Email    string `json:"email"`    // 邮箱（mail）
+	DN       string `json:"dn"`       // 用户 DN
 }
 
 // LDAPService 负责 LDAP 认证。
@@ -315,5 +315,6 @@ func (s *LDAPService) ListUsers() ([]LDAPUserInfo, error) {
 		})
 	}
 
+	log.Printf("[LDAP] ListUsers: 搜索到 %d 条记录，返回 %d 个用户", len(sr.Entries), len(users))
 	return users, nil
 }
