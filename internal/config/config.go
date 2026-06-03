@@ -23,6 +23,7 @@ type Config struct {
 	Timeouts TimeoutConfig  `yaml:"timeouts"`
 	Nginx    NginxConfig    `yaml:"nginx"`
 	Auth     AuthConfig     `yaml:"auth"`
+	LDAP     LDAPConfig     `yaml:"ldap"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -77,6 +78,26 @@ type NginxConfig struct {
 type AuthConfig struct {
 	MaxLoginAttempts  int           `yaml:"max_login_attempts"`  // 最大失败尝试次数，默认 10
 	LoginLockDuration time.Duration `yaml:"login_lock_duration"` // 登录锁定时长，默认 1m
+}
+
+// LDAPConfig 是 LDAP 认证配置。
+type LDAPConfig struct {
+	Enabled      bool           `yaml:"enabled"`       // 是否启用 LDAP 认证
+	Host         string         `yaml:"host"`          // LDAP 服务器地址
+	Port         int            `yaml:"port"`          // LDAP 服务器端口，默认 389
+	BaseDN       string         `yaml:"base_dn"`       // 搜索基础 DN
+	BindDN       string         `yaml:"bind_dn"`       // 绑定用户 DN
+	BindPassword string         `yaml:"bind_password"` // 绑定用户密码
+	Attributes   LDAPAttributes `yaml:"attributes"`    // 用户属性映射
+	UserFilter   string         `yaml:"user_filter"`   // 用户搜索过滤器（可选）
+	StartTLS     bool           `yaml:"start_tls"`     // 是否启用 StartTLS
+}
+
+// LDAPAttributes 是 LDAP 用户属性映射配置。
+type LDAPAttributes struct {
+	Username string `yaml:"username"` // 用户名属性，默认 sAMAccountName
+	Name     string `yaml:"name"`     // 姓名属性，默认 displayName
+	Email    string `yaml:"email"`    // 邮箱属性，默认 mail
 }
 
 // RedisConfig 是 Redis 连接配置，支持单节点和哨兵两种模式。
@@ -154,6 +175,21 @@ func Load(path string) error {
 	if v := os.Getenv("REDIS_SENTINEL_ADDRS"); v != "" {
 		Global.Redis.SentinelAddrs = strings.Split(v, ",")
 	}
+	// LDAP 环境变量覆盖
+	if v := os.Getenv("LDAP_ENABLED"); v != "" {
+		Global.LDAP.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("LDAP_HOST"); v != "" {
+		Global.LDAP.Host = v
+	}
+	if v := os.Getenv("LDAP_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil {
+			Global.LDAP.Port = port
+		}
+	}
+	if v := os.Getenv("LDAP_BIND_PASSWORD"); v != "" {
+		Global.LDAP.BindPassword = v
+	}
 
 	// Redis 默认值
 	if Global.Redis.Mode == "" {
@@ -207,6 +243,19 @@ func Load(path string) error {
 	}
 	if Global.Auth.LoginLockDuration == 0 {
 		Global.Auth.LoginLockDuration = 1 * time.Minute
+	}
+	// LDAP 默认值
+	if Global.LDAP.Port == 0 {
+		Global.LDAP.Port = 389
+	}
+	if Global.LDAP.Attributes.Username == "" {
+		Global.LDAP.Attributes.Username = "sAMAccountName"
+	}
+	if Global.LDAP.Attributes.Name == "" {
+		Global.LDAP.Attributes.Name = "displayName"
+	}
+	if Global.LDAP.Attributes.Email == "" {
+		Global.LDAP.Attributes.Email = "mail"
 	}
 
 	if Global.JWT.Expire == 0 {

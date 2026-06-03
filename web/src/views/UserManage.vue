@@ -6,7 +6,7 @@
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
           <el-button :type="selectedRow?.enabled ? 'warning' : 'success'" @click="handleToggleSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">{{ selectedRow?.enabled ? '禁用' : '启用' }}</el-button>
           <el-button type="primary" @click="handleEditSelected" :disabled="!selectedRow">编辑</el-button>
-          <el-button type="warning" @click="handleResetPwdSelected" :disabled="!selectedRow || selectedRow?.username === 'admin'">重置密码</el-button>
+          <el-button type="warning" @click="handleResetPwdSelected" :disabled="!selectedRow || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'">重置密码</el-button>
           <el-button type="danger" @click="handleDeleteSelected" :disabled="!selectedRow || selectedRow?.id === currentUserId || selectedRow?.username === 'admin'">删除</el-button>
           <el-input v-model="searchQuery" placeholder="搜索用户名 / 姓名 / 邮箱" clearable style="width: 250px; margin-left: auto;" />
         </div>
@@ -25,6 +25,11 @@
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
             <el-tag :type="row.role === 'admin' ? 'danger' : 'info'">{{ row.role === 'admin' ? '管理员' : '普通用户' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="认证来源" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.auth_source === 'ldap' ? 'warning' : 'info'" size="small">{{ row.auth_source === 'ldap' ? 'LDAP' : '本地' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" min-width="160">

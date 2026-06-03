@@ -73,3 +73,22 @@ auth:
   max_login_attempts: 10
   # 登录限流：锁定时长（默认 1m）
   login_lock_duration: 1m
+
+# LDAP 认证配置（可选，不配置则不启用）
+# 启用后，非 admin 用户可使用域账号密码登录，首次登录自动创建本地用户
+ldap:
+  enabled: false
+  host: "192.168.10.110"
+  port: 389
+  base_dn: "DC=hs,DC=com"
+  bind_dn: "CN=域管理员,OU=Services,OU=Headquarter,DC=hs,DC=com"
+  bind_password: ""
+  # 用户属性映射（AD 域默认值）
+  attributes:
+    username: "sAMAccountName"
+    name: "displayName"
+    email: "mail"
+  # 自定义用户搜索过滤器（可选，默认根据 username 属性搜索）
+  # user_filter: "(&(objectClass=user)(sAMAccountName=%s))"
+  # 是否启用 StartTLS（默认 false）
+  start_tls: false

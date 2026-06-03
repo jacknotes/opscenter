@@ -18,6 +18,7 @@ import (
 	"opscenter/internal/config"
 	"opscenter/internal/middleware"
 	"opscenter/internal/model"
+	"opscenter/internal/service"
 )
 
 // validatePassword 校验密码强度：至少8位，包含大写、小写、数字、特殊符号
@@ -134,11 +135,15 @@ func (rl *LoginRateLimiter) Reset(ip string) {
 }
 
 type AuthHandler struct {
-	db *gorm.DB
+	db         *gorm.DB
+	ldapSvc    *service.LDAPService
 }
 
 func NewAuthHandler(db *gorm.DB) *AuthHandler {
-	return &AuthHandler{db: db}
+	return &AuthHandler{
+		db:      db,
+		ldapSvc: service.NewLDAPService(&config.Global.LDAP),
+	}
 }
 
 type LoginRequest struct {
@@ -179,6 +184,65 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	var user model.User
+
+	// 优先尝试 LDAP 认证（非 admin 用户）
+	if config.Global.LDAP.Enabled && req.Username != "admin" {
+		ldapInfo, err := h.ldapSvc.Authenticate(req.Username, req.Password)
+		if err == nil {
+			// LDAP 认证成功，查找或创建本地用户
+			if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
+				// 用户不存在，自动创建
+				user = model.User{
+					Username:   ldapInfo.Username,
+					Name:       ldapInfo.Name,
+					Email:      ldapInfo.Email,
+					Role:       "user",
+					Enabled:    true,
+					AuthSource: "ldap",
+					LDAPDN:     ldapInfo.DN,
+				}
+				if user.Name == "" {
+					user.Name = ldapInfo.Username
+				}
+				if err := h.db.Create(&user).Error; err != nil {
+					log.Printf("[LDAP] 自动创建用户失败: %v", err)
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败"})
+					return
+				}
+				log.Printf("[LDAP] 自动创建用户: %s", ldapInfo.Username)
+			} else {
+				// 用户存在，检查是否被禁用
+				if !user.Enabled {
+					loginRateLimiter.Record(clientIP)
+					createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+					return
+				}
+				// 更新 LDAP 信息
+				if user.AuthSource != "ldap" {
+					h.db.Model(&user).Updates(map[string]interface{}{
+						"auth_source": "ldap",
+						"ldap_dn":     ldapInfo.DN,
+					})
+				}
+			}
+
+			token, err := middleware.GenerateToken(user.ID, user.Username, user.Role)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "生成令牌失败"})
+				return
+			}
+
+			loginRateLimiter.Reset(clientIP)
+			createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "LDAP 登录成功", 0, "")
+			c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
+			return
+		}
+		// LDAP 认证失败，回退到本地认证
+		log.Printf("[LDAP] 认证失败，回退到本地认证: %v", err)
+	}
+
+	// 本地密码认证
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
 		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
@@ -190,6 +254,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+		return
+	}
+
+	// LDAP 用户不能使用本地密码登录
+	if user.AuthSource == "ldap" {
+		loginRateLimiter.Record(clientIP)
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户请使用域账号登录", 0, "")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "LDAP 用户请使用域账号登录"})
 		return
 	}
 
@@ -621,6 +693,11 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	if user.AuthSource == "ldap" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "LDAP 用户密码由域控制器管理，不能在此重置"})
+		return
+	}
+
 	if errMsg := validatePassword(req.Password); errMsg != "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 		return
@@ -685,6 +762,11 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var user model.User
 	if err := h.db.First(&user, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if user.AuthSource == "ldap" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "LDAP 用户密码由域控制器管理，不能在此修改"})
 		return
 	}
 
