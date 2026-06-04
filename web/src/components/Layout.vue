@@ -208,7 +208,8 @@ function handleCommand(cmd) {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true
   } else if (cmd === 'swagger') {
-    window.open('/swagger/index.html', '_blank')
+    const base = import.meta.env.DEV ? 'http://localhost:18080' : ''
+    window.open(base + '/swagger/index.html', '_blank')
   }
 }
 
