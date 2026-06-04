@@ -428,6 +428,9 @@ async function handleRefresh() {
 
 // 切换服务器时，缓存/恢复执行结果
 watch(serverId, (newVal, oldVal) => {
+  // 有活跃或最近的执行时，保留输出（页面切换回来的场景）
+  if (wsStore.status !== 'idle') return
+
   if (oldVal != null) {
     outputCache.set(oldVal, [...wsStore.outputLines])
   }
