@@ -895,7 +895,7 @@ async function handleBatchOffline() {
   }
 }
 
-// 切换：选中 2 台 RS（一 up 一 down），直接切换
+// 切换：选中 2 台 RS（一 up 一 down），检查依赖后切换
 async function handleSwap() {
   const details = batchSelectedDetails.value
   if (details.length !== 2) return
@@ -903,6 +903,22 @@ async function handleSwap() {
   const vip = details[0].vip
   const upRs = details.find(d => d.isFullyUp)
   const downRs = details.find(d => d.isFullyDown)
+
+  // 对即将上线的 RS 做预生产依赖检查（与上线操作一致）
+  try {
+    const checkRes = await checkLvsOnlineForPreprod({ vs_ip: vip, rs_ip: downRs.rsIp })
+    if (checkRes.need_warning) {
+      lvsOnlineCheckData.value = checkRes
+      lvsOnlineCheckVisible.value = true
+      lvsOnlineCheckConfirmText.value = ''
+      const confirmed = await new Promise(resolve => {
+        lvsOnlineCheckCallback.value = resolve
+      })
+      if (!confirmed) return
+    }
+  } catch {
+    // 检查失败不阻塞操作
+  }
 
   try {
     const res = await lvsSwapPreview({ server_id: serverId.value, vs_ip: vip, rs_ip1: upRs.rsIp, rs_ip2: downRs.rsIp })
