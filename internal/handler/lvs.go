@@ -322,9 +322,6 @@ func (h *LVSHandler) OpExecute(c *gin.Context) {
 
 	output, err := h.sshManager.Execute(ctx, &server, command)
 
-	// 执行完成后关闭SSH连接，强制下次请求重新连接
-	h.sshManager.CloseServer(server.ID)
-
 	status := "success"
 	if err != nil {
 		status = "failed"
@@ -454,9 +451,6 @@ func (h *LVSHandler) SwapExecute(c *gin.Context) {
 	command, _ := h.lvsService.GenerateSwapPreview(server.ScriptPath, vsIP, rsIP1, rsIP2)
 
 	output, err := h.sshManager.Execute(ctx, &server, command)
-
-	// 执行完成后关闭SSH连接，强制下次请求重新连接
-	h.sshManager.CloseServer(server.ID)
 
 	status := "success"
 	if err != nil {
