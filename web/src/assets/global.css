@@ -85,9 +85,10 @@
   margin: 0;
 }
 
-.terminal-pre::selection {
-  background: rgba(34, 211, 238, 0.3);
-  color: #fff;
+html .terminal-pre::selection,
+html .terminal-pre *::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
 }
 
 /* Preview dialog pre */
@@ -101,9 +102,16 @@
   word-break: break-all;
 }
 
-.preview-pre::selection {
-  background: rgba(34, 211, 238, 0.3);
-  color: #fff;
+html .preview-pre::selection,
+html .preview-pre *::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
+}
+
+/* 预览对话框内所有内容的框选高亮 */
+html .el-dialog ::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
 }
 
 /* Cyan Button - 青色辅助按钮 */

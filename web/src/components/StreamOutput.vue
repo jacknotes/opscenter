@@ -81,8 +81,8 @@ watch(
 
 .stream-output::selection,
 .stream-output *::selection {
-  background: rgba(34, 211, 238, 0.3);
-  color: #fff;
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
 }
 
 .output-line {

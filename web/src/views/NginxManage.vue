@@ -1381,9 +1381,9 @@ async function executePreview() {
 }
 
 .diff-filename {
-  color: #E2E8F0;
+  color: #22D3EE;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .diff-body {
@@ -1474,15 +1474,17 @@ async function executePreview() {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.terminal-pre::selection {
-  background: rgba(34, 211, 238, 0.3);
-  color: #fff;
+.terminal-pre::selection,
+.terminal-pre *::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
 }
 
 .diff-body::selection,
-.diff-line-content::selection {
-  background: rgba(34, 211, 238, 0.3);
-  color: #fff;
+.diff-line-content::selection,
+.diff-body *::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
 }
 
 .terminal-lg {
