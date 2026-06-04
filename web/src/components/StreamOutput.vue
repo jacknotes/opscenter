@@ -79,6 +79,12 @@ watch(
   line-height: 1.6;
 }
 
+.stream-output::selection,
+.stream-output *::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
+
 .output-line {
   white-space: pre-wrap;
   word-break: break-all;

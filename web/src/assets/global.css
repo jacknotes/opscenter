@@ -85,6 +85,11 @@
   margin: 0;
 }
 
+.terminal-pre::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
+
 /* Cyan Button - 青色辅助按钮 */
 .el-button--cyan {
   --el-button-bg-color: #009688;
