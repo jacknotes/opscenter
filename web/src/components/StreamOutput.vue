@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 
 const props = defineProps({
   lines: { type: Array, default: () => [] },
@@ -35,6 +35,13 @@ defineEmits(['cancel'])
 const container = ref(null)
 const userScrolled = ref(false)
 
+function scrollToBottom() {
+  const el = container.value
+  if (el) {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
 function onScroll() {
   const el = container.value
   if (!el) return
@@ -42,15 +49,18 @@ function onScroll() {
   userScrolled.value = !atBottom
 }
 
+// 组件挂载时（包括页面切换回来），滚动到底部显示最新内容
+onMounted(async () => {
+  await nextTick()
+  scrollToBottom()
+})
+
 watch(
   () => props.lines.length,
   async () => {
     if (userScrolled.value) return
     await nextTick()
-    const el = container.value
-    if (el) {
-      el.scrollTop = el.scrollHeight
-    }
+    scrollToBottom()
   }
 )
 </script>
