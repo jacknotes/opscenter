@@ -120,6 +120,7 @@
             <div class="user-menu">
               <div class="user-menu-item" @click="handleCommand('profile')">个人信息</div>
               <div class="user-menu-item" @click="handleCommand('changePwd')">修改密码</div>
+              <div v-if="userStore.isAdmin" class="user-menu-item" @click="handleCommand('swagger')">API 文档</div>
               <div class="user-menu-item user-menu-item--danger" @click="handleCommand('logout')">退出登录</div>
             </div>
           </el-popover>
@@ -206,6 +207,8 @@ function handleCommand(cmd) {
   } else if (cmd === 'changePwd') {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true
+  } else if (cmd === 'swagger') {
+    window.open('/swagger/index.html', '_blank')
   }
 }
 
