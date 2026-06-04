@@ -74,6 +74,16 @@ auth:
   # 登录限流：锁定时长（默认 1m）
   login_lock_duration: 1m
 
+# 审计日志 JSON 输出（可选，用于 Elasticsearch 等日志系统收集）
+# 配合 Filebeat/Fluentd 等采集器将日志发送到 Elasticsearch
+audit_log:
+  enabled: false
+  # file: 输出到文件（推荐，不影响应用日志输出到 stdout）
+  # stdout: 输出到标准输出（会禁用 Gin/GORM 日志，仅保留审计 JSON）
+  output: file
+  #file_path: /var/log/opscenter/audit.log  # output=file 时生效
+  #max_output: 4096  # Output 字段最大字符数，默认 4096
+
 # LDAP 认证配置（可选，不配置则不启用）
 # 启用后，非 admin 用户可使用域账号密码登录，首次登录自动创建本地用户
 ldap:

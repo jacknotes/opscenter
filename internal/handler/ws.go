@@ -327,7 +327,10 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	// Write log and cleanup
 	outputStr := strings.Join(allOutput, "\n")
 	logEntry.Output = outputStr
-	h.db.Create(&logEntry)
+	if err := h.db.Create(&logEntry).Error; err != nil {
+		log.Printf("[WARN] 审计日志写入失败: %v (module=preprod, action=%s)", err, preview.Action)
+	}
+	outputAuditJSON(&logEntry)
 	h.previewMgr.Delete(msg.PreviewID)
 	h.lockManager.Unlock(preview.ServerID, usernameStr)
 }

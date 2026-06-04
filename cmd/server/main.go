@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -12,12 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
 	"opscenter/internal/config"
+	"opscenter/internal/handler"
 	"opscenter/internal/model"
 	"opscenter/internal/router"
 )
@@ -52,9 +55,26 @@ func main() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
+	// Init audit log JSON writer
+	auditCfg := config.Global.AuditLog
+	handler.InitAuditWriter(auditCfg.Enabled, auditCfg.Output, auditCfg.FilePath, auditCfg.MaxOutput)
+
+	// 当审计日志 JSON 输出到 stdout 时，禁用 Gin/GORM 日志避免污染 NDJSON 流。
+	// 输出到 file 时不需要禁用，应用日志正常输出到 stdout。
+	if auditCfg.Enabled && auditCfg.Output != "file" {
+		gin.SetMode(gin.ReleaseMode)
+		gin.DefaultWriter = io.Discard
+		gin.DefaultErrorWriter = io.Discard
+		log.SetOutput(io.Discard)
+	}
+
 	// Connect database
+	gormLogLevel := logger.Info
+	if auditCfg.Enabled && auditCfg.Output != "file" {
+		gormLogLevel = logger.Silent
+	}
 	db, err := gorm.Open(mysql.Open(config.Global.Database.DSN()), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(gormLogLevel),
 	})
 	if err != nil {
 		log.Fatalf("连接数据库失败: %v", err)

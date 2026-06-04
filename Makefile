@@ -1,4 +1,4 @@
-.PHONY: build frontend backend swagger clean dev-frontend dev-backend
+.PHONY: build frontend backend swagger clean dev-frontend dev-backend deps
 
 # 生成 swagger 文档
 swagger:
@@ -20,10 +20,19 @@ clean:
 	rm -f opscenter
 	rm -rf web/dist web/node_modules docs
 
+# 安装依赖（前端 npm + 后端 go mod）
+deps:
+	cd web && npm install
+	go mod tidy
+
 # 开发模式：前端 Vite 开发服务器（:3000），代理 /api 到 :18080
 dev-frontend:
 	cd web && npm run dev
 
 # 开发模式：Go 后端服务器（:18080）
 dev-backend: swagger
-	go run ./cmd/server/
+	GIN_MODE=debug go run ./cmd/server/
+
+# 生产模式：Go 后端服务器（:18080）
+prod-backend: swagger
+	GIN_MODE=release go run ./cmd/server/

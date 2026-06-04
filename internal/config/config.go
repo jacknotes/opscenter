@@ -24,6 +24,7 @@ type Config struct {
 	Nginx    NginxConfig    `yaml:"nginx"`
 	Auth     AuthConfig     `yaml:"auth"`
 	LDAP     LDAPConfig     `yaml:"ldap"`
+	AuditLog AuditLogConfig `yaml:"audit_log"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -78,6 +79,14 @@ type NginxConfig struct {
 type AuthConfig struct {
 	MaxLoginAttempts  int           `yaml:"max_login_attempts"`  // 最大失败尝试次数，默认 10
 	LoginLockDuration time.Duration `yaml:"login_lock_duration"` // 登录锁定时长，默认 1m
+}
+
+// AuditLogConfig 是审计日志 JSON 输出配置。
+type AuditLogConfig struct {
+	Enabled  bool   `yaml:"enabled"`   // 是否输出 JSON 审计日志，默认 false
+	Output   string `yaml:"output"`    // 输出目标: "stdout"（默认）或 "file"
+	FilePath string `yaml:"file_path"` // output=file 时的日志文件路径
+	MaxOutput int   `yaml:"max_output"` // Output 字段最大字符数，默认 4096
 }
 
 // LDAPConfig 是 LDAP 认证配置。
@@ -175,6 +184,11 @@ func Load(path string) error {
 	if v := os.Getenv("REDIS_SENTINEL_ADDRS"); v != "" {
 		Global.Redis.SentinelAddrs = strings.Split(v, ",")
 	}
+	// 审计日志环境变量覆盖
+	if v := os.Getenv("AUDIT_LOG_ENABLED"); v != "" {
+		Global.AuditLog.Enabled = v == "true" || v == "1"
+	}
+
 	// LDAP 环境变量覆盖
 	if v := os.Getenv("LDAP_ENABLED"); v != "" {
 		Global.LDAP.Enabled = v == "true" || v == "1"
@@ -245,6 +259,14 @@ func Load(path string) error {
 		Global.Auth.LoginLockDuration = 1 * time.Minute
 	}
 	// LDAP 默认值
+	// 审计日志默认值
+	if Global.AuditLog.Output == "" {
+		Global.AuditLog.Output = "stdout"
+	}
+	if Global.AuditLog.MaxOutput == 0 {
+		Global.AuditLog.MaxOutput = 4096
+	}
+
 	if Global.LDAP.Port == 0 {
 		Global.LDAP.Port = 389
 	}
