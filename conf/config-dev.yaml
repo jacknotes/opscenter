@@ -1,0 +1,36 @@
+server:
+  port: 18080
+  host: 0.0.0.0
+  admin_password: Admin@123
+  allowed_origins: []
+  known_hosts_path: ""
+  insecure_ignore_host_key: true
+
+database:
+  host: mysql-dev
+  port: 3306
+  username: opscenter
+  password: dev-db-password
+  dbname: opscenter
+  charset: utf8mb4
+
+redis:
+  mode: standalone
+  host: redis-dev
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: dev-jwt-secret-change-me-12345678
+  expire: 24h
+
+crypto:
+  key: dev-crypto-key-32-bytes-here!
+
+audit_log:
+  enabled: false
+  output: stdout
+
+ldap:
+  enabled: false

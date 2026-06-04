@@ -37,8 +37,10 @@ WORKDIR /app
 
 COPY --from=backend-builder /app/opscenter .
 COPY --from=frontend-builder /app/web/dist ./web/dist
+COPY conf/ /app/config/
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 18080
 
-ENTRYPOINT ["./opscenter"]
-CMD ["-config", "/app/config/config.yaml"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

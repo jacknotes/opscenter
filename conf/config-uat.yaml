@@ -1,0 +1,36 @@
+server:
+  port: 18080
+  host: 0.0.0.0
+  admin_password: Admin@123
+  allowed_origins: []
+  known_hosts_path: ""
+  insecure_ignore_host_key: true
+
+database:
+  host: mysql-uat
+  port: 3306
+  username: opscenter
+  password: uat-db-password
+  dbname: opscenter
+  charset: utf8mb4
+
+redis:
+  mode: standalone
+  host: redis-uat
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: uat-jwt-secret-change-me-12345678
+  expire: 24h
+
+crypto:
+  key: uat-crypto-key-32-bytes-here!
+
+audit_log:
+  enabled: false
+  output: stdout
+
+ldap:
+  enabled: false

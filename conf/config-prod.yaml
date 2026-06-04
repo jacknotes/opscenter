@@ -1,0 +1,60 @@
+# 生产环境配置
+# 敏感字段通过环境变量覆盖：DB_HOST, DB_PORT, DB_PASSWORD, JWT_SECRET,
+# CRYPTO_KEY, ADMIN_PASSWORD, REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+
+server:
+  port: 18080
+  host: 0.0.0.0
+  admin_password: "CHANGE_ME_VIA_ENV"
+  allowed_origins: []
+  known_hosts_path: ""
+  insecure_ignore_host_key: false
+
+database:
+  host: mysql-prod
+  port: 3306
+  username: opscenter
+  password: "CHANGE_ME_VIA_ENV"
+  dbname: opscenter
+  charset: utf8mb4
+
+redis:
+  mode: standalone
+  host: redis-prod
+  port: 6379
+  password: ""
+  db: 0
+
+jwt:
+  secret: "CHANGE_ME_VIA_ENV_MUST_BE_16_CHARS"
+  expire: 24h
+
+crypto:
+  key: "CHANGE_ME_VIA_ENV_32B"
+
+timeouts:
+  ssh_connect: 10s
+  ssh_idle: 10m
+  ssh_lifetime: 1h
+  ssh_cleanup: 5m
+  ws_read: 60s
+  ws_ping: 30s
+  lock: 10m
+  preview: 5m
+  dashboard_ssh: 20s
+
+nginx:
+  max_backups: 10
+
+auth:
+  max_login_attempts: 10
+  login_lock_duration: 1m
+
+audit_log:
+  enabled: true
+  output: file
+  file_path: /var/log/opscenter/audit.log
+  max_output: 4096
+
+ldap:
+  enabled: false
