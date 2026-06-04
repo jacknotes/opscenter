@@ -143,5 +143,14 @@ func (lm *LockManager) IsLocked(serverID uint) (bool, *LockInfo) {
 	return true, lockInfo
 }
 
+// ClearAll 清除所有分布式锁。服务启动时调用，清除上次运行遗留的锁。
+func (lm *LockManager) ClearAll() {
+	ctx := context.Background()
+	iter := lm.rdb.Scan(ctx, 0, lockKeyPrefix+"*", 100).Iterator()
+	for iter.Next(ctx) {
+		lm.rdb.Del(ctx, iter.Val())
+	}
+}
+
 // Stop 无操作，Redis 版本由 TTL 自动过期，无需手动清理。
 func (lm *LockManager) Stop() {}

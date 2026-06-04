@@ -92,5 +92,14 @@ func (pm *PreviewManager) Delete(id string) {
 	pm.rdb.Del(context.Background(), previewKeyPrefix+id)
 }
 
+// ClearAll 清除所有预览数据。服务启动时调用，清除上次运行遗留的预览。
+func (pm *PreviewManager) ClearAll() {
+	ctx := context.Background()
+	iter := pm.rdb.Scan(ctx, 0, previewKeyPrefix+"*", 100).Iterator()
+	for iter.Next(ctx) {
+		pm.rdb.Del(ctx, iter.Val())
+	}
+}
+
 // Stop 无操作，Redis 版本由 TTL 自动过期，无需手动清理。
 func (pm *PreviewManager) Stop() {}

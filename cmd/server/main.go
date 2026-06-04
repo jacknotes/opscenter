@@ -124,6 +124,10 @@ func main() {
 	// Setup router
 	app := router.Setup(db, rdb)
 
+	// 清除上次运行遗留的分布式锁和预览数据，防止重启后操作被阻塞
+	app.LockManager.ClearAll()
+	app.PreviewMgr.ClearAll()
+
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", config.Global.Server.Host, config.Global.Server.Port)
 	srv := &http.Server{
