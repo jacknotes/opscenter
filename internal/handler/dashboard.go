@@ -83,7 +83,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count      int64
 	}
 	var byType []typeCount
-	if err := h.db.WithContext(ctx).Model(&model.Server{}).Select("server_type, count(*) as count").Group("server_type").Scan(&byType).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Where("enabled = ?", true).Select("server_type, count(*) as count").Group("server_type").Scan(&byType).Error; err != nil {
 		log.Printf("查询服务器类型统计失败: %v", err)
 	}
 	typeMap := make(map[string]int64)
@@ -97,7 +97,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 		Count int64
 	}
 	var byEnv []envCount
-	if err := h.db.WithContext(ctx).Model(&model.Server{}).Select("env, count(*) as count").Where("env != ?", "").Group("env").Scan(&byEnv).Error; err != nil {
+	if err := h.db.WithContext(ctx).Model(&model.Server{}).Select("env, count(*) as count").Where("env != ? AND enabled = ?", "", true).Group("env").Scan(&byEnv).Error; err != nil {
 		log.Printf("查询服务器环境统计失败: %v", err)
 	}
 	envMap := make(map[string]int64)
