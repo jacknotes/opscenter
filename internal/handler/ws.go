@@ -298,7 +298,18 @@ func (h *WSHandler) Handle(c *gin.Context) {
 			Stream: streamType,
 		}); err != nil {
 			go func() {
-				for range outputCh {
+				// 带超时的 drain，防止 SSH 流挂起导致 goroutine 永久阻塞
+				timer := time.NewTimer(30 * time.Second)
+				defer timer.Stop()
+				for {
+					select {
+					case _, ok := <-outputCh:
+						if !ok {
+							return
+						}
+					case <-timer.C:
+						return
+					}
 				}
 			}()
 			execErr = fmt.Errorf("客户端断开连接")

@@ -58,13 +58,16 @@ func (s *LDAPService) Authenticate(username, password string) (*LDAPUserInfo, er
 	return userInfo, nil
 }
 
-// connect 创建 LDAP 连接。
+// connect 创建 LDAP 连接。当 StartTLS 为 true 时使用 LDAPS 直连（TLS），否则使用普通 LDAP 连接。
 func (s *LDAPService) connect() (*ldap.Conn, error) {
 	addr := fmt.Sprintf("%s:%d", s.config.Host, s.config.Port)
 
+	// 是否跳过 TLS 证书验证
+	skipVerify := s.config.InsecureSkipVerify != nil && *s.config.InsecureSkipVerify
+
 	if s.config.StartTLS {
 		conn, err := ldap.DialTLS("tcp", addr, &tls.Config{
-			InsecureSkipVerify: true, // 内网 LDAP 可能使用自签名证书
+			InsecureSkipVerify: skipVerify,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("连接 LDAP 服务器失败: %w", err)
@@ -75,16 +78,6 @@ func (s *LDAPService) connect() (*ldap.Conn, error) {
 	conn, err := ldap.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("连接 LDAP 服务器失败: %w", err)
-	}
-
-	// 如果配置了 StartTLS，升级连接
-	if s.config.StartTLS {
-		if err := conn.StartTLS(&tls.Config{
-			InsecureSkipVerify: true,
-		}); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("StartTLS 失败: %w", err)
-		}
 	}
 
 	return conn, nil

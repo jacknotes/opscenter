@@ -681,7 +681,9 @@ func (h *NginxHandler) SwapExecute(c *gin.Context) {
 	// 测试并重载
 	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		rollbackCmd := h.nginxService.GenerateRollbackCommand(configPath, backupPath, configFile)
+		h.sshManager.Execute(ctx, &server, rollbackCmd)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，已自动回滚到备份: %s", testOutput)})
 		return
 	}
 
@@ -882,7 +884,9 @@ func (h *NginxHandler) ToggleExecute(c *gin.Context) {
 	// 测试并重载
 	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		rollbackCmd := h.nginxService.GenerateRollbackCommand(configPath, backupPath, configFile)
+		h.sshManager.Execute(ctx, &server, rollbackCmd)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，已自动回滚到备份: %s", testOutput)})
 		return
 	}
 
@@ -1192,7 +1196,9 @@ func (h *NginxHandler) BatchExecute(c *gin.Context) {
 	// 测试并重载
 	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		rollbackCmd := h.nginxService.GenerateRollbackCommand(configPath, backupPath, configFile)
+		h.sshManager.Execute(ctx, &server, rollbackCmd)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，已自动回滚到备份: %s", testOutput)})
 		return
 	}
 
@@ -1476,7 +1482,10 @@ func (h *NginxHandler) executeNginxAction(c *gin.Context, previewID, action stri
 
 	testOutput, err := h.sshManager.Execute(ctx, &server, nginxCmd+" -t")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，请检查: %s", testOutput)})
+		// nginx -t 失败，自动从最新备份恢复配置
+		rollbackCmd := h.nginxService.GenerateRollbackCommand(configPath, backupPath, configFile)
+		h.sshManager.Execute(ctx, &server, rollbackCmd)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("配置语法错误，已自动回滚到备份: %s", testOutput)})
 		return
 	}
 

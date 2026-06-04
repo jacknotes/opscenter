@@ -68,6 +68,7 @@ func validateEmail(email string) bool {
 
 // loginAttempt 用于记录登录尝试信息
 type loginAttempt struct {
+	mu        sync.Mutex
 	Count     int
 	FirstTime time.Time
 }
@@ -87,7 +88,10 @@ func (rl *LoginRateLimiter) Allow(ip string) bool {
 	// 清理过期条目
 	rl.attempts.Range(func(key, value interface{}) bool {
 		if entry, ok := value.(*loginAttempt); ok {
-			if now.Sub(entry.FirstTime) > lockDuration {
+			entry.mu.Lock()
+			expired := now.Sub(entry.FirstTime) > lockDuration
+			entry.mu.Unlock()
+			if expired {
 				rl.attempts.Delete(key)
 			}
 		}
@@ -100,8 +104,11 @@ func (rl *LoginRateLimiter) Allow(ip string) bool {
 	}
 
 	entry := val.(*loginAttempt)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
 	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置
+		// 窗口已过期，重置（defer 会解锁，之后由 Record 创建新条目）
 		rl.attempts.Delete(ip)
 		return true
 	}
@@ -120,6 +127,9 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	}
 
 	entry := val.(*loginAttempt)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
 	if now.Sub(entry.FirstTime) > lockDuration {
 		// 窗口已过期，重置
 		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})

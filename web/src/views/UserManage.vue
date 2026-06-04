@@ -265,14 +265,19 @@ function formatTime(t) {
   return new Date(t).toLocaleString('zh-CN')
 }
 
+// HTML 转义，防止 XSS
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
 // 显示批量操作结果消息
 function showBatchResult(res) {
   const message = res.message || '操作完成'
   const success = res.deleted || res.updated || 0
   const failed = res.failed || 0
 
-  // 将消息中的换行符转换为 HTML
-  const htmlMessage = message.replace(/\n/g, '<br>')
+  // 转义 HTML 后将换行符转换为 <br>
+  const htmlMessage = escapeHtml(message).replace(/\n/g, '<br>')
 
   if (failed === 0) {
     ElMessage({ message: htmlMessage, type: 'success', dangerouslyUseHTMLString: true })

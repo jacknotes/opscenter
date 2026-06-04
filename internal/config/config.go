@@ -33,7 +33,8 @@ type ServerConfig struct {
 	Host           string   `yaml:"host"`
 	AdminPassword  string   `yaml:"admin_password"`
 	AllowedOrigins []string `yaml:"allowed_origins"`
-	KnownHostsPath string   `yaml:"known_hosts_path"`
+	KnownHostsPath     string   `yaml:"known_hosts_path"`
+	InsecureIgnoreHostKey *bool  `yaml:"insecure_ignore_host_key"` // 是否跳过 SSH 主机密钥验证，默认 true（向后兼容，生产环境建议配置 known_hosts_path 并设为 false）
 }
 
 // DatabaseConfig 是 MySQL 数据库连接配置。
@@ -91,15 +92,16 @@ type AuditLogConfig struct {
 
 // LDAPConfig 是 LDAP 认证配置。
 type LDAPConfig struct {
-	Enabled      bool           `yaml:"enabled"`       // 是否启用 LDAP 认证
-	Host         string         `yaml:"host"`          // LDAP 服务器地址
-	Port         int            `yaml:"port"`          // LDAP 服务器端口，默认 389
-	BaseDN       string         `yaml:"base_dn"`       // 搜索基础 DN
-	BindDN       string         `yaml:"bind_dn"`       // 绑定用户 DN
-	BindPassword string         `yaml:"bind_password"` // 绑定用户密码
-	Attributes   LDAPAttributes `yaml:"attributes"`    // 用户属性映射
-	UserFilter   string         `yaml:"user_filter"`   // 用户搜索过滤器（可选）
-	StartTLS     bool           `yaml:"start_tls"`     // 是否启用 StartTLS
+	Enabled            bool           `yaml:"enabled"`               // 是否启用 LDAP 认证
+	Host               string         `yaml:"host"`                  // LDAP 服务器地址
+	Port               int            `yaml:"port"`                  // LDAP 服务器端口，默认 389
+	BaseDN             string         `yaml:"base_dn"`               // 搜索基础 DN
+	BindDN             string         `yaml:"bind_dn"`               // 绑定用户 DN
+	BindPassword       string         `yaml:"bind_password"`         // 绑定用户密码
+	Attributes         LDAPAttributes `yaml:"attributes"`            // 用户属性映射
+	UserFilter         string         `yaml:"user_filter"`           // 用户搜索过滤器（可选）
+	StartTLS           bool           `yaml:"start_tls"`             // 是否启用 StartTLS
+	InsecureSkipVerify *bool          `yaml:"insecure_skip_verify"`  // 是否跳过 TLS 证书验证，默认 true（兼容自签名证书）
 }
 
 // LDAPAttributes 是 LDAP 用户属性映射配置。
@@ -220,6 +222,11 @@ func Load(path string) error {
 	}
 
 	// 超时默认值
+	// SSH host key 验证默认跳过（向后兼容），生产环境建议配置 known_hosts_path 并设为 false
+	if Global.Server.InsecureIgnoreHostKey == nil {
+		defaultTrue := true
+		Global.Server.InsecureIgnoreHostKey = &defaultTrue
+	}
 	if Global.Timeouts.SSHConnect == 0 {
 		Global.Timeouts.SSHConnect = 10 * time.Second
 	}
@@ -269,6 +276,11 @@ func Load(path string) error {
 
 	if Global.LDAP.Port == 0 {
 		Global.LDAP.Port = 389
+	}
+	// LDAP TLS 证书验证默认跳过（向后兼容自签名证书），生产环境建议显式设置 insecure_skip_verify: false
+	if Global.LDAP.InsecureSkipVerify == nil {
+		defaultTrue := true
+		Global.LDAP.InsecureSkipVerify = &defaultTrue
 	}
 	if Global.LDAP.Attributes.Username == "" {
 		Global.LDAP.Attributes.Username = "sAMAccountName"

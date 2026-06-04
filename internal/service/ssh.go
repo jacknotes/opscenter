@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -55,45 +56,68 @@ func NewSSHManager() *SSHManager {
 func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 	m.mu.RLock()
 	sc, ok := m.clients[server.ID]
-	m.mu.RUnlock()
-
 	if ok {
 		now := time.Now()
 		lastUsedTime := time.Unix(0, sc.lastUsed.Load())
 		if now.Sub(sc.createdAt) > m.maxLifetime || now.Sub(lastUsedTime) > m.maxIdle {
+			m.mu.RUnlock()
 			m.CloseServer(server.ID)
 		} else {
 			sc.lastUsed.Store(now.UnixNano())
-			return sc.client, nil
+			client := sc.client
+			m.mu.RUnlock()
+			return client, nil
 		}
+	} else {
+		m.mu.RUnlock()
 	}
 
 	return m.connect(server)
 }
 
 // hostKeyCallback 根据配置返回 SSH 主机密钥验证回调。
-// 若配置了 known_hosts_path 则使用文件验证，否则跳过验证（不推荐生产环境）。
+// 若配置了 known_hosts_path 则使用文件验证，否则根据 insecure_ignore_host_key 配置决定行为。
 func hostKeyCallback() ssh.HostKeyCallback {
 	knownHostsPath := config.Global.Server.KnownHostsPath
+	insecureAllowed := config.Global.Server.InsecureIgnoreHostKey != nil && *config.Global.Server.InsecureIgnoreHostKey
+
 	if knownHostsPath == "" {
-		log.Println("警告: 未配置 known_hosts_path，跳过 SSH 主机密钥验证（不推荐生产环境）")
-		return ssh.InsecureIgnoreHostKey()
+		if insecureAllowed {
+			log.Println("警告: 未配置 known_hosts_path，跳过 SSH 主机密钥验证（不推荐生产环境）")
+			return ssh.InsecureIgnoreHostKey()
+		}
+		log.Println("错误: 未配置 known_hosts_path 且未允许跳过主机密钥验证，SSH 连接将失败")
+		return ssh.HostKeyCallback(func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return fmt.Errorf("SSH 主机密钥验证失败: 未配置 known_hosts_path，请在配置文件中设置 known_hosts_path 或 insecure_ignore_host_key: true")
+		})
 	}
 
 	// 展开 ~ 路径
 	if strings.HasPrefix(knownHostsPath, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			log.Printf("警告: 获取用户主目录失败: %v，跳过主机密钥验证", err)
-			return ssh.InsecureIgnoreHostKey()
+			if insecureAllowed {
+				log.Printf("警告: 获取用户主目录失败: %v，跳过主机密钥验证", err)
+				return ssh.InsecureIgnoreHostKey()
+			}
+			log.Printf("错误: 获取用户主目录失败: %v", err)
+			return ssh.HostKeyCallback(func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+				return fmt.Errorf("获取用户主目录失败: %w", err)
+			})
 		}
 		knownHostsPath = filepath.Join(home, knownHostsPath[2:])
 	}
 
 	callback, err := knownhosts.New(knownHostsPath)
 	if err != nil {
-		log.Printf("警告: 加载 known_hosts 文件失败 (%s): %v，跳过主机密钥验证", knownHostsPath, err)
-		return ssh.InsecureIgnoreHostKey()
+		if insecureAllowed {
+			log.Printf("警告: 加载 known_hosts 文件失败 (%s): %v，跳过主机密钥验证", knownHostsPath, err)
+			return ssh.InsecureIgnoreHostKey()
+		}
+		log.Printf("错误: 加载 known_hosts 文件失败 (%s): %v", knownHostsPath, err)
+		return ssh.HostKeyCallback(func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			return fmt.Errorf("加载 known_hosts 文件失败: %w", err)
+		})
 	}
 	return callback
 }
@@ -198,8 +222,11 @@ func (m *SSHManager) Execute(ctx context.Context, server *model.Server, command 
 	return string(output), nil
 }
 
-// ExecuteWithTimeout 带超时的命令执行。超时后返回错误。支持通过 context 取消执行。
+// ExecuteWithTimeout 带超时的命令执行。超时后取消 SSH 操作并返回错误。
 func (m *SSHManager) ExecuteWithTimeout(ctx context.Context, server *model.Server, command string, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	type result struct {
 		output string
 		err    error
@@ -213,9 +240,10 @@ func (m *SSHManager) ExecuteWithTimeout(ctx context.Context, server *model.Serve
 	select {
 	case r := <-ch:
 		return r.output, r.err
-	case <-time.After(timeout):
-		return "", fmt.Errorf("执行超时 (%v)", timeout)
 	case <-ctx.Done():
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("执行超时 (%v)", timeout)
+		}
 		return "", ctx.Err()
 	}
 }

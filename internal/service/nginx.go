@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+// escapeIPForSed 转义 IP 地址中的点号，用于 sed 正则表达式，避免误匹配。
+// 例如 10.0.0.1 → 10\.0\.0\.1
+func escapeIPForSed(ip string) string {
+	return strings.ReplaceAll(ip, ".", "\\.")
+}
+
 // NginxUpstream 表示 Nginx upstream 块，包含名称和后端服务器列表。
 type NginxUpstream struct {
 	Name    string        `json:"name"`
@@ -155,13 +161,18 @@ func (s *NginxService) GenerateBackupCommand(configPath, backupPath, configFile 
 	return fmt.Sprintf("mkdir -p %s && cp %s/%s %s/%s.bak.$(date +%%Y%%m%%d%%H%%M%%S)", backupPath, configPath, configFile, backupPath, configFile)
 }
 
+// GenerateRollbackCommand 生成从最新备份恢复配置文件的命令。
+func (s *NginxService) GenerateRollbackCommand(configPath, backupPath, configFile string) string {
+	return fmt.Sprintf("cp $(ls -t %s/%s.bak.* 2>/dev/null | head -1) %s/%s", backupPath, configFile, configPath, configFile)
+}
+
 // GenerateCleanupCommand 生成清理旧备份命令，保留最近 maxBackups 个备份文件。
 func (s *NginxService) GenerateCleanupCommand(backupPath, configFile string, maxBackups int) string {
 	return fmt.Sprintf("cd %s && ls -t %s.bak.* 2>/dev/null | tail -n +%d | xargs -r rm -f", backupPath, configFile, maxBackups+1)
 }
 
 // GenerateModifyCommand 生成 sed 命令用于批量上线/下线多个后端 IP。
-// 支持 :80 端口的自动省略匹配。
+// 支持 :80 端口的自动省略匹配。IP 中的点号会被转义以避免正则误匹配。
 func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamName string, backendIPs []string, action string) string {
 	if !ValidateUpstreamName(upstreamName) {
 		return ""
@@ -171,11 +182,11 @@ func (s *NginxService) GenerateModifyCommand(configPath, configFile, upstreamNam
 		if idx := strings.LastIndex(ip, ":"); idx > 0 {
 			port := ip[idx+1:]
 			if port == "80" {
-				ipParts = append(ipParts, ip[:idx])
+				ipParts = append(ipParts, escapeIPForSed(ip[:idx]))
 				continue
 			}
 		}
-		ipParts = append(ipParts, ip)
+		ipParts = append(ipParts, escapeIPForSed(ip))
 	}
 	ipPattern := strings.Join(ipParts, "\\|")
 
@@ -226,21 +237,21 @@ func (s *NginxService) GenerateSwapDiff(config, upstreamName, offlineIP, onlineI
 	return
 }
 
-// GenerateSwapModifyCommands 生成切换操作的 sed 命令列表
+// GenerateSwapModifyCommands 生成切换操作的 sed 命令列表。IP 中的点号会被转义以避免正则误匹配。
 func (s *NginxService) GenerateSwapModifyCommands(configPath, configFile, upstreamName, offlineIP, onlineIP string) []string {
 	if !ValidateUpstreamName(upstreamName) {
 		return nil
 	}
-	offlinePattern := offlineIP
+	offlinePattern := escapeIPForSed(offlineIP)
 	if idx := strings.LastIndex(offlineIP, ":"); idx > 0 {
 		if offlineIP[idx+1:] == "80" {
-			offlinePattern = offlineIP[:idx]
+			offlinePattern = escapeIPForSed(offlineIP[:idx])
 		}
 	}
-	onlinePattern := onlineIP
+	onlinePattern := escapeIPForSed(onlineIP)
 	if idx := strings.LastIndex(onlineIP, ":"); idx > 0 {
 		if onlineIP[idx+1:] == "80" {
-			onlinePattern = onlineIP[:idx]
+			onlinePattern = escapeIPForSed(onlineIP[:idx])
 		}
 	}
 
@@ -284,16 +295,16 @@ func (s *NginxService) GenerateToggleDiff(config, upstreamName string) (before, 
 	return
 }
 
-// GenerateToggleModifyCommands 生成组切换操作的 sed 命令列表（按 IP 精确匹配，避免相互干扰）
+// GenerateToggleModifyCommands 生成组切换操作的 sed 命令列表（按 IP 精确匹配，避免相互干扰）。IP 中的点号会被转义。
 func (s *NginxService) GenerateToggleModifyCommands(configPath, configFile, upstreamName string, servers []NginxServer) []string {
 	if !ValidateUpstreamName(upstreamName) {
 		return nil
 	}
 	var commands []string
 	for _, srv := range servers {
-		ipPattern := srv.IP
+		ipPattern := escapeIPForSed(srv.IP)
 		if srv.Port != "" && srv.Port != "80" {
-			ipPattern = srv.IP + ":" + srv.Port
+			ipPattern = escapeIPForSed(srv.IP) + ":" + srv.Port
 		}
 		if srv.Status == "up" {
 			commands = append(commands, fmt.Sprintf("sed -i '/%s/,/}/{s/server\\(.*\\(%s\\)\\)/#server\\1/}' %s/%s", upstreamName, ipPattern, configPath, configFile))

@@ -7,6 +7,9 @@ server:
   allowed_origins: []
   # SSH known_hosts 文件路径，为空则跳过主机密钥验证（不推荐生产环境）
   known_hosts_path: ""
+  # 是否跳过 SSH 主机密钥验证（默认 true，向后兼容）
+  # 生产环境建议：配置 known_hosts_path 并设为 false
+  # insecure_ignore_host_key: false
 
 database:
   host: localhost
@@ -102,3 +105,6 @@ ldap:
   # user_filter: "(&(objectClass=user)(sAMAccountName=%s))"
   # 是否启用 StartTLS（默认 false）
   start_tls: false
+  # 是否跳过 TLS 证书验证（默认 true，兼容自签名证书）
+  # 生产环境建议设为 false
+  # insecure_skip_verify: false
