@@ -1479,6 +1479,12 @@ async function executePreview() {
   color: #fff;
 }
 
+.diff-body::selection,
+.diff-line-content::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
+
 .terminal-lg {
   max-height: 600px;
 }

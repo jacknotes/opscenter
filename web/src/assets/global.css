@@ -90,6 +90,22 @@
   color: #fff;
 }
 
+/* Preview dialog pre */
+.preview-pre {
+  background: #1A1D2E;
+  padding: 10px;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.preview-pre::selection {
+  background: rgba(34, 211, 238, 0.3);
+  color: #fff;
+}
+
 /* Cyan Button - 青色辅助按钮 */
 .el-button--cyan {
   --el-button-bg-color: #009688;

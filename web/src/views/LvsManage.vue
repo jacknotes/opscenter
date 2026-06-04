@@ -197,7 +197,7 @@
         </div>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; max-height: 300px; overflow-y: auto;">{{ previewData.current_status }}</pre>
+        <pre class="preview-pre">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>

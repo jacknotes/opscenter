@@ -69,7 +69,7 @@
         </ul>
         <el-divider />
         <p><strong>当前状态：</strong></p>
-        <pre style="background: #1A1D2E; padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all;">{{ previewData.current_status }}</pre>
+        <pre class="preview-pre">{{ previewData.current_status }}</pre>
       </div>
       <template #footer>
         <el-button @click="previewVisible = false">取消</el-button>
