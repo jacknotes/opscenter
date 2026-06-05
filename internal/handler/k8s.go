@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -524,9 +525,31 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	if lastErr != nil {
 		status = "failed"
 	}
-	createAuditLog(h.db, c, "k8s", action,
+
+	// 提取项目名称列表
+	var projectNames string
+	var projectCount int
+	if projects, ok := params["projects"].([]interface{}); ok {
+		var names []string
+		for _, p := range projects {
+			if proj, ok := p.(map[string]interface{}); ok {
+				if name, ok := proj["name"].(string); ok && name != "" {
+					names = append(names, name)
+				}
+			}
+		}
+		projectNames = strings.Join(names, ",")
+		projectCount = len(names)
+	} else {
+		// 全量操作，无具体项目
+		projectNames = "*"
+		projectCount = 0
+	}
+
+	createAuditLogWithProjects(h.db, c, "k8s", action,
 		fmt.Sprintf("Commands: %v", commands),
-		fmt.Sprintf("%v", commands), status, fmt.Sprintf("%v", outputs), server.ID, server.Name)
+		fmt.Sprintf("%v", commands), status, fmt.Sprintf("%v", outputs), server.ID, server.Name,
+		projectNames, projectCount)
 
 	if lastErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", lastErr), "output": outputs})

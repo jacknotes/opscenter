@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -569,8 +570,36 @@ func (h *PreprodHandler) executePreprodAction(c *gin.Context, previewID, action 
 	if err != nil {
 		status = "failed"
 	}
-	createAuditLog(h.db, c, "preprod", action,
-		command, command, status, output, server.ID, server.Name)
+
+	// 提取资源名称列表，区分批量/全量操作
+	var projectNames string
+	var projectCount int
+	var auditAction string
+	if names, ok := preview.Params["resource_names"].([]interface{}); ok {
+		var strNames []string
+		for _, n := range names {
+			if s, ok := n.(string); ok && s != "" {
+				strNames = append(strNames, s)
+			}
+		}
+		if len(strNames) > 0 {
+			projectNames = strings.Join(strNames, ",")
+			projectCount = len(strNames)
+			auditAction = "batch_" + action
+		} else {
+			projectNames = "*"
+			projectCount = 0
+			auditAction = "full_" + action
+		}
+	} else {
+		projectNames = "*"
+		projectCount = 0
+		auditAction = "full_" + action
+	}
+
+	createAuditLogWithProjects(h.db, c, "preprod", auditAction,
+		command, command, status, output, server.ID, server.Name,
+		projectNames, projectCount)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("执行失败: %v", err), "output": output})

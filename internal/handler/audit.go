@@ -54,19 +54,21 @@ func sanitizeCommand(cmd string) string {
 
 // auditJSON 是审计日志 JSON 输出的结构。
 type auditJSON struct {
-	Timestamp  string `json:"timestamp"`
-	UserID     uint   `json:"user_id"`
-	Username   string `json:"username"`
-	Module     string `json:"module"`
-	Action     string `json:"action"`
-	Target     string `json:"target"`
-	Detail     string `json:"detail,omitempty"`
-	Status     string `json:"status"`
-	Output     string `json:"output,omitempty"`
-	IP         string `json:"ip"`
-	ServerID   uint   `json:"server_id,omitempty"`
-	ServerName string `json:"server_name,omitempty"`
-	PreviewID  string `json:"preview_id,omitempty"`
+	Timestamp    string `json:"timestamp"`
+	UserID       uint   `json:"user_id"`
+	Username     string `json:"username"`
+	Module       string `json:"module"`
+	Action       string `json:"action"`
+	Target       string `json:"target"`
+	Detail       string `json:"detail,omitempty"`
+	Status       string `json:"status"`
+	Output       string `json:"output,omitempty"`
+	IP           string `json:"ip"`
+	ServerID     uint   `json:"server_id,omitempty"`
+	ServerName   string `json:"server_name,omitempty"`
+	PreviewID    string `json:"preview_id,omitempty"`
+	ProjectNames string `json:"project_names,omitempty"`
+	ProjectCount int    `json:"project_count,omitempty"`
 }
 
 // AuditWriter 是审计日志 JSON 输出的 writer，由 main.go 根据配置初始化。
@@ -139,19 +141,21 @@ func outputAuditJSON(entry *model.OperationLog) {
 	}
 
 	j := auditJSON{
-		Timestamp:  entry.CreatedAt.Format(time.RFC3339Nano),
-		UserID:     entry.UserID,
-		Username:   entry.Username,
-		Module:     entry.Module,
-		Action:     entry.Action,
-		Target:     entry.Target,
-		Detail:     detail,
-		Status:     entry.Status,
-		Output:     output,
-		IP:         entry.IP,
-		ServerID:   entry.ServerID,
-		ServerName: entry.ServerName,
-		PreviewID:  entry.PreviewID,
+		Timestamp:    entry.CreatedAt.Format(time.RFC3339Nano),
+		UserID:       entry.UserID,
+		Username:     entry.Username,
+		Module:       entry.Module,
+		Action:       entry.Action,
+		Target:       entry.Target,
+		Detail:       detail,
+		Status:       entry.Status,
+		Output:       output,
+		IP:           entry.IP,
+		ServerID:     entry.ServerID,
+		ServerName:   entry.ServerName,
+		PreviewID:    entry.PreviewID,
+		ProjectNames: entry.ProjectNames,
+		ProjectCount: entry.ProjectCount,
 	}
 
 	auditMu.Lock()
@@ -181,6 +185,11 @@ func getClientIP(c *gin.Context) string {
 
 // createAuditLog 将操作审计日志写入数据库。写入失败时仅打印警告，不影响主流程。
 func createAuditLog(db *gorm.DB, c *gin.Context, module, action, target, detail, status, output string, serverID uint, serverName string) {
+	createAuditLogWithProjects(db, c, module, action, target, detail, status, output, serverID, serverName, "", 0)
+}
+
+// createAuditLogWithProjects 带项目信息的审计日志写入，用于 K8s 和 Preprod 模块。
+func createAuditLogWithProjects(db *gorm.DB, c *gin.Context, module, action, target, detail, status, output string, serverID uint, serverName string, projectNames string, projectCount int) {
 	var userID uint
 	if uid, exists := c.Get("user_id"); exists {
 		if id, ok := uid.(uint); ok {
@@ -189,17 +198,19 @@ func createAuditLog(db *gorm.DB, c *gin.Context, module, action, target, detail,
 	}
 
 	logEntry := model.OperationLog{
-		UserID:     userID,
-		Username:   c.GetString("username"),
-		Module:     module,
-		Action:     action,
-		Target:     target,
-		Detail:     sanitizeCommand(detail),
-		Status:     status,
-		Output:     output,
-		IP:         getClientIP(c),
-		ServerID:   serverID,
-		ServerName: serverName,
+		UserID:       userID,
+		Username:     c.GetString("username"),
+		Module:       module,
+		Action:       action,
+		Target:       target,
+		Detail:       sanitizeCommand(detail),
+		Status:       status,
+		Output:       output,
+		IP:           getClientIP(c),
+		ServerID:     serverID,
+		ServerName:   serverName,
+		ProjectNames: projectNames,
+		ProjectCount: projectCount,
 	}
 	if err := db.Create(&logEntry).Error; err != nil {
 		log.Printf("[WARN] 审计日志写入失败: %v (module=%s, action=%s, target=%s)", err, module, action, target)

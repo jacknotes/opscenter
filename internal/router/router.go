@@ -93,6 +93,8 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 		protected.GET("/dashboard/stats", dashboardHandler.Stats)
 		protected.GET("/dashboard/remote-stats", dashboardHandler.RemoteStats)
 		protected.GET("/dashboard/activity-stats", dashboardHandler.ActivityStats)
+		protected.GET("/dashboard/k8s-project-stats", dashboardHandler.K8sProjectStats)
+		protected.GET("/dashboard/preprod-project-stats", dashboardHandler.PreprodProjectStats)
 
 		// LVS
 		lvs := protected.Group("/lvs")

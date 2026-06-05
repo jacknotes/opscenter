@@ -18,8 +18,10 @@ type OperationLog struct {
 	PreviewID  string    `gorm:"size:64" json:"preview_id"`
 	ServerID   uint      `gorm:"index" json:"server_id"`
 	ServerName string    `gorm:"size:100" json:"server_name"`
-	IP         string    `gorm:"size:255" json:"ip"`
-	CreatedAt  time.Time `gorm:"index" json:"created_at"`
+	IP           string    `gorm:"size:255" json:"ip"`
+	ProjectNames string    `gorm:"size:500" json:"project_names"` // 逗号分隔的服务名列表（K8s/Preprod）
+	ProjectCount int       `gorm:"default:0" json:"project_count"` // 涉及的服务数量
+	CreatedAt    time.Time `gorm:"index" json:"created_at"`
 }
 
 // TableName 指定 GORM 使用的表名为 operation_logs。
