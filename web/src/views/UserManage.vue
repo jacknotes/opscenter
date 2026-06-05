@@ -103,7 +103,7 @@
     </el-dialog>
 
     <!-- LDAP Import Dialog -->
-    <el-dialog v-model="ldapImportVisible" title="导入 LDAP 用户" width="800px" @close="ldapUsers = []">
+    <el-dialog v-model="ldapImportVisible" title="导入 LDAP 用户" width="800px" @close="handleLdapDialogClose">
       <div v-if="ldapLoading" style="text-align: center; padding: 40px;">
         <el-icon class="is-loading" :size="32"><Loading /></el-icon>
         <p style="margin-top: 12px; color: #94A3B8;">正在从 LDAP 获取用户列表...</p>
@@ -116,11 +116,11 @@
             <el-button type="info" class="el-button--cyan" @click="showLdapImport" :loading="ldapLoading">刷新</el-button>
           </div>
         </div>
-        <el-table :data="paginatedLdapUsers" stripe border max-height="400" @selection-change="handleLdapSelectionChange" ref="ldapTableRef">
+        <el-table :data="paginatedLdapUsers" stripe border max-height="400" @selection-change="handleLdapSelectionChange" @sort-change="handleLdapSortChange" ref="ldapTableRef">
           <el-table-column type="selection" width="55" :selectable="(row) => !row.imported" />
-          <el-table-column prop="username" label="用户名" width="120" />
-          <el-table-column prop="name" label="姓名" min-width="120" />
-          <el-table-column prop="email" label="邮箱" min-width="180" />
+          <el-table-column prop="username" label="用户名" width="120" sortable="custom" />
+          <el-table-column prop="name" label="姓名" min-width="120" sortable="custom" />
+          <el-table-column prop="email" label="邮箱" min-width="180" sortable="custom" />
           <el-table-column label="状态" width="100" align="center">
             <template #default="{ row }">
               <el-tag v-if="row.imported" type="success" size="small">已导入</el-tag>
@@ -231,19 +231,39 @@ const ldapLoading = ref(false)
 const importing = ref(false)
 const ldapUsers = ref([])
 const ldapSearch = ref('')
-const selectedLdapUsers = ref([])
 const ldapTableRef = ref(null)
 const ldapCurrentPage = ref(1)
 const ldapPageSize = ref(20)
+const selectedLdapUsernames = ref(new Set())
+const ldapSortProp = ref('')
+const ldapSortOrder = ref('')
 
 const filteredLdapUsers = computed(() => {
   const q = ldapSearch.value.trim().toLowerCase()
-  if (!q) return ldapUsers.value
-  return ldapUsers.value.filter(u =>
-    u.username.toLowerCase().includes(q) ||
-    (u.name && u.name.toLowerCase().includes(q)) ||
-    (u.email && u.email.toLowerCase().includes(q))
-  )
+  let list = ldapUsers.value
+  if (q) {
+    list = list.filter(u =>
+      u.username.toLowerCase().includes(q) ||
+      (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.email && u.email.toLowerCase().includes(q))
+    )
+  }
+  if (ldapSortProp.value && ldapSortOrder.value) {
+    const prop = ldapSortProp.value
+    const order = ldapSortOrder.value === 'ascending' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      const va = (a[prop] || '').toLowerCase()
+      const vb = (b[prop] || '').toLowerCase()
+      if (va < vb) return -1 * order
+      if (va > vb) return 1 * order
+      return 0
+    })
+  }
+  return list
+})
+
+const selectedLdapUsers = computed(() => {
+  return ldapUsers.value.filter(u => selectedLdapUsernames.value.has(u.username))
 })
 
 const paginatedLdapUsers = computed(() => {
@@ -253,12 +273,25 @@ const paginatedLdapUsers = computed(() => {
 
 function handleLdapSizeChange() {
   ldapCurrentPage.value = 1
-  selectedLdapUsers.value = []
 }
 
 function handleLdapCurrentChange() {
-  selectedLdapUsers.value = []
+  // 翻页不清除选择，由 watch(paginatedLdapUsers) 自动恢复选中态
 }
+
+function handleLdapSortChange({ prop, order }) {
+  ldapSortProp.value = prop || ''
+  ldapSortOrder.value = order || ''
+}
+
+// 翻页或数据变化后，恢复当前页中已选用户的勾选状态
+watch(paginatedLdapUsers, () => {
+  if (!ldapTableRef.value) return
+  const names = selectedLdapUsernames.value
+  paginatedLdapUsers.value.forEach(row => {
+    ldapTableRef.value.toggleRowSelection(row, names.has(row.username))
+  })
+}, { flush: 'post' })
 
 function formatTime(t) {
   if (!t) return ''
@@ -507,12 +540,21 @@ async function handleSubmitResetPwd() {
 }
 
 // LDAP 导入
+function handleLdapDialogClose() {
+  ldapUsers.value = []
+  selectedLdapUsernames.value = new Set()
+  ldapSortProp.value = ''
+  ldapSortOrder.value = ''
+}
+
 async function showLdapImport() {
   ldapImportVisible.value = true
   ldapLoading.value = true
   ldapSearch.value = ''
   ldapCurrentPage.value = 1
-  selectedLdapUsers.value = []
+  selectedLdapUsernames.value = new Set()
+  ldapSortProp.value = ''
+  ldapSortOrder.value = ''
   try {
     const ldapList = await getLdapUsers()
     // 标记已导入的用户
@@ -530,7 +572,20 @@ async function showLdapImport() {
 }
 
 function handleLdapSelectionChange(rows) {
-  selectedLdapUsers.value = rows
+  const currentPageUsernames = new Set(paginatedLdapUsers.value.map(r => r.username))
+  const selectedOnPage = new Set(rows.map(r => r.username))
+  const newSet = new Set(selectedLdapUsernames.value)
+  // 移除当前页中未选中的
+  for (const name of currentPageUsernames) {
+    if (!selectedOnPage.has(name)) {
+      newSet.delete(name)
+    }
+  }
+  // 添加当前页中选中的
+  for (const name of selectedOnPage) {
+    newSet.add(name)
+  }
+  selectedLdapUsernames.value = newSet
 }
 
 async function handleImportLdapUsers() {
