@@ -133,6 +133,7 @@ export const getLogs = (params) => api.get('/logs', { params })
 // Dashboard
 export const getDashboardStats = () => api.get('/dashboard/stats')
 export const getDashboardRemoteStats = () => api.get('/dashboard/remote-stats', { timeout: 35000 })
+export const getActivityStats = (params) => api.get('/dashboard/activity-stats', { params })
 
 // Users
 export const getUsers = () => api.get('/users')

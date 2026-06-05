@@ -55,6 +55,45 @@ func IsBlacklisted(jti string) bool {
 	return val > 0
 }
 
+const activeUserKeyPrefix = "opscenter:active_user:"
+
+// TrackActiveUser 标记用户为在线（登录时调用），key 在 JWT 过期后自动清除。
+func TrackActiveUser(username string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Set(context.Background(), activeUserKeyPrefix+username, "1", config.Global.JWT.Expire)
+}
+
+// UntrackActiveUser 标记用户为离线（登出时调用）。
+func UntrackActiveUser(username string) {
+	if rdb == nil {
+		return
+	}
+	rdb.Del(context.Background(), activeUserKeyPrefix+username)
+}
+
+// GetActiveUserCount 获取当前在线用户数。
+func GetActiveUserCount() int64 {
+	if rdb == nil {
+		return 0
+	}
+	var count int64
+	var cursor uint64
+	for {
+		keys, nextCursor, err := rdb.Scan(context.Background(), cursor, activeUserKeyPrefix+"*", 100).Result()
+		if err != nil {
+			break
+		}
+		count += int64(len(keys))
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+	return count
+}
+
 // Auth 返回 JWT 认证中间件。支持从 Authorization Header 或 URL query 参数 token 中提取令牌。
 func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {

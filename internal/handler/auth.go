@@ -229,6 +229,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			}
 
 			loginRateLimiter.Reset(clientIP)
+			middleware.TrackActiveUser(req.Username)
 			createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "LDAP 登录成功", 0, "")
 			c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 			return
@@ -278,6 +279,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	loginRateLimiter.Reset(clientIP)
+	middleware.TrackActiveUser(req.Username)
 	createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "登录成功", 0, "")
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 }
@@ -299,6 +301,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 	username, _ := c.Get("username")
+	middleware.UntrackActiveUser(fmt.Sprintf("%v", username))
 	createAuditLog(h.db, c, "auth", "logout", fmt.Sprintf("%v", username), "", "success", "登出成功", 0, "")
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }

@@ -1,296 +1,316 @@
 <template>
   <div class="dashboard">
-    <!-- 统计卡片网格 -->
-    <el-row :gutter="20">
-      <!-- 服务器管理（admin） -->
-      <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
-        <div class="stat-card" @click="$router.push('/servers')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(100,116,139,0.1)">
-              <el-icon :size="22" color="#64748B"><Monitor /></el-icon>
-            </div>
-            <span class="stat-title">服务器管理</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!statsLoading && serverStats">
-            <div class="stat-row">
-              <span class="stat-label">总数</span>
-              <span class="stat-value">{{ serverStats.total }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">启用 / 禁用</span>
-              <span class="stat-value">
-                <span class="text-success">{{ serverStats.enabled }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-danger">{{ serverStats.disabled }}</span>
-              </span>
-            </div>
-            <div class="stat-tags">
-              <el-tag v-for="(count, type) in serverStats.by_type" :key="type" size="small" type="info" class="stat-tag">
-                {{ typeLabel(type) }}: {{ count }}
-              </el-tag>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="statsLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>加载失败</span>
-            <el-button text type="primary" size="small" @click.stop="loadStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- 用户管理（admin） -->
-      <el-col v-if="userStore.isAdmin" :xs="24" :sm="12" :md="8">
-        <div class="stat-card" @click="$router.push('/users')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(100,116,139,0.1)">
-              <el-icon :size="22" color="#64748B"><User /></el-icon>
-            </div>
-            <span class="stat-title">用户管理</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!statsLoading && userStats">
-            <div class="stat-row">
-              <span class="stat-label">总数</span>
-              <span class="stat-value">{{ userStats.total }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">启用 / 禁用</span>
-              <span class="stat-value">
-                <span class="text-success">{{ userStats.enabled }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-danger">{{ userStats.disabled }}</span>
-              </span>
-            </div>
-            <div class="stat-tags">
-              <el-tag v-for="(count, role) in userStats.by_role" :key="role" size="small" :type="role === 'admin' ? 'danger' : 'info'" class="stat-tag">
-                {{ role === 'admin' ? '管理员' : '普通用户' }}: {{ count }}
-              </el-tag>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="statsLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>加载失败</span>
-            <el-button text type="primary" size="small" @click.stop="loadStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- LVS 管理 -->
-      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
-        <div class="stat-card" @click="$router.push('/lvs')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(6,182,212,0.1)">
-              <el-icon :size="22" color="#06B6D4"><Connection /></el-icon>
-            </div>
-            <span class="stat-title">LVS 管理</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!remoteLoading && lvsStats">
-            <div class="stat-row">
-              <span class="stat-label">VirtualServer</span>
-              <span class="stat-value">{{ lvsStats.vs_count }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">RealServer 在线 / 离线</span>
-              <span class="stat-value">
-                <span class="text-success">{{ lvsStats.rs_online }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-danger">{{ lvsStats.rs_offline }}</span>
-              </span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">ActiveConn / InActConn</span>
-              <span class="stat-value">
-                <span>{{ lvsStats.total_active_conn }}</span>
-                <span class="stat-divider">/</span>
-                <span>{{ lvsStats.total_inact_conn }}</span>
-              </span>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="remoteLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>{{ remoteError || '加载失败' }}</span>
-            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- Nginx 管理 -->
-      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
-        <div class="stat-card" @click="$router.push('/nginx')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(34,197,94,0.1)">
-              <el-icon :size="22" color="#22C55E"><Document /></el-icon>
-            </div>
-            <span class="stat-title">Nginx 管理</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!remoteLoading && nginxStats">
-            <div class="stat-row">
-              <span class="stat-label">Upstream 组</span>
-              <span class="stat-value">{{ nginxStats.upstream_count }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">Server 在线 / 离线</span>
-              <span class="stat-value">
-                <span class="text-success">{{ nginxStats.server_online }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-danger">{{ nginxStats.server_offline }}</span>
-              </span>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="remoteLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>{{ remoteError || '加载失败' }}</span>
-            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- K8S 发布 -->
-      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
-        <div class="stat-card" @click="$router.push('/k8s')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(245,158,11,0.1)">
-              <el-icon :size="22" color="#F59E0B"><Box /></el-icon>
-            </div>
-            <span class="stat-title">K8S 发布</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!remoteLoading && k8sStats">
-            <div class="stat-row">
-              <span class="stat-label">Rollout 总数</span>
-              <span class="stat-value">{{ k8sStats.total_rollouts }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">待发布 / 已发布</span>
-              <span class="stat-value">
-                <span class="text-warning">{{ k8sStats.pending }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-success">{{ k8sStats.online }}</span>
-              </span>
-            </div>
-            <div class="stat-tags" v-if="k8sStats.by_namespace && Object.keys(k8sStats.by_namespace).length > 0">
-              <el-tag v-for="(count, ns) in k8sStats.by_namespace" :key="ns" size="small" type="warning" class="stat-tag">
-                {{ ns }}: {{ count }}
-              </el-tag>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="remoteLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>{{ remoteError || '加载失败' }}</span>
-            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- 预生产扩缩容 -->
-      <el-col :xs="24" :sm="12" :md="userStore.isAdmin ? 8 : 12">
-        <div class="stat-card" @click="$router.push('/preprod')">
-          <div class="stat-header">
-            <div class="stat-icon" style="background: rgba(239,68,68,0.1)">
-              <el-icon :size="22" color="#EF4444"><ZoomOut /></el-icon>
-            </div>
-            <span class="stat-title">预生产扩缩容</span>
-            <el-icon class="stat-arrow"><ArrowRight /></el-icon>
-          </div>
-          <div class="stat-body" v-if="!remoteLoading && preprodStats">
-            <div class="stat-row">
-              <span class="stat-label">资源总数</span>
-              <span class="stat-value">{{ preprodStats.total_resources }}</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">已缩容 / 已扩容 / 正常</span>
-              <span class="stat-value">
-                <span class="text-danger">{{ preprodStats.scaled_down }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-warning">{{ preprodStats.expanded }}</span>
-                <span class="stat-divider">/</span>
-                <span class="text-success">{{ preprodStats.normal }}</span>
-              </span>
-            </div>
-          </div>
-          <div class="stat-body" v-else-if="remoteLoading">
-            <el-skeleton :rows="2" animated />
-          </div>
-          <div class="stat-body stat-error" v-else>
-            <span>{{ remoteError || '加载失败' }}</span>
-            <el-button text type="primary" size="small" @click.stop="loadRemoteStats">重试</el-button>
-          </div>
-        </div>
-      </el-col>
-    </el-row>
-
-    <!-- 最近操作 -->
-    <el-card class="main-card" style="margin-top: 20px;">
-      <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-weight: 600; font-size: 15px;">最近操作</span>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <el-button text type="primary" size="small" :loading="remoteLoading" @click="loadRemoteStats">
-              <el-icon style="margin-right: 4px"><Refresh /></el-icon>
-              刷新远程数据
-            </el-button>
-            <el-button text type="primary" @click="$router.push('/logs')">查看全部</el-button>
-          </div>
-        </div>
-      </template>
-      <el-table :data="logs" stripe v-if="logs.length > 0" v-force-reflow>
-        <el-table-column label="时间" width="180">
-          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column prop="username" label="操作人" width="100" />
-        <el-table-column prop="module" label="模块" width="100">
-          <template #default="{ row }">
-            <el-tag :type="moduleTagType(row.module)" size="small">{{ moduleLabel(row.module) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="ip" label="IP" width="130" show-overflow-tooltip />
-        <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
-        <el-table-column prop="action" label="动作" width="100" />
-        <el-table-column prop="target" label="目标" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small">{{ row.status === 'success' ? '成功' : '失败' }}</el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
-      <div v-else class="empty-state">
-        <el-icon class="empty-state-icon"><Document /></el-icon>
-        <span class="empty-state-text">暂无操作记录</span>
+    <!-- 页面顶部操作栏 -->
+    <div class="page-toolbar">
+      <div class="page-toolbar-left">
+        <span class="page-toolbar-hint">数据每 30 分钟自动刷新远程状态</span>
       </div>
-    </el-card>
+      <el-button text type="primary" size="small" :loading="remoteLoading" @click="refreshAll">
+        <el-icon style="margin-right: 4px"><Refresh /></el-icon>
+        刷新全部数据
+      </el-button>
+    </div>
+
+    <!-- ====== 实时状态 ====== -->
+    <div class="section">
+      <div class="section-header">
+        <el-icon :size="18"><Odometer /></el-icon>
+        <span>实时状态</span>
+      </div>
+
+      <!-- 数字卡片 -->
+      <el-row :gutter="16" class="stat-numbers">
+        <el-col :xs="24" :sm="8">
+          <div class="number-card number-card--cyan" style="animation-delay: 0s">
+            <div class="number-info">
+              <div class="number-label">在线用户数</div>
+              <div class="number-value">{{ animatedOnlineUsers }}</div>
+              <div class="number-sub">基于登录状态追踪</div>
+            </div>
+            <div class="number-deco"><el-icon :size="56"><User /></el-icon></div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="8">
+          <div class="number-card number-card--green" style="animation-delay: 0.08s">
+            <div class="number-info">
+              <div class="number-label">今日登录成功</div>
+              <div class="number-value">{{ animatedLoginSuccess }}</div>
+              <div class="number-sub">用户认证成功次数</div>
+            </div>
+            <div class="number-deco"><el-icon :size="56"><CircleCheck /></el-icon></div>
+          </div>
+        </el-col>
+        <el-col :xs="24" :sm="8">
+          <div class="number-card number-card--red" style="animation-delay: 0.16s">
+            <div class="number-info">
+              <div class="number-label">今日登录失败</div>
+              <div class="number-value">{{ animatedLoginFailed }}</div>
+              <div class="number-sub">密码错误 / 账户禁用等</div>
+            </div>
+            <div class="number-deco"><el-icon :size="56"><CircleClose /></el-icon></div>
+          </div>
+        </el-col>
+      </el-row>
+
+      <!-- 服务器/用户分布（admin） -->
+      <el-row v-if="userStore.isAdmin" :gutter="16">
+        <el-col :xs="24" :sm="12">
+          <el-card class="chart-card chart-card--key" shadow="hover">
+            <template #header>
+              <div class="chart-header-row">
+                <span class="chart-title">服务器类型分布</span>
+                <el-tag size="small" type="info" effect="plain">共 {{ serverStats?.total || 0 }} 台</el-tag>
+              </div>
+            </template>
+            <v-chart v-if="serverStats?.by_type" class="chart chart--lg" :option="serverTypePie" autoresize />
+            <div v-else-if="statsLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+            <div v-else class="chart-empty">暂无数据</div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="12">
+          <el-card class="chart-card chart-card--key" shadow="hover">
+            <template #header>
+              <div class="chart-header-row">
+                <span class="chart-title">用户角色分布</span>
+                <el-tag size="small" type="info" effect="plain">共 {{ userStats?.total || 0 }} 人</el-tag>
+              </div>
+            </template>
+            <v-chart v-if="userStats?.by_role" class="chart chart--lg" :option="userRolePie" autoresize />
+            <div v-else-if="statsLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+            <div v-else class="chart-empty">暂无数据</div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <!-- 各模块实时状态（4 列） -->
+      <el-row :gutter="16">
+        <el-col :xs="24" :sm="12" :md="6">
+          <el-card class="chart-card" shadow="hover">
+            <template #header><span class="chart-title">LVS RealServer</span></template>
+            <div class="chart-wrap">
+              <v-chart v-if="!remoteLoading && lvsStats" class="chart" :option="lvsPie" autoresize />
+              <div v-else-if="remoteLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+              <div v-else class="chart-error">
+                <span>{{ remoteError || '加载失败' }}</span>
+                <el-button text type="primary" size="small" @click="loadRemoteStats">重试</el-button>
+              </div>
+              <div v-if="remoteLoading && lvsStats" class="chart-overlay"><el-icon class="is-loading" :size="24"><Loading /></el-icon></div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <el-card class="chart-card" shadow="hover">
+            <template #header><span class="chart-title">Nginx Server</span></template>
+            <div class="chart-wrap">
+              <v-chart v-if="!remoteLoading && nginxStats" class="chart" :option="nginxPie" autoresize />
+              <div v-else-if="remoteLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+              <div v-else class="chart-error">
+                <span>{{ remoteError || '加载失败' }}</span>
+                <el-button text type="primary" size="small" @click="loadRemoteStats">重试</el-button>
+              </div>
+              <div v-if="remoteLoading && nginxStats" class="chart-overlay"><el-icon class="is-loading" :size="24"><Loading /></el-icon></div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <el-card class="chart-card" shadow="hover">
+            <template #header><span class="chart-title">K8S Rollout</span></template>
+            <div class="chart-wrap">
+              <v-chart v-if="!remoteLoading && k8sStats" class="chart" :option="k8sPie" autoresize />
+              <div v-else-if="remoteLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+              <div v-else class="chart-error">
+                <span>{{ remoteError || '加载失败' }}</span>
+                <el-button text type="primary" size="small" @click="loadRemoteStats">重试</el-button>
+              </div>
+              <div v-if="remoteLoading && k8sStats" class="chart-overlay"><el-icon class="is-loading" :size="24"><Loading /></el-icon></div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="12" :md="6">
+          <el-card class="chart-card" shadow="hover">
+            <template #header><span class="chart-title">预生产资源</span></template>
+            <div class="chart-wrap">
+              <v-chart v-if="!remoteLoading && preprodStats" class="chart" :option="preprodPie" autoresize />
+              <div v-else-if="remoteLoading" class="chart-loading"><el-skeleton :rows="3" animated /></div>
+              <div v-else class="chart-error">
+                <span>{{ remoteError || '加载失败' }}</span>
+                <el-button text type="primary" size="small" @click="loadRemoteStats">重试</el-button>
+              </div>
+              <div v-if="remoteLoading && preprodStats" class="chart-overlay"><el-icon class="is-loading" :size="24"><Loading /></el-icon></div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </div>
+
+    <!-- ====== 历史趋势 ====== -->
+    <div class="section">
+      <div class="section-header">
+        <el-icon :size="18"><TrendCharts /></el-icon>
+        <span>历史趋势</span>
+      </div>
+
+      <!-- 发布次数趋势 -->
+      <el-card class="chart-card trend-card" shadow="hover">
+        <template #header>
+          <div class="trend-header">
+            <span class="chart-title">各模块发布次数趋势</span>
+            <el-radio-group v-model="deployGranularity" size="small" @change="loadActivityStats">
+              <el-radio-button value="day">按天</el-radio-button>
+              <el-radio-button value="week">按周</el-radio-button>
+              <el-radio-button value="month">按月</el-radio-button>
+              <el-radio-button value="year">按年</el-radio-button>
+            </el-radio-group>
+          </div>
+        </template>
+        <v-chart v-if="deployChartData.length > 0" class="trend-chart" :option="deployLineOption" autoresize />
+        <div v-else class="empty-state">
+          <el-icon class="empty-state-icon"><DataLine /></el-icon>
+          <span class="empty-state-text">暂无发布数据</span>
+        </div>
+      </el-card>
+
+      <!-- 操作动作明细 -->
+      <el-card class="chart-card trend-card" shadow="hover">
+        <template #header>
+          <div class="trend-header">
+            <span class="chart-title">各模块操作动作明细</span>
+            <el-radio-group v-model="actionGranularity" size="small" @change="loadActionStats">
+              <el-radio-button value="day">按天</el-radio-button>
+              <el-radio-button value="week">按周</el-radio-button>
+              <el-radio-button value="month">按月</el-radio-button>
+              <el-radio-button value="year">按年</el-radio-button>
+            </el-radio-group>
+          </div>
+        </template>
+        <el-tabs v-model="activeActionTab" type="border-card" class="action-tabs">
+          <el-tab-pane label="LVS 管理" name="lvs">
+            <v-chart v-if="Object.keys(lvsActionBar).length > 0" class="action-chart" :option="lvsActionBar" autoresize />
+            <div v-else class="action-empty">暂无 LVS 操作记录</div>
+          </el-tab-pane>
+          <el-tab-pane label="Nginx 管理" name="nginx">
+            <v-chart v-if="Object.keys(nginxActionBar).length > 0" class="action-chart" :option="nginxActionBar" autoresize />
+            <div v-else class="action-empty">暂无 Nginx 操作记录</div>
+          </el-tab-pane>
+          <el-tab-pane label="K8S 发布" name="k8s">
+            <v-chart v-if="Object.keys(k8sActionBar).length > 0" class="action-chart" :option="k8sActionBar" autoresize />
+            <div v-else class="action-empty">暂无 K8S 操作记录</div>
+          </el-tab-pane>
+          <el-tab-pane label="预生产扩缩容" name="preprod">
+            <v-chart v-if="Object.keys(preprodActionBar).length > 0" class="action-chart" :option="preprodActionBar" autoresize />
+            <div v-else class="action-empty">暂无预生产操作记录</div>
+          </el-tab-pane>
+        </el-tabs>
+      </el-card>
+
+      <!-- 登录统计趋势（admin） -->
+      <el-card v-if="userStore.isAdmin" class="chart-card trend-card" shadow="hover">
+        <template #header>
+          <div class="trend-header">
+            <span class="chart-title">登录统计趋势</span>
+            <el-radio-group v-model="loginGranularity" size="small" @change="loadLoginStats">
+              <el-radio-button value="day">按天</el-radio-button>
+              <el-radio-button value="week">按周</el-radio-button>
+              <el-radio-button value="month">按月</el-radio-button>
+              <el-radio-button value="year">按年</el-radio-button>
+            </el-radio-group>
+          </div>
+        </template>
+        <v-chart v-if="loginChartData.length > 0" class="trend-chart" :option="loginBarOption" autoresize />
+        <div v-else class="empty-state">
+          <el-icon class="empty-state-icon"><DataLine /></el-icon>
+          <span class="empty-state-text">暂无登录数据</span>
+        </div>
+      </el-card>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, markRaw } from 'vue'
-import { getLogs, getDashboardStats, getDashboardRemoteStats } from '../api'
+import { ref, computed, onMounted, watch } from 'vue'
+import { getDashboardStats, getDashboardRemoteStats, getActivityStats } from '../api'
 import { useUserStore } from '../stores/user'
+import { useAppStore } from '../stores/app'
 import { ElMessage } from 'element-plus'
-import { Connection, Document, Box, ZoomOut, Monitor, User, ArrowRight, Refresh } from '@element-plus/icons-vue'
+import { User, CircleCheck, CircleClose, DataLine, Refresh, Loading, Odometer, TrendCharts } from '@element-plus/icons-vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { PieChart, LineChart, BarChart } from 'echarts/charts'
+import {
+  TitleComponent,
+  TooltipComponent,
+  LegendComponent,
+  GridComponent
+} from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+use([PieChart, LineChart, BarChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 const userStore = useUserStore()
+const appStore = useAppStore()
 
-const logs = ref([])
+// ---- 主题感知 ----
+const isDark = computed(() => appStore.theme === 'dark')
+const themeColors = computed(() => isDark.value
+  ? { text: '#E2E8F0', subText: '#94A3B8', muted: '#64748B', border: 'rgba(255,255,255,0.06)', tooltipBg: '#1A1D2E', tooltipBorder: 'rgba(255,255,255,0.1)' }
+  : { text: '#303133', subText: '#606266', muted: '#909399', border: '#e4e7ed', tooltipBg: '#ffffff', tooltipBorder: '#e4e7ed' }
+)
 
-// MySQL 统计（即时）
+// ---- 色彩方案 ----
+const C = {
+  lvs: '#06B6D4',
+  nginx: '#22C55E',
+  k8s: '#F59E0B',
+  preprod: '#EF4444',
+  success: '#22C55E',
+  failed: '#EF4444',
+  online: '#22C55E',
+  offline: '#EF4444',
+  pending: '#F59E0B',
+  other: '#94A3B8',
+  scaledDown: '#EF4444',
+  expanded: '#F59E0B',
+  normal: '#22C55E'
+}
+
+const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
+
+// ---- countUp 动画 ----
+function useCountUp(targetRef, duration = 800) {
+  const display = ref(0)
+  let animFrame = null
+  watch(targetRef, (newVal) => {
+    if (animFrame) cancelAnimationFrame(animFrame)
+    const start = display.value
+    const diff = newVal - start
+    if (diff === 0) return
+    const startTime = performance.now()
+    function step(now) {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // easeOutCubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      display.value = Math.round(start + diff * eased)
+      if (progress < 1) animFrame = requestAnimationFrame(step)
+    }
+    animFrame = requestAnimationFrame(step)
+  })
+  return display
+}
+
+// ---- 数据 ----
+const onlineUsers = ref(0)
+const todayLoginSuccess = ref(0)
+const todayLoginFailed = ref(0)
+
+const animatedOnlineUsers = useCountUp(onlineUsers)
+const animatedLoginSuccess = useCountUp(todayLoginSuccess)
+const animatedLoginFailed = useCountUp(todayLoginFailed)
+
 const statsLoading = ref(true)
 const serverStats = ref(null)
 const userStats = ref(null)
 
-// SSH 远程统计（慢）
 const remoteLoading = ref(true)
 const remoteError = ref(null)
 const lvsStats = ref(null)
@@ -298,19 +318,308 @@ const nginxStats = ref(null)
 const k8sStats = ref(null)
 const preprodStats = ref(null)
 
-const typeLabels = { lvs: 'LVS', nginx: 'Nginx', kubernetes: 'K8S', preprod: 'Preprod' }
-function typeLabel(type) { return typeLabels[type] || type }
+const deployGranularity = ref('day')
+const loginGranularity = ref('day')
+const deployChartData = ref([])
+const loginChartData = ref([])
+const actionStatsData = ref([])
 
-const moduleLabels = markRaw({ lvs: 'LVS', nginx: 'Nginx', k8s: 'Kubernetes', preprod: 'K8s-PrePro', auth: '认证', server: '服务器' })
-const moduleTagTypes = markRaw({ lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' })
+// Tab & 动作粒度
+const activeActionTab = ref('lvs')
+const actionGranularity = ref('day')
 
-function formatTime(t) {
-  if (!t) return ''
-  return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
+// ---- 工具函数：带主题的 tooltip ----
+function tooltipConf(extra = {}) {
+  return {
+    backgroundColor: themeColors.value.tooltipBg,
+    borderColor: themeColors.value.tooltipBorder,
+    textStyle: { color: themeColors.value.text, fontSize: 13 },
+    ...extra
+  }
 }
 
-function moduleLabel(m) { return moduleLabels[m] || m }
-function moduleTagType(m) { return moduleTagTypes[m] || '' }
+// ---- 饼图：服务器类型分布（实心饼图）----
+const serverTypePie = computed(() => {
+  if (!serverStats.value?.by_type) return {}
+  const data = Object.entries(serverStats.value.by_type).map(([k, v]) => ({
+    name: k === 'kubernetes' ? 'K8S' : k.toUpperCase(),
+    value: v
+  }))
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'item', formatter: '{b}: {c} 台 ({d}%)' }) },
+    legend: { bottom: 0, textStyle: { color: themeColors.value.subText, fontSize: 12 } },
+    color: [C.lvs, C.nginx, C.k8s, C.preprod],
+    series: [{
+      type: 'pie',
+      radius: '60%',
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 8, borderColor: isDark.value ? '#141722' : '#fff', borderWidth: 3 },
+      label: { show: true, formatter: '{b}\n{c} 台', color: themeColors.value.subText, fontSize: 12 },
+      emphasis: {
+        label: { fontSize: 15, fontWeight: 'bold', color: themeColors.value.text },
+        itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.2)' }
+      },
+      data
+    }]
+  }
+})
+
+// ---- 饼图：用户角色分布（实心饼图）----
+const userRolePie = computed(() => {
+  if (!userStats.value?.by_role) return {}
+  const data = Object.entries(userStats.value.by_role).map(([k, v]) => ({
+    name: k === 'admin' ? '管理员' : '普通用户',
+    value: v
+  }))
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'item', formatter: '{b}: {c} 人 ({d}%)' }) },
+    legend: { bottom: 0, textStyle: { color: themeColors.value.subText, fontSize: 12 } },
+    color: ['#EF4444', '#64748B'],
+    series: [{
+      type: 'pie',
+      radius: '60%',
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 8, borderColor: isDark.value ? '#141722' : '#fff', borderWidth: 3 },
+      label: { show: true, formatter: '{b}\n{c} 人', color: themeColors.value.subText, fontSize: 12 },
+      emphasis: {
+        label: { fontSize: 15, fontWeight: 'bold', color: themeColors.value.text },
+        itemStyle: { shadowBlur: 20, shadowColor: 'rgba(0,0,0,0.2)' }
+      },
+      data
+    }]
+  }
+})
+
+// ---- 饼图：LVS（环形图，中心显示总数）----
+const lvsPie = computed(() => {
+  if (!lvsStats.value) return {}
+  const total = (lvsStats.value.rs_online || 0) + (lvsStats.value.rs_offline || 0)
+  const data = [
+    { name: '在线', value: lvsStats.value.rs_online || 0 },
+    { name: '离线', value: lvsStats.value.rs_offline || 0 }
+  ]
+  return makeRingOption(data, ['在线', '离线'], [C.online, C.offline], total, 'RS')
+})
+
+// ---- 饼图：Nginx（环形图，中心显示总数）----
+const nginxPie = computed(() => {
+  if (!nginxStats.value) return {}
+  const total = (nginxStats.value.server_online || 0) + (nginxStats.value.server_offline || 0)
+  const data = [
+    { name: '在线', value: nginxStats.value.server_online || 0 },
+    { name: '离线', value: nginxStats.value.server_offline || 0 }
+  ]
+  return makeRingOption(data, ['在线', '离线'], [C.online, C.offline], total, 'Server')
+})
+
+// ---- 饼图：K8S（玫瑰图）----
+const k8sPie = computed(() => {
+  if (!k8sStats.value) return {}
+  const other = (k8sStats.value.total_rollouts || 0) - (k8sStats.value.pending || 0) - (k8sStats.value.online || 0)
+  const data = [
+    { name: '待发布', value: k8sStats.value.pending || 0 },
+    { name: '已发布', value: k8sStats.value.online || 0 },
+    { name: '其他', value: Math.max(0, other) }
+  ]
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }) },
+    legend: { bottom: 0, textStyle: { color: themeColors.value.subText, fontSize: 11 } },
+    color: [C.pending, C.online, C.other],
+    series: [{
+      type: 'pie',
+      radius: ['15%', '65%'],
+      center: ['50%', '42%'],
+      roseType: 'area',
+      itemStyle: { borderRadius: 6, borderColor: isDark.value ? '#141722' : '#fff', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{c}', color: themeColors.value.subText, fontSize: 11 },
+      emphasis: { label: { fontSize: 13, fontWeight: 'bold', color: themeColors.value.text } },
+      data
+    }]
+  }
+})
+
+// ---- 饼图：预生产（玫瑰图）----
+const preprodPie = computed(() => {
+  if (!preprodStats.value) return {}
+  const data = [
+    { name: '已缩容', value: preprodStats.value.scaled_down || 0 },
+    { name: '已扩容', value: preprodStats.value.expanded || 0 },
+    { name: '正常', value: preprodStats.value.normal || 0 }
+  ]
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }) },
+    legend: { bottom: 0, textStyle: { color: themeColors.value.subText, fontSize: 11 } },
+    color: [C.scaledDown, C.expanded, C.normal],
+    series: [{
+      type: 'pie',
+      radius: ['15%', '65%'],
+      center: ['50%', '42%'],
+      roseType: 'area',
+      itemStyle: { borderRadius: 6, borderColor: isDark.value ? '#141722' : '#fff', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{c}', color: themeColors.value.subText, fontSize: 11 },
+      emphasis: { label: { fontSize: 13, fontWeight: 'bold', color: themeColors.value.text } },
+      data
+    }]
+  }
+})
+
+// 环形图模板（LVS/Nginx 共用）
+function makeRingOption(data, legendNames, colors, total, unit) {
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'item', formatter: '{b}: {c} ' + unit + ' ({d}%)' }) },
+    legend: { bottom: 0, textStyle: { color: themeColors.value.subText, fontSize: 11 } },
+    color: colors,
+    graphic: [{
+      type: 'group',
+      left: 'center',
+      top: '36%',
+      children: [
+        {
+          type: 'text',
+          style: { text: String(total), textAlign: 'center', fill: themeColors.value.text, fontSize: 28, fontWeight: 700, fontFamily: 'system-ui, -apple-system, sans-serif' }
+        },
+        {
+          type: 'text',
+          top: 32,
+          style: { text: '总计', textAlign: 'center', fill: themeColors.value.muted, fontSize: 12 }
+        }
+      ]
+    }],
+    series: [{
+      type: 'pie',
+      radius: ['50%', '70%'],
+      center: ['50%', '42%'],
+      avoidLabelOverlap: false,
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 'bold', color: themeColors.value.text },
+        itemStyle: { shadowBlur: 15, shadowColor: 'rgba(0,0,0,0.15)' }
+      },
+      itemStyle: { borderRadius: 4, borderColor: isDark.value ? '#141722' : '#fff', borderWidth: 2 },
+      data
+    }]
+  }
+}
+
+// ---- 操作动作统计（Tab 大图）----
+const ACTION_NAMES = {
+  lvs: { op: '上线/下线', swap: '切换' },
+  nginx: { online: '上线', offline: '下线', swap: '切换', toggle: '单个切换', batch: '批量操作', rollback: '回滚' },
+  k8s: { online: '上线', sync: '同步', rollback: '回滚', full_online: '完全上线', full_sync: '完全同步', full_rollback: '完全回滚' },
+  preprod: { scaleup: '扩容', scaledown: '缩容' }
+}
+
+function makeActionBarOption(module) {
+  const items = actionStatsData.value.filter(d => d.module === module)
+  if (items.length === 0) return {}
+  items.sort((a, b) => b.count - a.count)
+  const names = items.map(d => ACTION_NAMES[module]?.[d.action] || d.action)
+  const values = items.map(d => d.count)
+  const color = C[module]
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'axis', axisPointer: { type: 'shadow' } }) },
+    grid: { left: 20, right: 50, top: 20, bottom: 30, containLabel: true },
+    xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } }, axisLabel: { color: themeColors.value.muted, fontSize: 12 } },
+    yAxis: {
+      type: 'category',
+      data: names,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: themeColors.value.subText, fontSize: 13 }
+    },
+    series: [{
+      type: 'bar',
+      data: values,
+      barWidth: '50%',
+      itemStyle: {
+        borderRadius: [0, 6, 6, 0],
+        color: { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: color + '33' }, { offset: 1, color: color }] }
+      },
+      emphasis: { itemStyle: { shadowBlur: 12, shadowColor: color + '40' } },
+      label: { show: true, position: 'right', color: themeColors.value.text, fontSize: 14, fontWeight: 700 }
+    }]
+  }
+}
+
+const lvsActionBar = computed(() => makeActionBarOption('lvs'))
+const nginxActionBar = computed(() => makeActionBarOption('nginx'))
+const k8sActionBar = computed(() => makeActionBarOption('k8s'))
+const preprodActionBar = computed(() => makeActionBarOption('preprod'))
+
+// ---- 折线图：发布趋势 ----
+const deployLineOption = computed(() => {
+  if (deployChartData.value.length === 0) return {}
+  const periods = [...new Set(deployChartData.value.map(d => d.period))].sort()
+  const modules = ['lvs', 'nginx', 'k8s', 'preprod']
+  const series = modules.map(mod => {
+    const map = {}
+    deployChartData.value.filter(d => d.module === mod).forEach(d => { map[d.period] = d.count })
+    return {
+      name: MODULE_NAMES[mod],
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 8,
+      lineStyle: { width: 3 },
+      areaStyle: {
+        opacity: 0.15,
+        color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: C[mod] }, { offset: 1, color: 'transparent' }] }
+      },
+      data: periods.map(p => map[p] || 0)
+    }
+  })
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'axis', axisPointer: { type: 'cross', lineStyle: { color: themeColors.value.muted, type: 'dashed' } } }) },
+    legend: { data: modules.map(m => MODULE_NAMES[m]), right: 0, top: 'center', orient: 'vertical', textStyle: { color: themeColors.value.subText, fontSize: 12 } },
+    color: [C.lvs, C.nginx, C.k8s, C.preprod],
+    grid: { left: 60, right: 80, top: 20, bottom: 40 },
+    xAxis: { type: 'category', data: periods, boundaryGap: false, axisLine: { lineStyle: { color: themeColors.value.border } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    series
+  }
+})
+
+// ---- 柱状图：登录统计 ----
+const loginBarOption = computed(() => {
+  if (loginChartData.value.length === 0) return {}
+  const periods = [...new Set(loginChartData.value.map(d => d.period))].sort()
+  const successMap = {}
+  const failedMap = {}
+  loginChartData.value.forEach(d => {
+    if (d.status === 'success') successMap[d.period] = d.count
+    else if (d.status === 'failed') failedMap[d.period] = d.count
+  })
+  return {
+    tooltip: { ...tooltipConf({ trigger: 'axis', axisPointer: { type: 'shadow' } }) },
+    legend: { data: ['成功', '失败'], right: 0, top: 'center', orient: 'vertical', textStyle: { color: themeColors.value.subText, fontSize: 12 } },
+    color: [C.success, C.failed],
+    grid: { left: 60, right: 80, top: 20, bottom: 40 },
+    xAxis: { type: 'category', data: periods, axisLine: { lineStyle: { color: themeColors.value.border } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    series: [
+      {
+        name: '成功', type: 'bar', stack: 'login', barWidth: '50%',
+        data: periods.map(p => successMap[p] || 0),
+        itemStyle: {
+          borderRadius: [0, 0, 0, 0],
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#4ade80' }, { offset: 1, color: '#22C55E' }] }
+        }
+      },
+      {
+        name: '失败', type: 'bar', stack: 'login',
+        data: periods.map(p => failedMap[p] || 0),
+        itemStyle: {
+          borderRadius: [4, 4, 0, 0],
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#f87171' }, { offset: 1, color: '#EF4444' }] }
+        }
+      }
+    ]
+  }
+})
+
+// ---- 数据加载 ----
 
 async function loadStats() {
   statsLoading.value = true
@@ -318,6 +627,7 @@ async function loadStats() {
     const res = await getDashboardStats()
     serverStats.value = res.servers || null
     userStats.value = res.users || null
+    onlineUsers.value = res.online_users || 0
   } catch (e) {
     ElMessage.error('加载 MySQL 统计失败')
   } finally {
@@ -342,16 +652,54 @@ async function loadRemoteStats() {
   }
 }
 
-onMounted(async () => {
-  // 并行加载 MySQL 统计、SSH 远程统计、操作日志
+async function loadActivityStats() {
+  try {
+    const res = await getActivityStats({ granularity: deployGranularity.value })
+    deployChartData.value = res.deploy_stats || []
+    loginChartData.value = res.login_stats || []
+    if (deployGranularity.value === 'day') {
+      const today = new Date().toISOString().slice(0, 10)
+      const todayLogins = (res.login_stats || []).filter(d => d.period === today)
+      todayLoginSuccess.value = todayLogins.find(d => d.status === 'success')?.count || 0
+      todayLoginFailed.value = todayLogins.find(d => d.status === 'failed')?.count || 0
+    }
+  } catch (e) {
+    console.error('加载活动统计失败', e)
+  }
+}
+
+async function loadLoginStats() {
+  try {
+    const res = await getActivityStats({ granularity: loginGranularity.value })
+    loginChartData.value = res.login_stats || []
+  } catch (e) {
+    console.error('加载登录统计失败', e)
+  }
+}
+
+async function loadActionStats() {
+  try {
+    // granularity 用于后端计算 dateFormat（影响 deploy_stats 分组），传 deployGranularity 保持一致
+    // action_granularity 用于后端独立计算 actionStartTime（action_stats 的时间窗口）
+    const res = await getActivityStats({ granularity: deployGranularity.value, action_granularity: actionGranularity.value })
+    actionStatsData.value = res.action_stats || []
+  } catch (e) {
+    console.error('加载操作动作统计失败', e)
+  }
+}
+
+function refreshAll() {
   loadStats()
   loadRemoteStats()
-  try {
-    const res = await getLogs({ page: 1, size: 10 })
-    logs.value = res.data || []
-  } catch (e) {
-    ElMessage.error('加载日志失败')
-  }
+  loadActivityStats()
+  loadActionStats()
+}
+
+onMounted(() => {
+  loadStats()
+  loadRemoteStats()
+  loadActivityStats()
+  loadActionStats()
 })
 </script>
 
@@ -360,103 +708,265 @@ onMounted(async () => {
   padding: 0;
 }
 
-.stat-card {
-  background: var(--card-bg);
-  border-radius: var(--card-radius);
-  border: var(--card-border);
-  cursor: pointer;
-  transition: transform 0.2s, border-color 0.2s;
-  margin-bottom: 20px;
-  overflow: hidden;
+/* ===== 分组区域 ===== */
+.section {
+  margin-bottom: 24px;
 }
 
-.stat-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(6, 182, 212, 0.2);
-}
-
-.stat-card:active {
-  transform: translateY(-1px);
-}
-
-.stat-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px 0;
-}
-
-.stat-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.stat-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.stat-arrow {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.stat-body {
-  padding: 12px 20px 16px;
-  min-height: 60px;
-}
-
-.stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.stat-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.stat-divider {
-  margin: 0 4px;
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-.stat-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.stat-tag {
-  font-size: 12px;
-}
-
-.stat-error {
+.section-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748B;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-default, #e4e7ed);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #303133);
+}
+
+/* ===== 顶部操作栏 ===== */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.page-toolbar-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #909399);
+}
+
+/* ===== 数字卡片 ===== */
+.stat-numbers {
+  margin-bottom: 16px;
+}
+
+.number-card {
+  border-radius: var(--card-radius, 12px);
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  cursor: default;
+  animation: cardSlideIn 0.5s ease both;
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.number-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.number-card--cyan {
+  background: linear-gradient(135deg, #0e7490, #06b6d4);
+  color: #fff;
+}
+
+.number-card--green {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  color: #fff;
+}
+
+.number-card--red {
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  color: #fff;
+}
+
+.number-info {
+  position: relative;
+  z-index: 1;
+}
+
+.number-label {
+  font-size: 13px;
+  opacity: 0.85;
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+}
+
+.number-value {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.number-sub {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 6px;
+}
+
+.number-deco {
+  opacity: 0.15;
+  position: relative;
+  z-index: 0;
+  margin-right: -8px;
+}
+
+/* ===== 图表卡片 ===== */
+.chart-card {
+  margin-bottom: 16px;
+}
+
+.chart-card--key :deep(.el-card__body) {
+  padding: 12px 20px 16px;
+}
+
+.chart-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chart-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.chart {
+  height: 260px;
+}
+
+.chart--lg {
+  height: 300px;
+}
+
+.chart-wrap {
+  position: relative;
+}
+
+.chart-loading,
+.chart-error {
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary, #64748B);
   font-size: 13px;
 }
 
-.text-success { color: #22C55E; }
-.text-danger { color: #EF4444; }
-.text-warning { color: #F59E0B; }
+.chart-empty {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-placeholder, #c0c4cc);
+  font-size: 13px;
+}
+
+.chart-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  z-index: 5;
+}
+
+/* ===== 操作动作 Tab ===== */
+.action-tabs {
+  border-radius: 8px;
+}
+
+.action-chart {
+  height: 320px;
+}
+
+.action-empty {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-placeholder, #c0c4cc);
+  font-size: 14px;
+}
+
+/* ===== 趋势图 ===== */
+.trend-card {
+  margin-bottom: 16px;
+}
+
+.trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.trend-chart {
+  height: 380px;
+}
+
+/* ===== 空状态 ===== */
+.empty-state {
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.empty-state-icon {
+  font-size: 52px;
+  color: var(--text-placeholder, #c0c4cc);
+}
+
+.empty-state-text {
+  font-size: 14px;
+  color: var(--text-secondary, #909399);
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 768px) {
+  .page-toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .number-value {
+    font-size: 28px;
+  }
+
+  .number-deco {
+    display: none;
+  }
+
+  .chart {
+    height: 220px;
+  }
+
+  .chart--lg {
+    height: 260px;
+  }
+
+  .trend-chart {
+    height: 280px;
+  }
+
+  .action-chart {
+    height: 260px;
+  }
+}
 </style>

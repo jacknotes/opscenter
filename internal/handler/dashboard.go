@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"opscenter/internal/config"
+	"opscenter/internal/middleware"
 	"opscenter/internal/model"
 	"opscenter/internal/service"
 )
@@ -106,11 +107,11 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	}
 
 	result["servers"] = gin.H{
-		"total":   total,
-		"enabled": enabled,
+		"total":    total,
+		"enabled":  enabled,
 		"disabled": disabled,
-		"by_type": typeMap,
-		"by_env":  envMap,
+		"by_type":  typeMap,
+		"by_env":   envMap,
 	}
 
 	// 用户统计（仅 admin 可见）
@@ -146,9 +147,142 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			"disabled": userDisabled,
 			"by_role":  roleMap,
 		}
+
+		// 在线用户数：通过 Redis 活跃用户集合获取
+		result["online_users"] = middleware.GetActiveUserCount()
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// ActivityStats godoc
+//
+//	@Summary		获取仪表盘活动统计数据
+//	@Description	按日/周/月/年统计各模块发布次数和登录成功/失败次数
+//	@Tags			仪表盘
+//	@Produce		json
+//	@Param			granularity	query	string	true	"时间粒度: day/week/month/year"
+//	@Security		BearerAuth
+//	@Success		200	{object}	object
+//	@Router			/dashboard/activity-stats [get]
+func (h *DashboardHandler) ActivityStats(c *gin.Context) {
+	ctx := c.Request.Context()
+	granularity := c.DefaultQuery("granularity", "day")
+	actionGranularity := c.DefaultQuery("action_granularity", "")
+
+	// 根据粒度确定时间范围和分组表达式
+	var dateFormat string
+	var defaultDuration time.Duration
+	switch granularity {
+	case "week":
+		dateFormat = "%x-W%v"
+		defaultDuration = 12 * 7 * 24 * time.Hour
+	case "month":
+		dateFormat = "%Y-%m"
+		defaultDuration = 365 * 24 * time.Hour
+	case "year":
+		dateFormat = "%Y"
+		defaultDuration = 5 * 365 * 24 * time.Hour
+	default: // day
+		dateFormat = "%Y-%m-%d"
+		defaultDuration = 30 * 24 * time.Hour
+	}
+
+	startTime := time.Now().Add(-defaultDuration)
+
+	// 操作动作统计使用独立的时间粒度，按自然周期起始点计算
+	actionGran := granularity
+	if actionGranularity != "" {
+		actionGran = actionGranularity
+	}
+	now := time.Now()
+	var actionStartTime time.Time
+	switch actionGran {
+	case "week":
+		// 本周一 00:00
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		actionStartTime = time.Date(now.Year(), now.Month(), now.Day()-weekday+1, 0, 0, 0, 0, now.Location())
+	case "month":
+		// 本月 1 日 00:00
+		actionStartTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	case "year":
+		// 本年 1 月 1 日 00:00
+		actionStartTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+	default: // day
+		// 今天 00:00
+		actionStartTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	}
+
+	type moduleStat struct {
+		Period string `json:"period"`
+		Module string `json:"module"`
+		Count  int64  `json:"count"`
+	}
+	type loginStat struct {
+		Period string `json:"period"`
+		Status string `json:"status"`
+		Count  int64  `json:"count"`
+	}
+
+	// 发布统计：LVS/Nginx/K8S/Preprod
+	var deployStats []moduleStat
+	deployQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+		Select("DATE_FORMAT(created_at, ?) as period, module, count(*) as count", dateFormat).
+		Where("module IN ? AND created_at > ?", []string{"lvs", "nginx", "k8s", "preprod"}, startTime).
+		Group("period, module").
+		Order("period")
+
+	// 非管理员过滤掉 auth/server 模块（虽然这里只查了 lvs/nginx/k8s/preprod，但保持一致）
+	userRole, _ := c.Get("role")
+	if userRole != "admin" {
+		deployQuery = deployQuery.Where("module NOT IN ?", []string{"auth", "server"})
+	}
+
+	if err := deployQuery.Scan(&deployStats).Error; err != nil {
+		log.Printf("查询发布统计失败: %v", err)
+	}
+
+	// 登录统计
+	var loginStats []loginStat
+	loginQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+		Select("DATE_FORMAT(created_at, ?) as period, status, count(*) as count", dateFormat).
+		Where("module = ? AND action = ? AND created_at > ?", "auth", "login", startTime).
+		Group("period, status").
+		Order("period")
+
+	// 非管理员不可见登录统计
+	if userRole != "admin" {
+		loginStats = []loginStat{}
+	} else {
+		if err := loginQuery.Scan(&loginStats).Error; err != nil {
+			log.Printf("查询登录统计失败: %v", err)
+		}
+	}
+
+	// 操作动作统计：按 module + action 分组，全局累计
+	type actionStat struct {
+		Module string `json:"module"`
+		Action string `json:"action"`
+		Count  int64  `json:"count"`
+	}
+	var actionStats []actionStat
+	actionQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+		Select("module, action, count(*) as count").
+		Where("module IN ? AND created_at > ?", []string{"lvs", "nginx", "k8s", "preprod"}, actionStartTime).
+		Group("module, action").
+		Order("module, count DESC")
+	if err := actionQuery.Scan(&actionStats).Error; err != nil {
+		log.Printf("查询操作动作统计失败: %v", err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deploy_stats":  deployStats,
+		"login_stats":   loginStats,
+		"action_stats":  actionStats,
+	})
 }
 
 // RemoteStats godoc
