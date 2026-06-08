@@ -1,19 +1,25 @@
 <template>
-  <el-card style="margin-top: 20px;">
+  <el-card style="margin-top: 20px">
     <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; justify-content: space-between; align-items: center">
         <span>执行结果</span>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px">
           <el-tag v-if="status === 'streaming'" type="warning" size="small">执行中...</el-tag>
           <el-tag v-else-if="status === 'done'" type="success" size="small">执行完成</el-tag>
           <el-tag v-else-if="status === 'error'" type="danger" size="small">执行失败</el-tag>
           <el-tag v-else-if="status === 'connecting'" type="info" size="small">连接中...</el-tag>
-          <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')">取消</el-button>
+          <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')"
+            >取消</el-button
+          >
         </div>
       </div>
     </template>
     <div ref="container" class="stream-output" @scroll="onScroll">
-      <div v-for="(line, idx) in lines" :key="idx" :class="['output-line', line.stream === 'stderr' ? 'stderr' : 'stdout']">
+      <div
+        v-for="line in visibleLines"
+        :key="line.id"
+        :class="['output-line', line.stream === 'stderr' ? 'stderr' : 'stdout']"
+      >
         {{ line.text }}
       </div>
       <div v-if="status === 'streaming'" class="cursor">_</div>
@@ -22,7 +28,9 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
+
+const MAX_RENDERED_LINES = 300
 
 const props = defineProps({
   lines: { type: Array, default: () => [] },
@@ -32,8 +40,15 @@ const props = defineProps({
 
 defineEmits(['cancel'])
 
+// 只渲染最后 N 行，减少 DOM 节点数量
+const visibleLines = computed(() => {
+  const arr = props.lines
+  return arr.length > MAX_RENDERED_LINES ? arr.slice(-MAX_RENDERED_LINES) : arr
+})
+
 const container = ref(null)
 const userScrolled = ref(false)
+let scrollTimer = null
 
 function scrollToBottom() {
   const el = container.value
@@ -55,28 +70,34 @@ onMounted(async () => {
   scrollToBottom()
 })
 
+// 防抖滚动：高频消息到来时合并多次滚动为一次
 watch(
   () => props.lines.length,
-  async () => {
+  () => {
     if (userScrolled.value) return
-    await nextTick()
-    scrollToBottom()
+    if (scrollTimer) return
+    scrollTimer = requestAnimationFrame(() => {
+      scrollTimer = null
+      scrollToBottom()
+    })
   }
 )
 </script>
 
 <style scoped>
 .stream-output {
-  background: #0B0D13;
-  color: #22D3EE;
+  background: var(--terminal-bg, #0b0d13);
+  color: var(--terminal-text, #22d3ee);
   padding: 15px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.06));
   max-height: 500px;
   overflow-y: auto;
-  font-family: 'Courier New', Consolas, monospace;
-  font-size: 13px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: var(--font-base, 13px);
   line-height: 1.6;
+  /* 优化渲染性能（不使用 strict，避免 contain: size 影响 scrollHeight 计算） */
+  contain: layout style;
 }
 
 .stream-output::selection,
@@ -91,20 +112,28 @@ watch(
 }
 
 .output-line.stderr {
-  color: #FB7185;
+  color: var(--color-danger, #fb7185);
 }
 
 .output-line.stdout {
-  color: #22D3EE;
+  color: var(--terminal-text, #22d3ee);
 }
 
 .cursor {
   display: inline-block;
   animation: blink 1s step-end infinite;
-  color: #22D3EE;
+  color: var(--terminal-text, #22d3ee);
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor {
+    animation: none;
+  }
 }
 </style>

@@ -39,6 +39,6 @@ export const useUserStore = defineStore('user', () => {
     isAdmin,
     setToken,
     setUserInfo,
-    logout
+    logout,
   }
 })

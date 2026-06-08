@@ -2,54 +2,93 @@
   <div>
     <el-card class="main-card">
       <template #header>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择预生产服务器" style="width: 150px" @change="loadData">
+          <el-select
+            v-model="serverId"
+            placeholder="选择预生产服务器"
+            style="width: 150px"
+            @change="handleServerChange"
+          >
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
-          <span style="margin-left: auto;"></span>
-          <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px;" />
+          <span style="margin-left: auto"></span>
+          <el-input v-model="search" placeholder="搜索类型/名称" clearable style="width: 250px" />
         </div>
         <!-- 批量操作按钮 -->
         <div class="toolbar">
-        <el-dropdown trigger="click" @command="onStatusFilter" style="margin-right: 12px;">
-          <el-button type="info" class="el-button--cyan">{{ statusFilterLabel }}<el-icon style="margin-left: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"></path></svg></el-icon></el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="all">全部</el-dropdown-item>
-              <el-dropdown-item command="up">已扩容</el-dropdown-item>
-              <el-dropdown-item command="down">已缩容</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ allSelected ? '取消' : '全选' }}</el-button>
-        <el-button type="danger" :disabled="selectedIds.size > 0 ? !canBatchScaleDown : !canFullScaleDown" @click="handleBatchScaleDown">
-          {{ selectedIds.size > 0 ? '批量缩容' : '全量缩容' }}
-        </el-button>
-        <el-button type="success" :disabled="selectedIds.size > 0 ? !canBatchScaleUp : !canFullScaleUp" @click="handleBatchScaleUp">
-          {{ selectedIds.size > 0 ? '批量扩容' : '全量扩容' }}
-        </el-button>
-        <el-button type="info" class="el-button--cyan" @click="openBindingDialog">依赖配置</el-button>
-        <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
-        <span v-if="selectedIds.size > 0" style="margin-left: 10px; font-size: 13px; color: #64748B;">
-          已选 {{ selectedIds.size }} 项
-        </span>
-      </div>
+          <el-dropdown trigger="click" style="margin-right: 12px" @command="onStatusFilter">
+            <el-button type="info" class="el-button--cyan"
+              >{{ statusFilterLabel
+              }}<el-icon style="margin-left: 4px"
+                ><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    fill="currentColor"
+                    d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"
+                  /></svg></el-icon
+            ></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="all">全部</el-dropdown-item>
+                <el-dropdown-item command="up">已扩容</el-dropdown-item>
+                <el-dropdown-item command="down">已缩容</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button type="info" class="el-button--cyan" @click="handleToggleSelect">{{
+            allSelected ? '取消' : '全选'
+          }}</el-button>
+          <el-button
+            type="danger"
+            :disabled="selectedIds.size > 0 ? !canBatchScaleDown : !canFullScaleDown"
+            @click="handleBatchScaleDown"
+          >
+            {{ selectedIds.size > 0 ? '批量缩容' : '全量缩容' }}
+          </el-button>
+          <el-button
+            type="success"
+            :disabled="selectedIds.size > 0 ? !canBatchScaleUp : !canFullScaleUp"
+            @click="handleBatchScaleUp"
+          >
+            {{ selectedIds.size > 0 ? '批量扩容' : '全量扩容' }}
+          </el-button>
+          <el-button type="info" class="el-button--cyan" @click="openBindingDialog">依赖配置</el-button>
+          <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
+        </div>
       </template>
 
-      <el-table ref="tableRef" :data="paginatedResources" :row-key="row => row.name" stripe border @selection-change="handleSelectionChange" v-force-reflow max-height="calc(100vh - 240px)">
+      <el-table
+        ref="tableRef"
+        v-force-reflow
+        v-loading="loading"
+        :data="paginatedResources"
+        :row-key="(row) => row.name"
+        stripe
+        border
+        max-height="calc(100vh - 240px)"
+        @selection-change="handleSelectionChange"
+      >
         <el-table-column type="selection" width="45" />
         <el-table-column prop="category" label="类型" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.category === 'rollout' ? 'primary' : row.category === 'deployment' ? 'success' : 'warning'">{{ row.category }}</el-tag>
+            <el-tag
+              :type="row.category === 'rollout' ? 'primary' : row.category === 'deployment' ? 'success' : 'warning'"
+              >{{ row.category }}</el-tag
+            >
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="300" />
         <el-table-column prop="current" label="当前副本" width="100" align="center">
           <template #default="{ row }">
             <span>{{ row.current }}</span>
-            <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px;">已缩容</el-tag>
-            <el-tag v-else-if="row.current > 0 && row.current === row.target_replicas" type="success" size="small" style="margin-left: 4px;">正常</el-tag>
+            <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
+            <el-tag
+              v-else-if="row.current > 0 && row.current === row.target_replicas"
+              type="success"
+              size="small"
+              style="margin-left: 4px"
+              >正常</el-tag
+            >
           </template>
         </el-table-column>
         <el-table-column prop="target_replicas" label="目标副本" width="90" align="center">
@@ -63,7 +102,15 @@
         <el-table-column prop="age" label="年龄" width="100" />
       </el-table>
 
-      <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+      <div v-if="!loading && paginatedResources.length === 0" class="empty-state">
+        <el-icon class="empty-state-icon"><ZoomOut /></el-icon>
+        <span class="empty-state-text">{{ search || statusFilter !== 'all' ? '没有匹配的资源' : '暂无资源数据' }}</span>
+      </div>
+
+      <div class="pagination-wrapper">
+        <div class="pagination-left">
+          <span v-if="selectedIds.size > 0" class="selection-count">已选 {{ selectedIds.size }} 项</span>
+        </div>
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
@@ -77,10 +124,12 @@
     </el-card>
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="650px">
+    <el-dialog v-model="previewVisible" title="变更预览" width="min(650px, 90vw)" align-center>
       <div v-if="previewData">
         <p><strong>操作：</strong>{{ previewData.description }}</p>
-        <p><strong>命令：</strong><code>{{ previewData.command }}</code></p>
+        <p>
+          <strong>命令：</strong><code>{{ previewData.command }}</code>
+        </p>
         <el-divider />
         <p><strong>当前状态：</strong></p>
         <pre class="preview-pre">{{ previewData.current_status }}</pre>
@@ -92,79 +141,130 @@
     </el-dialog>
 
     <!-- Batch Confirm Dialog (unified for normal and large batches) -->
-    <el-dialog v-model="batchConfirmVisible" :title="batchConfirmTitle" width="580px" top="8vh">
-      <div style="margin-bottom: 16px;">
-        <el-alert v-if="batchConfirmNames.length > BATCH_THRESHOLD" type="warning" :closable="false" show-icon style="margin-bottom: 12px;">
+    <el-dialog v-model="batchConfirmVisible" :title="batchConfirmTitle" width="min(580px, 90vw)" align-center>
+      <div style="margin-bottom: 16px">
+        <el-alert
+          v-if="batchConfirmNames.length > BATCH_THRESHOLD"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px"
+        >
           <template #title>
             当前 <b>{{ batchConfirmNames.length }}</b> 个资源，请输入 <b>确认执行</b> 以继续
           </template>
         </el-alert>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 14px; color: var(--text-primary);">{{ batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:' }}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+          <span style="font-size: 14px; color: var(--text-primary)">{{
+            batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:'
+          }}</span>
           <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
         </div>
         <el-scrollbar max-height="320px">
-          <div style="background: var(--bg-elevated); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-default);">
-            <div v-for="(name, idx) in batchConfirmNames" :key="name"
-              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed var(--border-default);">
-              <span style="color: #64748B; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
+          <div
+            style="
+              background: var(--bg-elevated);
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid var(--border-default);
+            "
+          >
+            <div
+              v-for="(name, idx) in batchConfirmNames"
+              :key="name"
+              style="
+                font-size: 13px;
+                line-height: 2;
+                padding: 0 4px;
+                display: flex;
+                align-items: center;
+                border-bottom: 1px dashed var(--border-default);
+              "
+            >
+              <span style="color: #64748b; font-size: 12px; margin-right: 8px; min-width: 28px">{{ idx + 1 }}.</span>
               <span>{{ name }}</span>
             </div>
           </div>
         </el-scrollbar>
       </div>
-      <div v-if="batchConfirmSkipCount > 0" style="margin-bottom: 12px;">
+      <div v-if="batchConfirmSkipCount > 0" style="margin-bottom: 12px">
         <el-text type="info" size="small">
-          {{ batchConfirmIsFull ? '共' : '已选' }} {{ batchConfirmTotalCount }} 项，其中 {{ batchConfirmSkipCount }} 项{{ batchConfirmAction === 'scaledown' ? '已缩容' : '已扩容' }}将跳过
+          {{ batchConfirmIsFull ? '共' : '已选' }} {{ batchConfirmTotalCount }} 项，其中
+          {{ batchConfirmSkipCount }} 项{{ batchConfirmAction === 'scaledown' ? '已缩容' : '已扩容' }}将跳过
         </el-text>
       </div>
-      <el-input v-if="batchConfirmNames.length > BATCH_THRESHOLD" v-model="batchConfirmText" placeholder='请输入"确认执行"' />
+      <el-input
+        v-if="batchConfirmNames.length > BATCH_THRESHOLD"
+        v-model="batchConfirmText"
+        placeholder='请输入"确认执行"'
+      />
       <template #footer>
         <el-button @click="batchConfirmVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="batchConfirmNames.length > BATCH_THRESHOLD && batchConfirmText !== '确认执行'" @click="onBatchConfirm">
+        <el-button
+          type="primary"
+          :disabled="batchConfirmNames.length > BATCH_THRESHOLD && batchConfirmText !== '确认执行'"
+          @click="onBatchConfirm"
+        >
           确认{{ batchConfirmAction === 'scaledown' ? '缩容' : '扩容' }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- Dependency Warning Dialog -->
-    <el-dialog v-model="depWarningVisible" title="操作警告" width="520px" top="15vh" :close-on-click-modal="false">
-      <div style="margin-bottom: 16px;">
-        <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;">
-          <span style="color: #f56c6c; font-size: 20px; line-height: 1;">⚠</span>
+    <el-dialog v-model="depWarningVisible" title="操作警告" width="min(520px, 90vw)" align-center :close-on-click-modal="false">
+      <div style="margin-bottom: 16px">
+        <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px">
+          <span style="color: #f56c6c; font-size: 20px; line-height: 1">⚠</span>
           <div>
-            <div style="color: #f56c6c; font-weight: bold; font-size: 14px; line-height: 1.6; margin-bottom: 8px;">
+            <div style="color: #f56c6c; font-weight: bold; font-size: 14px; line-height: 1.6; margin-bottom: 8px">
               {{ depWarningText }}
             </div>
-            <div style="color: #94A3B8; font-size: 13px; line-height: 1.6;">
-              涉及资源：
-            </div>
+            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6">涉及资源：</div>
           </div>
         </div>
         <el-scrollbar max-height="200px">
-          <div style="background: rgba(245, 108, 108, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(245, 108, 108, 0.3);">
-            <div v-for="(name, idx) in depWarningAffected" :key="name"
-              style="font-size: 13px; line-height: 2; padding: 0 4px; display: flex; align-items: center; border-bottom: 1px dashed rgba(245, 108, 108, 0.2);">
-              <span style="color: #64748B; font-size: 12px; margin-right: 8px; min-width: 28px;">{{ idx + 1 }}.</span>
+          <div
+            style="
+              background: rgba(245, 108, 108, 0.1);
+              padding: 8px 12px;
+              border-radius: 6px;
+              border: 1px solid rgba(245, 108, 108, 0.3);
+            "
+          >
+            <div
+              v-for="(name, idx) in depWarningAffected"
+              :key="name"
+              style="
+                font-size: 13px;
+                line-height: 2;
+                padding: 0 4px;
+                display: flex;
+                align-items: center;
+                border-bottom: 1px dashed rgba(245, 108, 108, 0.2);
+              "
+            >
+              <span style="color: #64748b; font-size: 12px; margin-right: 8px; min-width: 28px">{{ idx + 1 }}.</span>
               <span>{{ name }}</span>
             </div>
           </div>
         </el-scrollbar>
-        <div style="margin-top: 12px; color: #64748B; font-size: 12px;">
+        <div style="margin-top: 12px; color: #64748b; font-size: 12px">
           如果确认执行，请在下方输入框中输入 <b>确认执行</b>
         </div>
-        <el-input v-model="depWarningConfirmText" placeholder='请输入"确认执行"' style="margin-top: 8px;" />
+        <el-input v-model="depWarningConfirmText" placeholder='请输入"确认执行"' style="margin-top: 8px" />
       </div>
       <template #footer>
         <el-button @click="depWarningVisible = false">取消</el-button>
-        <el-button type="danger" :disabled="depWarningConfirmText !== '确认执行'" @click="onDepWarningConfirm">确认执行</el-button>
+        <el-button type="danger" :disabled="depWarningConfirmText !== '确认执行'" @click="onDepWarningConfirm"
+          >确认执行</el-button
+        >
       </template>
     </el-dialog>
 
     <!-- Binding Config Dialog -->
     <el-dialog v-model="bindingDialogVisible" title="LVS-Preprod 依赖配置" width="min(650px, 90vw)" align-center>
-      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 14px; color: #94A3B8;">配置 VS 标签和 RS 环境标签的绑定关系</span>
+      <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
+        <span style="font-size: 14px; color: #94a3b8">配置 VS 标签和 RS 环境标签的绑定关系</span>
         <el-button type="primary" size="small" @click="showAddBinding">新增绑定</el-button>
       </div>
       <el-table :data="bindings" stripe size="small" border max-height="400">
@@ -178,32 +278,65 @@
       </el-table>
 
       <!-- Add binding sub-form -->
-      <div v-if="addBindingVisible" style="margin-top: 16px; padding: 12px; background: var(--bg-elevated); border-radius: 6px; border: 1px solid var(--border-default);">
+      <div
+        v-if="addBindingVisible"
+        style="
+          margin-top: 16px;
+          padding: 12px;
+          background: var(--bg-elevated);
+          border-radius: 6px;
+          border: 1px solid var(--border-default);
+        "
+      >
         <el-form label-width="100px" size="small">
           <el-form-item label="VS 标签">
-            <el-select v-model="newBinding.vs_tag" filterable allow-create clearable placeholder="选择或输入 VS 标签" style="width: 100%">
+            <el-select
+              v-model="newBinding.vs_tag"
+              filterable
+              allow-create
+              clearable
+              placeholder="选择或输入 VS 标签"
+              style="width: 100%"
+            >
               <el-option v-for="opt in vsTagOptions" :key="opt" :label="opt" :value="opt" />
             </el-select>
           </el-form-item>
           <el-form-item label="RS 环境标签">
-            <el-select v-model="newBinding.rs_env_tag" filterable allow-create clearable placeholder="选择或输入 RS 环境标签" style="width: 100%">
+            <el-select
+              v-model="newBinding.rs_env_tag"
+              filterable
+              allow-create
+              clearable
+              placeholder="选择或输入 RS 环境标签"
+              style="width: 100%"
+            >
               <el-option v-for="opt in rsTagOptions" :key="opt" :label="opt" :value="opt" />
             </el-select>
           </el-form-item>
         </el-form>
-        <div style="text-align: right; margin-top: 8px;">
+        <div style="text-align: right; margin-top: 8px">
           <el-button size="small" @click="addBindingVisible = false">取消</el-button>
-          <el-button type="primary" size="small" :disabled="!newBinding.vs_tag || !newBinding.rs_env_tag" @click="handleAddBinding">保存</el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :disabled="!newBinding.vs_tag || !newBinding.rs_env_tag"
+            @click="handleAddBinding"
+            >保存</el-button
+          >
         </div>
       </div>
     </el-dialog>
 
     <!-- LVS Scale Down Check Warning Dialog -->
-    <el-dialog v-model="lvsCheckVisible" title="缩容前检查" width="min(600px, 90vw)" align-center @close="handleLvsCheckCancel">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px;">
-        <template #title>
-          以下 LVS RS 仍处于上线状态，缩容前请确认已下线：
-        </template>
+    <el-dialog
+      v-model="lvsCheckVisible"
+      title="缩容前检查"
+      width="min(600px, 90vw)"
+      align-center
+      @close="handleLvsCheckCancel"
+    >
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
+        <template #title> 以下 LVS RS 仍处于上线状态，缩容前请确认已下线： </template>
       </el-alert>
       <div v-if="lvsCheckWarnings">
         <el-table :data="lvsCheckWarnings" stripe size="small" border max-height="300">
@@ -218,71 +351,147 @@
           <el-table-column prop="rs_ip" label="RS IP" min-width="120" />
         </el-table>
       </div>
-      <el-alert type="info" :closable="false" style="margin-top: 12px;">
-        请输入"确认执行"以继续缩容操作
-      </el-alert>
-      <el-input v-model="lvsCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px;" />
+      <el-alert type="info" :closable="false" style="margin-top: 12px"> 请输入"确认执行"以继续缩容操作 </el-alert>
+      <el-input v-model="lvsCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px" />
       <template #footer>
         <el-button @click="lvsCheckVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="lvsCheckConfirmText !== '确认执行'" @click="handleLvsCheckConfirm">确认执行</el-button>
+        <el-button type="primary" :disabled="lvsCheckConfirmText !== '确认执行'" @click="handleLvsCheckConfirm"
+          >确认执行</el-button
+        >
       </template>
     </el-dialog>
 
     <!-- Streaming Output Area -->
-    <StreamOutput
-      v-if="wsStore.status !== 'idle'"
-      :lines="wsStore.outputLines"
-      :status="wsStore.status"
-      :showCancel="false"
-    />
+    <el-card v-if="wsStore.status !== 'idle'" class="output-card" shadow="hover">
+      <template #header>
+        <div class="card-header">
+          <span class="chart-title">执行输出</span>
+          <el-tag :type="wsStore.status === 'done' ? 'success' : wsStore.status === 'error' ? 'danger' : 'warning'" size="small">
+            {{ wsStore.status === 'connecting' ? '连接中' : wsStore.status === 'streaming' ? '执行中' : wsStore.status === 'done' ? '已完成' : '失败' }}
+          </el-tag>
+        </div>
+      </template>
+      <StreamOutput
+        :lines="wsStore.outputLines"
+        :status="wsStore.status"
+        :show-cancel="false"
+      />
+    </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { getServers, getPreprodStatus, preprodScaleDownPreview, preprodScaleUpPreview, getWebSocketUrl, getLvsBindings, updateLvsBinding, deleteLvsBinding, getLvsVSTags, getLvsTags, checkLvsForScaleDown } from '../api'
+import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
+import {
+  getPreprodStatus,
+  preprodScaleDownPreview,
+  preprodScaleUpPreview,
+  getWebSocketUrl,
+  getLvsBindings,
+  updateLvsBinding,
+  deleteLvsBinding,
+  getLvsVSTags,
+  getLvsTags,
+  checkLvsForScaleDown,
+} from '../api'
 import { useWebSocketStore } from '../stores/websocket'
 import { useUserStore } from '../stores/user'
+import { useServerSelector } from '../composables/useServerSelector'
+import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ZoomOut } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../constants'
 
 const BATCH_THRESHOLD = 10
 
-const servers = ref([])
-const serverId = ref(null)
-const resources = ref([])
-const selectedIds = ref(new Set())
-const tableRef = ref(null)
+const resources = shallowRef([])
+const search = ref('')
+const currentPage = ref(1)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
+const statusFilter = ref('all')
+const loading = ref(false)
+const statusFilterLabels = { all: '全部', up: '已扩容', down: '已缩容' }
+const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
+
+// --- 必须在 composable 调用之前定义，避免暂时性死区 ---
+const filteredResources = computed(() => {
+  let list = resources.value
+  if (statusFilter.value === 'up') {
+    list = list.filter((r) => r.current >= r.target_replicas)
+  } else if (statusFilter.value === 'down') {
+    list = list.filter((r) => r.current < r.target_replicas)
+  }
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    list = list.filter((r) => r.category.toLowerCase().includes(q) || r.name.toLowerCase().includes(q))
+  }
+  return list
+})
+
+const paginatedResources = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredResources.value.slice(start, start + pageSize.value)
+})
+
+// --- 组合式函数 ---
+const {
+  servers,
+  serverId,
+  initServers,
+  refreshServers,
+  saveSelection,
+  handleServerChange: onServerChange,
+} = useServerSelector('preprod', STORAGE_KEYS.PREPROD_SERVER, loadData)
+const {
+  selectedIds,
+  allSelected,
+  tableRef,
+  handleSelectionChange,
+  handleSizeChange,
+  handleCurrentChange,
+  toggleSelectAll,
+} = useSelection('name', paginatedResources, { search, currentPage })
+
+// --- WebSocket ---
+const userStore = useUserStore()
+const wsStore = useWebSocketStore()
+const outputCache = new Map()
 const previewVisible = ref(false)
 const previewData = ref(null)
 const previewId = ref('')
 const executing = ref(false)
 const currentAction = ref('')
 
-// Streaming state
-const userStore = useUserStore()
-const wsStore = useWebSocketStore()
-const outputCache = new Map()
-
 // 监听 WebSocket 状态变化（支持页面切换后继续执行）
-watch(() => wsStore.status, async (newStatus, oldStatus) => {
-  if (newStatus === 'done') {
-    executing.value = false
-    ElMessage.success('执行成功')
-    await loadData()
-  } else if (newStatus === 'error') {
-    executing.value = false
-    ElMessage.error(wsStore.lastError || '执行失败')
+watch(
+  () => wsStore.status,
+  async (newStatus) => {
+    if (newStatus === 'done') {
+      executing.value = false
+      ElMessage.success('执行成功')
+      await loadData()
+    } else if (newStatus === 'error') {
+      executing.value = false
+      ElMessage.error(wsStore.lastError || '执行失败')
+    }
+  },
+  { immediate: true }
+)
+
+// 切换服务器时，缓存/恢复执行结果
+watch(serverId, (newVal, oldVal) => {
+  if (wsStore.status !== 'idle') return
+  if (oldVal != null) {
+    outputCache.set(oldVal, [...wsStore.outputLines])
   }
-}, { immediate: true })
-const search = ref('')
-const currentPage = ref(1)
-const pageSize = ref(DEFAULT_PAGE_SIZE)
-const skipSelectionSync = ref(false)
-const statusFilter = ref('all')
-const statusFilterLabels = { all: '全部', up: '已扩容', down: '已缩容' }
-const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
+  const cached = outputCache.get(newVal)
+  if (cached) {
+    wsStore.restoreOutput(cached)
+  } else {
+    wsStore.clearOutput()
+  }
+})
 
 // Batch confirm
 const batchConfirmVisible = ref(false)
@@ -320,101 +529,30 @@ const lvsCheckWarnings = ref(null)
 const lvsCheckConfirmText = ref('')
 const lvsCheckCallback = ref(null)
 
-const requireSet = computed(() => new Set(resources.value.filter(r => r.category === 'require').map(r => r.name)))
+const requireSet = computed(() => new Set(resources.value.filter((r) => r.category === 'require').map((r) => r.name)))
 
-const filteredResources = computed(() => {
-  let list = resources.value
-  if (statusFilter.value === 'up') {
-    list = list.filter(r => r.current >= r.target_replicas)
-  } else if (statusFilter.value === 'down') {
-    list = list.filter(r => r.current < r.target_replicas)
-  }
-  if (search.value) {
-    const q = search.value.toLowerCase()
-    list = list.filter(r =>
-      r.category.toLowerCase().includes(q) ||
-      r.name.toLowerCase().includes(q)
-    )
-  }
-  return list
-})
+const selectedResources = computed(() => filteredResources.value.filter((r) => selectedIds.value.has(r.name)))
 
-const paginatedResources = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredResources.value.slice(start, start + pageSize.value)
-})
+const canBatchScaleDown = computed(() => selectedResources.value.some((r) => r.current > 0))
 
-const allSelected = computed(() =>
-  filteredResources.value.length > 0 && filteredResources.value.every(r => selectedIds.value.has(r.name))
-)
+const canBatchScaleUp = computed(() => selectedResources.value.some((r) => r.current < r.target_replicas))
 
-const selectedResources = computed(() =>
-  filteredResources.value.filter(r => selectedIds.value.has(r.name))
-)
+const canFullScaleDown = computed(() => resources.value.some((r) => r.current > 0))
 
-const canBatchScaleDown = computed(() =>
-  selectedResources.value.some(r => r.current > 0)
-)
+const canFullScaleUp = computed(() => resources.value.some((r) => r.current < r.target_replicas))
 
-const canBatchScaleUp = computed(() =>
-  selectedResources.value.some(r => r.current < r.target_replicas)
-)
-
-// 全量操作可用性
-const canFullScaleDown = computed(() =>
-  resources.value.some(r => r.current > 0)
-)
-
-const canFullScaleUp = computed(() =>
-  resources.value.some(r => r.current < r.target_replicas)
-)
-
-
-function handleSizeChange(size) {
-  pageSize.value = size
-  currentPage.value = 1
-  restoreSelection()
+async function handleServerChange() {
+  saveSelection()
+  await loadData()
 }
 
-function handleCurrentChange() {
-  restoreSelection()
+function handleToggleSelect() {
+  toggleSelectAll()
 }
-
-function restoreSelection() {
-  skipSelectionSync.value = true
-  setTimeout(() => {
-    paginatedResources.value.forEach(row => {
-      if (selectedIds.value.has(row.name)) {
-        tableRef.value.toggleRowSelection(row, true)
-      }
-    })
-    skipSelectionSync.value = false
-  }, 0)
-}
-
-watch(search, () => { currentPage.value = 1; restoreSelection() })
 
 function onStatusFilter(cmd) {
   statusFilter.value = cmd
   currentPage.value = 1
-}
-
-function handleToggleSelect() {
-  if (allSelected.value) {
-    selectedIds.value.clear()
-    tableRef.value.clearSelection()
-  } else {
-    filteredResources.value.forEach(row => {
-      selectedIds.value.add(row.name)
-    })
-    paginatedResources.value.forEach(row => {
-      tableRef.value.toggleRowSelection(row, true)
-    })
-  }
-}
-
-function toggleSelectAll() {
-  handleToggleSelect()
 }
 
 async function handleRefresh() {
@@ -426,56 +564,28 @@ async function handleRefresh() {
   }
 }
 
-// 切换服务器时，缓存/恢复执行结果
-watch(serverId, (newVal, oldVal) => {
-  // 有活跃或最近的执行时，保留输出（页面切换回来的场景）
-  if (wsStore.status !== 'idle') return
-
-  if (oldVal != null) {
-    outputCache.set(oldVal, [...wsStore.outputLines])
-  }
-  const cached = outputCache.get(newVal)
-  if (cached) {
-    wsStore.outputLines.splice(0, wsStore.outputLines.length, ...cached)
-  } else {
-    wsStore.outputLines.splice(0, wsStore.outputLines.length)
-  }
+onMounted(async () => {
+  await initServers()
 })
 
-onMounted(async () => {
-  try {
-    servers.value = (await getServers('preprod')) || []
-    if (servers.value.length > 0) {
-      const saved = localStorage.getItem(STORAGE_KEYS.PREPROD_SERVER)
-      if (saved && servers.value.some(s => s.id === Number(saved))) {
-        serverId.value = Number(saved)
-      } else {
-        serverId.value = servers.value[0].id
-      }
-      await loadData()
-    }
-  } catch (e) {
-    ElMessage.error('加载服务器列表失败')
-  }
+onActivated(async () => {
+  await refreshServers()
+  if (serverId.value) loadData()
 })
 
 async function loadData() {
   if (!serverId.value) return
   localStorage.setItem(STORAGE_KEYS.PREPROD_SERVER, serverId.value)
+  loading.value = true
   try {
     resources.value = await getPreprodStatus(serverId.value)
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
     ElMessage.error('加载数据失败')
+  } finally {
+    loading.value = false
   }
-}
-
-function handleSelectionChange(rows) {
-  if (skipSelectionSync.value) return
-  const pageKeys = paginatedResources.value.map(r => r.name)
-  pageKeys.forEach(key => selectedIds.value.delete(key))
-  rows.forEach(r => selectedIds.value.add(r.name))
 }
 
 function showDepWarning(text, affected, callback) {
@@ -504,8 +614,8 @@ async function openBindingDialog() {
       getLvsTags(),
     ])
     bindings.value = bindingList || []
-    vsTagOptions.value = [...new Set((vsTags || []).map(t => t.tag).filter(Boolean))]
-    rsTagOptions.value = [...new Set((rsTags || []).map(t => t.tag).filter(Boolean))]
+    vsTagOptions.value = [...new Set((vsTags || []).map((t) => t.tag).filter(Boolean))]
+    rsTagOptions.value = [...new Set((rsTags || []).map((t) => t.tag).filter(Boolean))]
     bindingDialogVisible.value = true
   } catch (e) {
     ElMessage.error('加载绑定配置失败')
@@ -526,7 +636,6 @@ async function handleAddBinding() {
     })
     ElMessage.success('绑定已保存')
     addBindingVisible.value = false
-    // Reload bindings
     const list = await getLvsBindings({ preprod_server_id: serverId.value })
     bindings.value = list || []
   } catch (e) {
@@ -547,7 +656,7 @@ async function handleDeleteBinding(id) {
   try {
     await deleteLvsBinding(id)
     ElMessage.success('绑定已删除')
-    bindings.value = bindings.value.filter(b => b.id !== id)
+    bindings.value = bindings.value.filter((b) => b.id !== id)
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '删除失败')
   }
@@ -571,9 +680,9 @@ function handleLvsCheckCancel() {
 async function handleBatchScaleDown() {
   const isFull = selectedIds.value.size === 0
   const pool = isFull ? filteredResources.value : selectedResources.value
-  const targets = pool.filter(r => r.current > 0)
-  const skipCount = pool.filter(r => r.current === 0).length
-  const names = targets.map(r => r.name)
+  const targets = pool.filter((r) => r.current > 0)
+  const skipCount = pool.filter((r) => r.current === 0).length
+  const names = targets.map((r) => r.name)
   if (names.length === 0) return
 
   // 检查 LVS RS 状态依赖
@@ -583,7 +692,7 @@ async function handleBatchScaleDown() {
       lvsCheckWarnings.value = checkRes.warnings
       lvsCheckVisible.value = true
       lvsCheckConfirmText.value = ''
-      const confirmed = await new Promise(resolve => {
+      const confirmed = await new Promise((resolve) => {
         lvsCheckCallback.value = resolve
       })
       if (!confirmed) return
@@ -594,19 +703,15 @@ async function handleBatchScaleDown() {
 
   // 全量操作时脚本自动处理依赖，跳过警告
   if (!isFull) {
-    // 缩容 require 资源时，检查非 require 资源是否仍在运行
-    const requireTargets = names.filter(n => requireSet.value.has(n))
+    const requireTargets = names.filter((n) => requireSet.value.has(n))
     if (requireTargets.length > 0) {
       const nonRequireStillRunning = resources.value
-        .filter(r => !requireSet.value.has(r.name) && r.current > 0)
-        .map(r => r.name)
-      // 过滤掉已包含在本次缩容列表中的非 require 资源
-      const stillRunning = nonRequireStillRunning.filter(n => !names.includes(n))
+        .filter((r) => !requireSet.value.has(r.name) && r.current > 0)
+        .map((r) => r.name)
+      const stillRunning = nonRequireStillRunning.filter((n) => !names.includes(n))
       if (stillRunning.length > 0) {
-        showDepWarning(
-          '依赖(require)服务停止可能会影响其它服务运行！',
-          stillRunning,
-          () => doBatchScaleDown(names, skipCount, pool.length, isFull)
+        showDepWarning('依赖(require)服务停止可能会影响其它服务运行！', stillRunning, () =>
+          doBatchScaleDown(names, skipCount, pool.length, isFull)
         )
         return
       }
@@ -629,26 +734,21 @@ function doBatchScaleDown(names, skipCount, total, isFull) {
 async function handleBatchScaleUp() {
   const isFull = selectedIds.value.size === 0
   const pool = isFull ? filteredResources.value : selectedResources.value
-  const targets = pool.filter(r => r.current < r.target_replicas)
-  const skipCount = pool.filter(r => r.current >= r.target_replicas).length
-  const names = targets.map(r => r.name)
+  const targets = pool.filter((r) => r.current < r.target_replicas)
+  const skipCount = pool.filter((r) => r.current >= r.target_replicas).length
+  const names = targets.map((r) => r.name)
   if (names.length === 0) return
 
-  // 全量操作时脚本自动处理依赖，跳过警告
   if (!isFull) {
-    // 扩容非 require 资源时，检查 require 资源是否都在运行
-    const nonRequireTargets = names.filter(n => !requireSet.value.has(n))
+    const nonRequireTargets = names.filter((n) => !requireSet.value.has(n))
     if (nonRequireTargets.length > 0) {
       const requireNotRunning = resources.value
-        .filter(r => requireSet.value.has(r.name) && r.current === 0)
-        .map(r => r.name)
-      // 过滤掉已包含在本次扩容列表中的 require 资源
-      const stillMissing = requireNotRunning.filter(n => !names.includes(n))
+        .filter((r) => requireSet.value.has(r.name) && r.current === 0)
+        .map((r) => r.name)
+      const stillMissing = requireNotRunning.filter((n) => !names.includes(n))
       if (stillMissing.length > 0) {
-        showDepWarning(
-          '依赖(require)服务未运行，运行所选服务可能会发生异常！',
-          stillMissing,
-          () => doBatchScaleUp(names, skipCount, pool.length, isFull)
+        showDepWarning('依赖(require)服务未运行，运行所选服务可能会发生异常！', stillMissing, () =>
+          doBatchScaleUp(names, skipCount, pool.length, isFull)
         )
         return
       }
@@ -670,7 +770,6 @@ function doBatchScaleUp(names, skipCount, total, isFull) {
 
 async function onBatchConfirm() {
   const action = batchConfirmAction.value
-  // 全量模式传空数组，让脚本操作全部资源；批量模式传选中的资源名
   const names = batchConfirmIsFull.value ? [] : batchConfirmNames.value
   batchConfirmVisible.value = false
   await doPreview(action, names)
@@ -701,22 +800,20 @@ function executePreview() {
 </script>
 
 <style scoped>
-:deep(.el-card__header) {
-  border-bottom: none;
-  padding-bottom: 0;
-}
 .text-warning {
-  color: #e6a23c;
-  font-weight: bold;
+  color: var(--color-warning);
+  font-weight: var(--weight-bold);
 }
-.toolbar {
+.output-card {
+  margin-top: 16px;
+}
+.card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 12px;
+  justify-content: space-between;
 }
-.toolbar :deep(.el-dropdown) {
-  display: inline-flex;
+.chart-title {
+  font-weight: 600;
+  font-size: 14px;
 }
 </style>

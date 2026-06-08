@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, shallowRef, triggerRef } from 'vue'
 
 /**
  * 全局 WebSocket store，用于跨页面保持命令执行状态。
@@ -9,11 +9,35 @@ import { ref } from 'vue'
  * 组件通过 watch status 来响应状态变化，而非回调。
  */
 export const useWebSocketStore = defineStore('websocket', () => {
-  const outputLines = ref([])
+  const MAX_OUTPUT_LINES = 2000
+  const outputLines = shallowRef([])
   const status = ref('idle') // idle, connecting, streaming, done, error
-  const lastError = ref('')  // 最后一次错误信息，组件 watch 时读取后清空
+  const lastError = ref('') // 最后一次错误信息，组件 watch 时读取后清空
   const wsRef = ref(null)
   let connectTimer = null
+  let lineSeq = 0
+
+  // 批量触发 reactive 更新，避免每条消息都触发一次 Vue diff
+  let flushPending = false
+  function scheduleFlush() {
+    if (flushPending) return
+    flushPending = true
+    requestAnimationFrame(() => {
+      flushPending = false
+      triggerRef(outputLines)
+    })
+  }
+
+  function appendLine(text, stream) {
+    const lines = outputLines.value
+    if (lines.length >= MAX_OUTPUT_LINES) {
+      // 保留最近 1500 行，留出缓冲；整批替换时直接触发
+      outputLines.value = lines.slice(-1500).concat({ id: ++lineSeq, text, stream })
+    } else {
+      lines.push({ id: ++lineSeq, text, stream })
+      scheduleFlush()
+    }
+  }
 
   function connect(url, previewId, { token } = {}) {
     cleanup()
@@ -27,7 +51,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
     } catch (e) {
       status.value = 'error'
       lastError.value = `连接创建失败: ${e.message}`
-      outputLines.value.push({ text: `[ERROR] ${lastError.value}`, stream: 'stderr' })
+      appendLine(`[ERROR] ${lastError.value}`, 'stderr')
       return
     }
     wsRef.value = ws
@@ -37,7 +61,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
       if (status.value === 'connecting') {
         status.value = 'error'
         lastError.value = '连接超时'
-        outputLines.value.push({ text: '[ERROR] 连接超时', stream: 'stderr' })
+        appendLine('[ERROR] 连接超时', 'stderr')
         if (wsRef.value) {
           wsRef.value.close()
           wsRef.value = null
@@ -56,7 +80,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
         const msg = JSON.parse(event.data)
         switch (msg.type) {
           case 'output':
-            outputLines.value.push({ text: msg.data, stream: msg.stream })
+            appendLine(msg.data, msg.stream)
             break
           case 'done':
             status.value = 'done'
@@ -64,12 +88,12 @@ export const useWebSocketStore = defineStore('websocket', () => {
           case 'error':
             status.value = 'error'
             lastError.value = msg.message || '执行失败'
-            outputLines.value.push({ text: `[ERROR] ${msg.message}`, stream: 'stderr' })
+            appendLine(`[ERROR] ${msg.message}`, 'stderr')
             break
           case 'lock_error':
             status.value = 'error'
             lastError.value = msg.message
-            outputLines.value.push({ text: `[LOCK] ${msg.message}`, stream: 'stderr' })
+            appendLine(`[LOCK] ${msg.message}`, 'stderr')
             break
         }
       } catch (e) {
@@ -83,7 +107,16 @@ export const useWebSocketStore = defineStore('websocket', () => {
 
     ws.onclose = (event) => {
       clearTimeout(connectTimer)
-      console.log('WebSocket closed, code:', event.code, 'reason:', event.reason, 'wasClean:', event.wasClean, 'status:', status.value)
+      console.log(
+        'WebSocket closed, code:',
+        event.code,
+        'reason:',
+        event.reason,
+        'wasClean:',
+        event.wasClean,
+        'status:',
+        status.value
+      )
       if (status.value === 'streaming' || status.value === 'connecting') {
         status.value = 'error'
         if (event.code === 1006) {
@@ -93,7 +126,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
         } else {
           lastError.value = '连接已断开'
         }
-        outputLines.value.push({ text: `[ERROR] ${lastError.value}`, stream: 'stderr' })
+        appendLine(`[ERROR] ${lastError.value}`, 'stderr')
       }
       wsRef.value = null
     }
@@ -120,6 +153,17 @@ export const useWebSocketStore = defineStore('websocket', () => {
     lastError.value = ''
   }
 
+  /** 清空输出行（触发响应式更新） */
+  function clearOutput() {
+    outputLines.value = []
+  }
+
+  /** 恢复缓存的输出行（触发响应式更新） */
+  function restoreOutput(lines) {
+    // 确保恢复的行也有 id
+    outputLines.value = lines.map((l) => (l.id ? l : { ...l, id: ++lineSeq }))
+  }
+
   return {
     outputLines,
     status,
@@ -127,5 +171,7 @@ export const useWebSocketStore = defineStore('websocket', () => {
     connect,
     disconnect,
     reset,
+    clearOutput,
+    restoreOutput,
   }
 })

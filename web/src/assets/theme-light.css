@@ -26,6 +26,15 @@ html:not(.dark) {
   --color-primary-active: #0891B2;
   --color-primary-bg: rgba(6, 182, 212, 0.1);
 
+  /* Module Colors */
+  --module-lvs: #06B6D4;
+  --module-nginx: #22C55E;
+  --module-k8s: #8B5CF6;
+  --module-preprod: #F59E0B;
+  --module-log: #EA580C;
+  --module-server: #3B82F6;
+  --module-user: #EC4899;
+
   /* Status */
   --color-success: #22C55E;
   --color-warning: #F59E0B;
@@ -45,6 +54,16 @@ html:not(.dark) {
   --card-border: 1px solid #e4e7ed;
   --card-radius: 12px;
   --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+
+  /* Signature: ambient gradient line */
+  --accent-line: linear-gradient(90deg, #06B6D4 0%, #8B5CF6 40%, #F59E0B 70%, #06B6D4 100%);
+
+  /* Signature: dot-grid pattern */
+  --dot-grid: radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px);
+
+  /* Depth: frosted glass */
+  --glass-bg: rgba(48, 65, 86, 0.92);
+  --glass-blur: 16px;
 
   /* Toolbar */
   --toolbar-bg: #ffffff;
@@ -144,7 +163,7 @@ html:not(.dark) {
   --el-input-bg-color: #ffffff;
   --el-input-border-color: #dcdfe6;
   --el-input-hover-border-color: #c0c4cc;
-  --el-input-focus-border-color: #06B6D4;
+  --el-input-focus-border-color: #c0c4cc;
   --el-input-text-color: #303133;
   --el-input-placeholder-color: #c0c4cc;
   --el-dropdown-menuItem-hover-fill: rgba(6, 182, 212, 0.1);
@@ -217,7 +236,7 @@ html:not(.dark) .el-input__wrapper:hover {
 }
 
 html:not(.dark) .el-input__wrapper.is-focus {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0) !important;
+  box-shadow: 0 0 0 1px #c0c4cc inset !important;
 }
 
 html:not(.dark) .el-textarea__inner {
@@ -228,7 +247,7 @@ html:not(.dark) .el-textarea__inner {
 }
 
 html:not(.dark) .el-textarea__inner:focus {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0);
+  box-shadow: 0 0 0 1px #c0c4cc inset;
 }
 
 /* Select */
@@ -243,7 +262,7 @@ html:not(.dark) .el-select__wrapper:hover {
 }
 
 html:not(.dark) .el-select__wrapper.is-focused {
-  box-shadow: 0 0 0 1px #06B6D4 inset, 0 0 0 0px rgba(6, 182, 212, 0) !important;
+  box-shadow: 0 0 0 1px #c0c4cc inset !important;
 }
 
 html:not(.dark) .el-select-dropdown {
@@ -424,6 +443,84 @@ html:not(.dark) .el-picker-panel {
 html:not(.dark) .el-message-box {
   background-color: #ffffff;
   border: 1px solid #e4e7ed;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+html:not(.dark) .el-message-box__header {
+  padding: 20px 20px 12px;
+}
+
+html:not(.dark) .el-message-box__title {
+  color: #303133;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+html:not(.dark) .el-message-box__headerbtn {
+  top: 16px;
+  right: 16px;
+}
+
+html:not(.dark) .el-message-box__headerbtn .el-message-box__close {
+  color: #909399;
+}
+
+html:not(.dark) .el-message-box__headerbtn .el-message-box__close:hover {
+  color: #303133;
+}
+
+html:not(.dark) .el-message-box__content {
+  padding: 12px 20px 20px;
+}
+
+html:not(.dark) .el-message-box__status {
+  color: #EF4444;
+  font-size: 24px !important;
+}
+
+html:not(.dark) .el-message-box__status.el-icon-warning {
+  color: #EF4444;
+}
+
+html:not(.dark) .el-message-box__message {
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+html:not(.dark) .el-message-box__btns {
+  padding: 12px 20px 20px;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+html:not(.dark) .el-message-box__btns .el-button {
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-weight: 500;
+}
+
+html:not(.dark) .el-message-box__btns .el-button--primary {
+  background-color: #EF4444;
+  border-color: #EF4444;
+}
+
+html:not(.dark) .el-message-box__btns .el-button--primary:hover {
+  background-color: #f87171;
+  border-color: #f87171;
+}
+
+html:not(.dark) .el-message-box__btns .el-button--default {
+  background-color: #ffffff;
+  border-color: #dcdfe6;
+  color: #606266;
+}
+
+html:not(.dark) .el-message-box__btns .el-button--default:hover {
+  background-color: #f5f7fa;
+  border-color: #c0c4cc;
+  color: #303133;
 }
 
 /* Dropdown menu */
@@ -496,7 +593,7 @@ html:not(.dark) ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
 }
 
-html:not(.dark) * {
+html:not(.dark) {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
 }
@@ -511,3 +608,29 @@ html:not(.dark) ::selection {
 html:not(.dark) :focus-visible {
   outline: none;
 }
+
+/* ===== Message 消息提示 ===== */
+html:not(.dark) .el-message {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+}
+html:not(.dark) .el-message .el-message__content { color: #303133 !important; }
+html:not(.dark) .el-message--success { background-color: rgba(34, 197, 94, 0.1) !important; border-color: rgba(34, 197, 94, 0.25) !important; }
+html:not(.dark) .el-message--success .el-message__content { color: #22C55E !important; }
+html:not(.dark) .el-message--warning { background-color: rgba(245, 158, 11, 0.1) !important; border-color: rgba(245, 158, 11, 0.25) !important; }
+html:not(.dark) .el-message--warning .el-message__content { color: #F59E0B !important; }
+html:not(.dark) .el-message--error { background-color: rgba(239, 68, 68, 0.1) !important; border-color: rgba(239, 68, 68, 0.25) !important; }
+html:not(.dark) .el-message--error .el-message__content { color: #EF4444 !important; }
+
+/* ===== Notification 通知 ===== */
+html:not(.dark) .el-notification {
+  background-color: #ffffff !important;
+  border: 1px solid #e4e7ed !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+  border-radius: 12px !important;
+}
+html:not(.dark) .el-notification__title { color: #303133 !important; }
+html:not(.dark) .el-notification__content { color: #606266 !important; }
+html:not(.dark) .el-notification__closeBtn { color: #909399 !important; }
+html:not(.dark) .el-notification__closeBtn:hover { color: #303133 !important; }

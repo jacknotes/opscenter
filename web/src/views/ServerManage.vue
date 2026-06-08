@@ -4,21 +4,45 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
-          <el-button :type="batchToggleType" @click="handleBatchToggle" :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-button>
-          <el-button type="primary" @click="handleEditSelected" :disabled="selectedRows.length !== 1">编辑</el-button>
-          <el-button type="info" class="el-button--cyan" @click="handleCopySelected" :disabled="selectedRows.length !== 1">复制</el-button>
-          <el-button type="success" @click="handleBatchTest" :disabled="selectedRows.length === 0">测试连接</el-button>
-          <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0">删除</el-button>
-          <el-button type="info" class="el-button--cyan" @click="handleRefresh" :loading="loading">刷新</el-button>
-          <el-input v-model="searchQuery" placeholder="搜索服务器信息" clearable style="width: 300px; margin-left: auto;" />
+          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
+            batchToggleLabel
+          }}</el-button>
+          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
+          <el-button
+            type="info"
+            class="el-button--cyan"
+            :disabled="selectedRows.length !== 1"
+            @click="handleCopySelected"
+            >复制</el-button
+          >
+          <el-button type="success" :disabled="selectedRows.length === 0" @click="handleBatchTest">测试连接</el-button>
+          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
+          <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索服务器信息"
+            clearable
+            style="width: 300px; margin-left: auto"
+          />
         </div>
       </template>
 
-      <el-table :data="paginatedServers" stripe border :row-class-name="tableRowClassName" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 250px)">
+      <el-table
+        ref="tableRef"
+        v-force-reflow
+        :data="paginatedServers"
+        stripe
+        border
+        :row-class-name="tableRowClassName"
+        max-height="calc(100vh - 250px)"
+        @selection-change="handleSelectionChange"
+      >
         <el-table-column type="selection" width="55" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
+            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
+              row.enabled ? '已启用' : '已禁用'
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="120" />
@@ -27,16 +51,38 @@
         <el-table-column prop="username" label="用户名" min-width="100" />
         <el-table-column prop="server_type" label="类型" min-width="140">
           <template #default="{ row }">
-            <el-tag :type="row.server_type === 'lvs' ? 'primary' : row.server_type === 'nginx' ? 'success' : row.server_type === 'preprod' ? 'warning' : 'info'">{{ row.server_type === 'kubernetes' ? 'k8s' : row.server_type === 'preprod' ? 'k8s-prepro' : row.server_type }}</el-tag>
+            <el-tag
+              :type="
+                row.server_type === 'lvs'
+                  ? 'primary'
+                  : row.server_type === 'nginx'
+                    ? 'success'
+                    : row.server_type === 'preprod'
+                      ? 'warning'
+                      : 'info'
+              "
+              >{{
+                row.server_type === 'kubernetes'
+                  ? 'k8s'
+                  : row.server_type === 'preprod'
+                    ? 'k8s-prepro'
+                    : row.server_type
+              }}</el-tag
+            >
           </template>
         </el-table-column>
         <el-table-column prop="env" label="环境" width="80" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       </el-table>
 
+      <div v-if="!loading && paginatedServers.length === 0" class="empty-state">
+        <el-icon class="empty-state-icon"><Setting /></el-icon>
+        <span class="empty-state-text">{{ searchQuery ? '没有匹配的服务器' : '暂无服务器数据' }}</span>
+      </div>
+
       <div class="pagination-wrapper">
         <div class="pagination-left">
-          <span class="selection-count">已选 {{ selectedRows.length }}</span>
+          <span v-if="selectedRows.length > 0" class="selection-count">已选 {{ selectedRows.length }} 项</span>
         </div>
         <el-pagination
           v-model:current-page="currentPage"
@@ -51,7 +97,12 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑服务器' : (isCopy ? '复制服务器' : '添加服务器')" width="600px" align-center>
+    <el-dialog
+      v-model="dialogVisible"
+      :title="isEdit ? '编辑服务器' : isCopy ? '复制服务器' : '添加服务器'"
+      width="min(600px, 90vw)"
+      align-center
+    >
       <el-form :model="form" label-width="120px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
@@ -72,10 +123,20 @@
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.auth_type === 'password'" label="SSH密码" :required="!isEdit">
-          <el-input v-model="form.password" type="password" show-password :placeholder="isEdit && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'" />
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="isEdit && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'"
+          />
         </el-form-item>
         <el-form-item v-if="form.auth_type === 'key'" label="私钥" :required="!isEdit">
-          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="isEdit && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'" />
+          <el-input
+            v-model="form.private_key"
+            type="textarea"
+            :rows="4"
+            :placeholder="isEdit && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'"
+          />
         </el-form-item>
         <el-form-item label="服务器类型" required>
           <el-select v-model="form.server_type">
@@ -88,19 +149,24 @@
         <el-form-item label="环境">
           <el-input v-model="form.env" placeholder="env1 / env2 / both" />
         </el-form-item>
-        <el-form-item label="脚本路径" v-if="form.server_type !== 'nginx'">
+        <el-form-item v-if="form.server_type !== 'nginx'" label="脚本路径">
           <el-input v-model="form.script_path" placeholder="/shell/lvs.sh" />
         </el-form-item>
-        <el-form-item label="脚本密码" v-if="form.server_type !== 'nginx'">
-          <el-input v-model="form.script_password" type="password" show-password :placeholder="isEdit && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'" />
+        <el-form-item v-if="form.server_type !== 'nginx'" label="脚本密码">
+          <el-input
+            v-model="form.script_password"
+            type="password"
+            show-password
+            :placeholder="isEdit && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'"
+          />
         </el-form-item>
-        <el-form-item label="配置路径" v-if="form.server_type === 'nginx'">
+        <el-form-item v-if="form.server_type === 'nginx'" label="配置路径">
           <el-input v-model="form.config_path" placeholder="Nginx配置目录" />
         </el-form-item>
-        <el-form-item label="配置文件模式" v-if="form.server_type === 'nginx'">
+        <el-form-item v-if="form.server_type === 'nginx'" label="配置文件模式">
           <el-input v-model="form.config_pattern" placeholder="upstreamserver_*.conf" />
         </el-form-item>
-        <el-form-item label="备份路径" v-if="form.server_type === 'nginx'">
+        <el-form-item v-if="form.server_type === 'nginx'" label="备份路径">
           <el-input v-model="form.backup_path" />
         </el-form-item>
         <el-form-item label="描述">
@@ -119,11 +185,25 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { getServers, getServerForEdit, createServer, updateServer, deleteServer, testConnection, batchDeleteServers, batchToggleServers, batchTestServers, toggleServerEnabled } from '../api'
+import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
+import {
+  getServers,
+  getServerForEdit,
+  createServer,
+  updateServer,
+  deleteServer,
+  testConnection,
+  batchDeleteServers,
+  batchToggleServers,
+  batchTestServers,
+  toggleServerEnabled,
+} from '../api'
+import { clearServerCache } from '../composables/useServerSelector'
+import { showBatchResult } from '../utils/message'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Setting } from '@element-plus/icons-vue'
 
-const servers = ref([])
+const servers = shallowRef([])
 const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -131,7 +211,7 @@ const pageSize = ref(20)
 const filteredServers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return servers.value
-  return servers.value.filter(s => {
+  return servers.value.filter((s) => {
     const statusText = s.enabled ? '已启用' : '已禁用'
     const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
 
@@ -158,13 +238,13 @@ const paginatedServers = computed(() => {
 
 const batchToggleType = computed(() => {
   if (selectedRows.value.length === 0) return 'success'
-  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  const allDisabled = selectedRows.value.every((r) => !r.enabled)
   return allDisabled ? 'success' : 'warning'
 })
 
 const batchToggleLabel = computed(() => {
   if (selectedRows.value.length === 0) return '启用'
-  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  const allDisabled = selectedRows.value.every((r) => !r.enabled)
   return allDisabled ? '启用' : '禁用'
 })
 
@@ -196,36 +276,13 @@ function getDefaultForm() {
     config_pattern: '',
     backup_path: '',
     description: '',
-    enabled: true
+    enabled: true,
   }
 }
 
 function tableRowClassName({ row }) {
   if (row.enabled === false) return 'disabled-row'
   return ''
-}
-
-// HTML 转义，防止 XSS
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-}
-
-// 显示批量操作结果消息
-function showBatchResult(res) {
-  const message = res.message || '操作完成'
-  const success = res.deleted || res.updated || 0
-  const failed = res.failed || 0
-
-  // 转义 HTML 后将换行符转换为 <br>
-  const htmlMessage = escapeHtml(message).replace(/\n/g, '<br>')
-
-  if (failed === 0) {
-    ElMessage({ message: htmlMessage, type: 'success', dangerouslyUseHTMLString: true })
-  } else if (success === 0) {
-    ElMessage({ message: htmlMessage, type: 'error', dangerouslyUseHTMLString: true })
-  } else {
-    ElMessage({ message: htmlMessage, type: 'warning', dangerouslyUseHTMLString: true, duration: 5000 })
-  }
 }
 
 function handleSelectionChange(rows) {
@@ -258,10 +315,16 @@ onMounted(() => {
   loadData()
 })
 
+onActivated(() => {
+  loadData()
+})
+
 async function loadData(showMessage = false) {
   loading.value = true
   try {
     servers.value = await getServers(undefined, true)
+    // 清除 useServerSelector 的缓存，确保其他页面切换时获取最新列表
+    clearServerCache()
     if (showMessage) {
       ElMessage.success('刷新成功')
     }
@@ -326,10 +389,17 @@ async function handleBatchToggle() {
   const enabled = batchToggleLabel.value === '启用'
   const action = enabled ? '启用' : '禁用'
 
-  const names = selectedRows.value.map(r => r.name).join('、')
+  const names = selectedRows.value.map((r) => r.name).join('、')
   try {
-    await ElMessageBox.confirm(`确定要${action}以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, `批量${action}`, { type: 'warning' })
-    const res = await batchToggleServers(selectedRows.value.map(r => r.id), enabled)
+    await ElMessageBox.confirm(
+      `确定要${action}以下 ${selectedRows.value.length} 个服务器吗？\n${names}`,
+      `批量${action}`,
+      { type: 'warning' }
+    )
+    const res = await batchToggleServers(
+      selectedRows.value.map((r) => r.id),
+      enabled
+    )
     showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
@@ -344,10 +414,12 @@ async function handleBatchToggle() {
 async function handleBatchDelete() {
   if (selectedRows.value.length === 0) return
 
-  const names = selectedRows.value.map(r => r.name).join('、')
+  const names = selectedRows.value.map((r) => r.name).join('、')
   try {
-    await ElMessageBox.confirm(`确定要删除以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, '批量删除', { type: 'warning' })
-    const res = await batchDeleteServers(selectedRows.value.map(r => r.id))
+    await ElMessageBox.confirm(`确定要删除以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, '批量删除', {
+      type: 'warning',
+    })
+    const res = await batchDeleteServers(selectedRows.value.map((r) => r.id))
     showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
@@ -362,9 +434,13 @@ async function handleBatchDelete() {
 async function handleBatchTest() {
   if (selectedRows.value.length === 0) return
 
-  const loading = ElMessage({ message: `正在测试 ${selectedRows.value.length} 个服务器连接...`, type: 'info', duration: 0 })
+  const loading = ElMessage({
+    message: `正在测试 ${selectedRows.value.length} 个服务器连接...`,
+    type: 'info',
+    duration: 0,
+  })
   try {
-    const res = await batchTestServers(selectedRows.value.map(r => r.id))
+    const res = await batchTestServers(selectedRows.value.map((r) => r.id))
     loading.close()
     showBatchResult(res)
   } catch (e) {
@@ -411,43 +487,5 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-:deep(.el-card__header) {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  flex-wrap: wrap;
-}
-:deep(.disabled-row) {
-  background-color: var(--bg-elevated) !important;
-  opacity: 0.6;
-}
-:deep(.disabled-row:hover > td) {
-  background-color: var(--bg-elevated) !important;
-}
-.pagination-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 16px;
-  padding: 8px 0;
-}
-.pagination-left {
-  display: flex;
-  align-items: center;
-}
-.selection-count {
-  font-size: var(--el-pagination-font-size, 13px);
-  color: var(--el-text-color-regular);
-  white-space: nowrap;
-  line-height: 32px;
-}
+/* 页面特有样式 */
 </style>

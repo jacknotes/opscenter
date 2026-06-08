@@ -33,6 +33,6 @@ export const useAppStore = defineStore('app', () => {
     toggleCollapse,
     theme,
     toggleTheme,
-    applyTheme
+    applyTheme,
   }
 })

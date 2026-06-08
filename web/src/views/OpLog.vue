@@ -2,7 +2,7 @@
   <div>
     <el-card class="main-card">
       <template #header>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px">
           <span class="filter-label">模块:</span>
           <el-select v-model="module" style="width: 150px" @change="onModuleChange">
             <el-option label="全部" value="all" />
@@ -19,21 +19,42 @@
             <el-option label="成功" value="success" />
             <el-option label="失败" value="failed" />
           </el-select>
-          <div style="flex-shrink: 0; width: 240px;">
-            <el-date-picker v-model="dateRange" type="daterange" range-separator="-" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" style="width: 100%" :shortcuts="dateShortcuts" @change="onDateChange" @clear="onDateChange" clearable />
+          <div style="flex-shrink: 0; width: 240px">
+            <el-date-picker
+              v-model="dateRange"
+              type="daterange"
+              range-separator="-"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+              :shortcuts="dateShortcuts"
+              clearable
+              @change="onDateChange"
+              @clear="onDateChange"
+            />
           </div>
-          <el-input v-model="keyword" style="width: 250px; margin-left: 20px;" placeholder="搜索操作人/动作/目标/服务器/IP" clearable @change="onSearch" @clear="onSearch" />
-          <el-button type="info" class="el-button--cyan" @click="handleRefresh">{{ hasFilters ? '查询' : '刷新' }}</el-button>
+          <el-input
+            v-model="keyword"
+            style="width: 250px; margin-left: 20px"
+            placeholder="搜索操作人/动作/目标/服务器/IP"
+            clearable
+            @change="onSearch"
+            @clear="onSearch"
+          />
+          <el-button type="info" class="el-button--cyan" @click="handleRefresh">{{
+            hasFilters ? '查询' : '刷新'
+          }}</el-button>
         </div>
       </template>
 
-      <el-table :data="logs" stripe border v-force-reflow max-height="calc(100vh - 200px)">
+      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 200px)">
         <el-table-column type="expand" width="50">
           <template #default="{ row }">
-            <div style="padding: 10px;">
+            <div style="padding: 10px">
               <p><strong>命令：</strong></p>
               <pre class="command-block">{{ row.detail }}</pre>
-              <p style="margin-top: 10px;"><strong>输出：</strong></p>
+              <p style="margin-top: 10px"><strong>输出：</strong></p>
               <pre class="output-block">{{ row.output }}</pre>
             </div>
           </template>
@@ -58,22 +79,24 @@
         </el-table-column>
       </el-table>
 
-      <el-pagination
-        style="margin-top: 15px; justify-content: flex-end;"
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[20, 50, 100]"
-        layout="total, sizes, prev, pager, next"
-        @size-change="loadData"
-        @current-change="loadData"
-      />
+      <div class="pagination-wrapper">
+        <div></div>
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          @size-change="loadData"
+          @current-change="loadData"
+        />
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import { getLogs } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
@@ -81,25 +104,54 @@ import { DEFAULT_PAGE_SIZE } from '../constants'
 
 const userStore = useUserStore()
 
-const logs = ref([])
+const logs = shallowRef([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
+const loading = ref(false)
 const module = ref('all')
 const keyword = ref('')
 const status = ref('all')
 const dateRange = ref(null)
 const dateShortcuts = [
-  { text: '近一周', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return [s, e] } },
-  { text: '近一个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 1); return [s, e] } },
-  { text: '近三个月', value: () => { const e = new Date(); const s = new Date(); s.setMonth(s.getMonth() - 3); return [s, e] } },
+  {
+    text: '近一周',
+    value: () => {
+      const e = new Date()
+      const s = new Date()
+      s.setDate(s.getDate() - 7)
+      return [s, e]
+    },
+  },
+  {
+    text: '近一个月',
+    value: () => {
+      const e = new Date()
+      const s = new Date()
+      s.setMonth(s.getMonth() - 1)
+      return [s, e]
+    },
+  },
+  {
+    text: '近三个月',
+    value: () => {
+      const e = new Date()
+      const s = new Date()
+      s.setMonth(s.getMonth() - 3)
+      return [s, e]
+    },
+  },
 ]
 
-const hasFilters = computed(() =>
-  module.value !== 'all' || status.value !== 'all' || !!keyword.value || !!dateRange.value
+const hasFilters = computed(
+  () => module.value !== 'all' || status.value !== 'all' || !!keyword.value || !!dateRange.value
 )
 
 onMounted(() => {
+  loadData()
+})
+
+onActivated(() => {
   loadData()
 })
 
@@ -113,8 +165,15 @@ function onSearch() {
   loadData()
 }
 
-const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'k8s', preprod: 'k8s-prepro', auth: '认证', server: '服务器' }
-const moduleTagTypes = { lvs: '', nginx: 'success', k8s: 'warning', preprod: 'warning', auth: 'danger', server: 'info' }
+const moduleLabels = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产', auth: '认证', server: '服务器' }
+const moduleTagTypes = {
+  lvs: 'primary',
+  nginx: 'success',
+  k8s: 'warning',
+  preprod: 'warning',
+  auth: 'danger',
+  server: 'info',
+}
 
 function moduleLabel(m) {
   return moduleLabels[m] || m
@@ -144,6 +203,7 @@ async function handleRefresh() {
 }
 
 async function loadData() {
+  loading.value = true
   try {
     const params = { page: page.value, size: pageSize.value }
     if (module.value && module.value !== 'all') params.module = module.value
@@ -158,35 +218,45 @@ async function loadData() {
     total.value = res.total || 0
   } catch (e) {
     ElMessage.error('加载日志失败')
+  } finally {
+    loading.value = false
   }
 }
 </script>
 
 <style scoped>
 .command-block {
-  background: #1A1D2E;
-  color: #E2E8F0;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
   padding: 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-all;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--font-base);
+  line-height: 1.6;
 }
-.command-block::selection {
-  background: rgba(59, 130, 246, 0.5);
+.command-block::selection,
+.command-block *::selection {
+  background: rgba(6, 182, 212, 0.5);
   color: #fff;
 }
 .output-block {
-  background: #0B0D13;
-  color: #22D3EE;
+  background: var(--terminal-bg);
+  color: var(--terminal-text);
   padding: 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   max-height: 300px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--font-base);
+  line-height: 1.6;
 }
-.output-block::selection {
-  background: rgba(34, 211, 238, 0.3);
+.output-block::selection,
+.output-block *::selection {
+  background: rgba(34, 211, 238, 0.5);
   color: #fff;
 }
 </style>

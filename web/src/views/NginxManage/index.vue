@@ -2,7 +2,7 @@
   <div class="nginx-page">
     <el-card class="main-card">
       <template #header>
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px">
           <span class="filter-label">服务器:</span>
           <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 150px" @change="loadConfigs">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
@@ -11,19 +11,25 @@
           <el-select v-model="configFile" placeholder="选择配置文件" style="width: 150px" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
-          <span style="margin-left: auto;"></span>
-          <el-input v-model="filterKeyword" placeholder="搜索upstream/ip/port" clearable style="width: 250px;" />
+          <span style="margin-left: auto"></span>
+          <el-input v-model="filterKeyword" placeholder="搜索upstream/ip/port" clearable style="width: 250px" />
         </div>
 
         <!-- Toolbar -->
         <div class="toolbar">
-          <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{ allExpanded ? '折叠' : '展开' }}</el-button>
-          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{ isAllSelected ? '取消' : '全选' }}</el-button>
+          <el-button type="info" class="el-button--cyan" @click="toggleExpandAll">{{
+            allExpanded ? '折叠' : '展开'
+          }}</el-button>
+          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{
+            isAllSelected ? '取消' : '全选'
+          }}</el-button>
           <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">上线</el-button>
           <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">下线</el-button>
           <el-button type="primary" @click="openBatchDialog">批量</el-button>
-          <el-dropdown trigger="click" style="margin-left: 12px;">
-            <el-button type="info" class="el-button--cyan">更多<el-icon style="margin-left: 4px;"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M831.872 340.864 512 652.672 192.128 340.864a30.592 30.592 0 0 0-42.752 0 29.12 29.12 0 0 0 0 41.6L489.664 714.24a32 32 0 0 0 44.672 0l340.288-331.712a29.12 29.12 0 0 0 0-41.728 30.592 30.592 0 0 0-42.752 0z"></path></svg></el-icon></el-button>
+          <el-dropdown trigger="click" style="margin-left: 12px">
+            <el-button type="info" class="el-button--cyan"
+              >更多<el-icon style="margin-left: 4px"><ArrowDown /></el-icon
+            ></el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item @click="openBackupDialog">备份列表</el-dropdown-item>
@@ -32,18 +38,41 @@
             </template>
           </el-dropdown>
           <el-button type="info" class="el-button--cyan" @click="handleRefresh">刷新</el-button>
-          <span style="margin-left: auto;"></span>
-          <span class="stat-chip stat-chip-warning">Upstream <b>{{ filteredUpstreams.length }}</b></span>
-          <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
-          <span class="stat-chip stat-chip-danger" :class="{ 'stat-chip-active': statusFilter === 'down' }" @click="toggleStatusFilter('down')">离线 <b>{{ totalDownCount }}</b></span>
-          <span class="stat-chip stat-chip-primary">已选 <b>{{ selectedServers.length }}</b></span>
+          <span style="margin-left: auto"></span>
+          <span class="stat-chip stat-chip-warning"
+            >Upstream <b>{{ filteredUpstreams.length }}</b></span
+          >
+          <span class="stat-chip stat-chip-success"
+            >在线 <b>{{ totalUpCount }}</b></span
+          >
+          <span
+            class="stat-chip stat-chip-danger"
+            :class="{ 'stat-chip-active': statusFilter === 'down' }"
+            @click="toggleStatusFilter('down')"
+            >离线 <b>{{ totalDownCount }}</b></span
+          >
+          <span class="stat-chip stat-chip-primary"
+            >已选 <b>{{ selectedServers.length }}</b></span
+          >
         </div>
       </template>
 
       <!-- Upstream Groups -->
       <div v-loading="loadingUpstreams">
         <el-collapse v-model="expandedUpstreams" class="upstream-collapse">
-          <el-collapse-item v-for="upstream in filteredUpstreams" :key="upstream.name" :name="upstream.name" class="upstream-item">
+          <el-collapse-item
+            v-for="upstream in filteredUpstreams"
+            :key="upstream.name"
+            :name="upstream.name"
+            :class="[
+              'upstream-item',
+              upstream.downCount === 0
+                ? 'health-healthy'
+                : upstream.upCount === 0
+                  ? 'health-critical'
+                  : 'health-degraded',
+            ]"
+          >
             <template #title>
               <div class="upstream-header">
                 <span class="upstream-name">{{ upstream.name }}</span>
@@ -58,16 +87,29 @@
                   size="small"
                   class="upstream-toggle-btn"
                   @click.stop="handleToggleAll(upstream)"
-                >切换</el-button>
+                  >切换</el-button
+                >
               </div>
             </template>
-            <el-table :data="upstream.servers" size="small" :row-class-name="({ row }) => isServerSelected(upstream.name, row) ? 'selected-row' : ''" class="server-table" v-force-reflow>
+            <el-table
+              v-force-reflow
+              :data="upstream.servers"
+              size="small"
+              :row-class-name="({ row }) => (isServerSelected(upstream.name, row) ? 'selected-row' : '')"
+              class="server-table"
+            >
               <el-table-column width="50">
                 <template #header>
-                  <el-checkbox :model-value="isUpstreamAllSelected(upstream)" @change="val => toggleUpstreamAll(upstream, val)" />
+                  <el-checkbox
+                    :model-value="isUpstreamAllSelected(upstream)"
+                    @change="(val) => toggleUpstreamAll(upstream, val)"
+                  />
                 </template>
                 <template #default="{ row }">
-                  <el-checkbox :model-value="isServerSelected(upstream.name, row)" @change="() => toggleServer(upstream.name, row)" />
+                  <el-checkbox
+                    :model-value="isServerSelected(upstream.name, row)"
+                    @change="() => toggleServer(upstream.name, row)"
+                  />
                 </template>
               </el-table-column>
               <el-table-column prop="ip" label="IP" width="150" />
@@ -82,12 +124,13 @@
               <el-table-column label="操作" width="80">
                 <template #default="{ row }">
                   <el-button
-                    v-if="upstream.servers.some(s => s.status !== row.status)"
+                    v-if="upstream.servers.some((s) => s.status !== row.status)"
                     type="primary"
                     size="small"
                     link
                     @click="handleSwap(upstream, row)"
-                  >切换</el-button>
+                    >切换</el-button
+                  >
                 </template>
               </el-table-column>
             </el-table>
@@ -100,107 +143,65 @@
       </div>
     </el-card>
 
-    <!-- Backup Dialog -->
-    <el-dialog v-model="backupDialogVisible" title="备份列表" width="700px" class="cool-dialog">
-      <el-table :data="backupList" size="small" max-height="400" v-loading="loadingBackups" class="backup-table" v-force-reflow>
-        <el-table-column label="文件名" min-width="200">
-          <template #default="{ row }">{{ row.name }}</template>
-        </el-table-column>
-        <el-table-column label="备份时间" width="180">
-          <template #default="{ row }">{{ row.time }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="100">
-          <template #default="{ row }">
-            <el-button type="danger" size="small" @click="handleRollbackFromDialog(row.name)">回滚</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-dialog>
+    <!-- 子组件对话框 -->
+    <BackupDialog
+      v-model="backupDialogVisible"
+      :backup-list="backupList"
+      :loading="loadingBackups"
+      @rollback="handleRollbackFromDialog"
+    />
+    <PreviewDialog
+      v-model="previewVisible"
+      :data="previewData"
+      :config-file="configFile"
+      :executing="executing"
+      @execute="executePreview"
+    />
+    <ConfigViewer v-model="configDialogVisible" :raw-config="rawConfig" :config-file="configFile" />
+    <SwapDialog
+      v-model="swapDialogVisible"
+      :offline-ip="swapOfflineIP"
+      :online-ip="swapOnlineIP"
+      :affected-upstreams="swapAffectedUpstreams"
+      @confirm="confirmSwap"
+    />
 
-    <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="90%" top="5vh" class="cool-dialog">
-      <div v-if="previewData">
-        <div class="preview-desc">{{ previewData.description }}</div>
-        <div class="diff-container">
-          <div class="diff-header">
-            <span class="diff-filename">{{ configFile }}</span>
-          </div>
-          <div class="diff-body">
-            <div
-              v-for="(line, index) in previewData.line_diffs"
-              :key="index"
-              :class="['diff-line', `diff-${line.type}`]"
-            >
-              <span class="diff-line-num">{{ line.line_num }}</span>
-              <span class="diff-line-prefix">{{ getLinePrefix(line.type) }}</span>
-              <span class="diff-line-content">{{ line.content }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="previewVisible = false">取消</el-button>
-        <el-button type="primary" :loading="executing" @click="executePreview">确认执行</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Config Viewer Dialog -->
-    <el-dialog v-model="configDialogVisible" :title="'配置文件 - ' + configFile" width="80%" top="5vh" class="cool-dialog">
-      <pre class="terminal-pre terminal-lg" v-html="highlightedConfig"></pre>
-    </el-dialog>
-
-    <!-- Swap Target Dialog -->
-    <el-dialog v-model="swapDialogVisible" title="切换服务器" width="600px" class="cool-dialog">
-      <div v-if="swapOfflineIP" class="swap-dialog-body">
-        <div class="swap-ip-pair">
-          <el-tag type="danger" size="large">{{ swapOfflineIP }} (下线)</el-tag>
-          <span class="swap-arrow">⇅</span>
-          <el-tag type="success" size="large">{{ swapOnlineIP }} (上线)</el-tag>
-        </div>
-        <div class="swap-upstream-list">
-          <div class="swap-label">选择要执行切换的 Upstream 组：</div>
-          <div v-for="item in swapAffectedUpstreams" :key="item.name" class="swap-upstream-item">
-            <el-checkbox v-model="item.checked" />
-            <span class="upstream-name">{{ item.name }}</span>
-            <span class="badge badge-info">{{ item.totalCount }} 台</span>
-            <span class="badge badge-success">{{ item.upCount }} up</span>
-            <span class="badge badge-danger">{{ item.downCount }} down</span>
-          </div>
-          <div v-if="swapAffectedUpstreams.length === 0" style="color: #64748B; padding: 20px 0; text-align: center;">
-            未找到同时包含这两台服务器的 Upstream 组
-          </div>
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="swapDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="swapAffectedUpstreams.filter(i => i.checked).length === 0" @click="confirmSwap">确认切换</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Batch Operations Dialog -->
+    <!-- Batch Operations Dialog (内联，逻辑耦合度高) -->
     <el-dialog v-model="batchDialogVisible" width="min(800px, 90vw)" class="cool-dialog" align-center>
       <template #header>
         <div class="batch-dialog-header">
           <span class="el-dialog__title">批量操作</span>
-          <span class="batch-hint-text">为每个 Upstream 组选择操作类型，支持上线、下线、切换（反转全部状态）混合操作</span>
+          <span class="batch-hint-text"
+            >为每个 Upstream 组选择操作类型，支持上线、下线、切换（反转全部状态）混合操作</span
+          >
         </div>
       </template>
       <div class="batch-dialog-body">
         <div class="batch-hint">
-          <el-button size="small" @click="toggleBatchSelectAll">
-            {{ isBatchAllSelected ? '取消' : '全选' }}
-          </el-button>
-          <el-button size="small" @click="toggleBatchExpandAll">
-            {{ batchAllExpanded ? '折叠' : '展开' }}
-          </el-button>
-          <el-input v-model="batchSearch" placeholder="搜索 IP / 端口" size="small" clearable style="width: 160px; margin-left: 12px;" />
+          <el-button size="small" @click="toggleBatchSelectAll">{{ isBatchAllSelected ? '取消' : '全选' }}</el-button>
+          <el-button size="small" @click="toggleBatchExpandAll">{{ batchAllExpanded ? '折叠' : '展开' }}</el-button>
+          <el-input
+            v-model="batchSearch"
+            placeholder="搜索 IP / 端口"
+            size="small"
+            clearable
+            style="width: 160px; margin-left: 12px"
+          />
         </div>
-        <el-table ref="batchTableRef" :data="filteredBatchItems" size="small" max-height="500" class="batch-table" v-force-reflow row-key="upstreamName">
+        <el-table
+          ref="batchTableRef"
+          v-force-reflow
+          :data="filteredBatchItems"
+          size="small"
+          max-height="500"
+          class="batch-table"
+          row-key="upstreamName"
+        >
           <el-table-column type="expand" width="1">
             <template #default="{ row }">
               <div class="batch-expand-servers">
                 <div v-for="s in row.servers" :key="serverKey(s)" class="batch-server-item">
-                  <span class="status-dot" :class="s.status === 'up' ? 'status-up' : 'status-down'" />
+                  <span class="status-dot" :class="s.status === 'up' ? 'status-up' : 'status-down'"></span>
                   <span class="batch-server-ip">{{ s.ip }}</span>
                   <span class="batch-server-port">:{{ s.port }}</span>
                   <span v-if="s.weight" class="batch-server-weight">w={{ s.weight }}</span>
@@ -215,7 +216,9 @@
           </el-table-column>
           <el-table-column label="Upstream 组" min-width="150">
             <template #default="{ row }">
-              <span class="batch-upstream-name" @mousedown.prevent @click="toggleBatchExpand(row)">{{ row.upstreamName }}</span>
+              <span class="batch-upstream-name" @mousedown.prevent @click="toggleBatchExpand(row)">{{
+                row.upstreamName
+              }}</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="130">
@@ -234,19 +237,14 @@
                 style="width: 100%"
                 @change="onBatchActionChange(row)"
               >
-                <el-option
-                  v-for="a in getAvailableActions(row)"
-                  :key="a.value"
-                  :label="a.label"
-                  :value="a.value"
-                />
+                <el-option v-for="a in getAvailableActions(row)" :key="a.value" :label="a.label" :value="a.value" />
               </el-select>
             </template>
           </el-table-column>
           <el-table-column label="目标服务器" min-width="200">
             <template #default="{ row }">
               <template v-if="row.action === 'online' || row.action === 'offline'">
-                <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 6px">
                   <el-select
                     v-model="row.backendIPs"
                     placeholder="选择服务器（可多选）"
@@ -261,9 +259,10 @@
                         size="small"
                         type="primary"
                         text
+                        style="padding: 0 4px; font-size: 12px"
                         @click.stop="toggleBatchIPSelectAll(row)"
-                        style="padding: 0 4px; font-size: 12px;"
-                      >{{ isBatchIPAllSelected(row) ? '取消全选' : '全选' }}</el-button>
+                        >{{ isBatchIPAllSelected(row) ? '取消全选' : '全选' }}</el-button
+                      >
                     </template>
                     <el-option
                       v-for="s in getSelectableServers(row)"
@@ -273,34 +272,29 @@
                     />
                   </el-select>
                 </div>
-                <div v-if="row.action === 'offline'" class="batch-offline-hint">
-                  至少保留 1 台在线服务器
-                </div>
+                <div v-if="row.action === 'offline'" class="batch-offline-hint">至少保留 1 台在线服务器</div>
               </template>
-              <span v-else-if="row.action === 'toggle'" style="color: #64748B; font-size: 12px;">全部反转</span>
+              <span v-else-if="row.action === 'toggle'" style="color: var(--text-secondary); font-size: 12px"
+                >全部反转</span
+              >
             </template>
           </el-table-column>
         </el-table>
-        <div v-if="filteredBatchItems.length === 0" class="batch-empty">
-          暂无可执行的批量操作
-        </div>
+        <div v-if="filteredBatchItems.length === 0" class="batch-empty">暂无可执行的批量操作</div>
       </div>
       <template #footer>
         <el-button @click="batchDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="executing"
-          :disabled="batchValidCount === 0"
-          @click="executeBatch"
-        >预览并执行（{{ batchValidCount }} 项）</el-button>
+        <el-button type="primary" :loading="executing" :disabled="batchValidCount === 0" @click="executeBatch"
+          >预览并执行（{{ batchValidCount }} 项）</el-button
+        >
       </template>
     </el-dialog>
 
     <!-- Output Area -->
-    <el-card v-if="output" style="margin-top: 20px;">
+    <el-card v-if="output" style="margin-top: 20px">
       <template #header>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-weight: 700;">执行结果</span>
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-weight: 700">执行结果</span>
           <el-button size="small" text @click="output = ''">关闭</el-button>
         </div>
       </template>
@@ -310,21 +304,21 @@
             <span class="output-meta-label">操作类型</span>
             <el-tag :type="outputMeta.actionType" size="small">{{ outputMeta.actionLabel }}</el-tag>
           </div>
-          <div class="output-meta-item" v-if="outputMeta.upstreamNames.length > 0">
+          <div v-if="outputMeta.upstreamNames.length > 0" class="output-meta-item">
             <span class="output-meta-label">Upstream 组</span>
             <div class="output-meta-tags">
               <el-tag v-for="name in outputMeta.upstreamNames" :key="name" size="small" type="info">{{ name }}</el-tag>
             </div>
           </div>
-          <div class="output-meta-item" v-if="outputMeta.ipCount > 0">
+          <div v-if="outputMeta.ipCount > 0" class="output-meta-item">
             <span class="output-meta-label">涉及服务器</span>
             <span class="output-meta-value">{{ outputMeta.ipCount }} 台</span>
           </div>
           <div class="output-meta-item">
             <span class="output-meta-label">执行状态</span>
-            <el-tag :type="outputMeta.success ? 'success' : 'danger'" size="small">
-              {{ outputMeta.success ? '执行成功' : '执行失败' }}
-            </el-tag>
+            <el-tag :type="outputMeta.success ? 'success' : 'danger'" size="small">{{
+              outputMeta.success ? '执行成功' : '执行失败'
+            }}</el-tag>
           </div>
           <div class="output-meta-item">
             <span class="output-meta-label">执行时间</span>
@@ -338,25 +332,43 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import {
-  getServers, getNginxConfigs, getNginxUpstreams,
-  nginxOnlinePreview, nginxOnlineExecute,
-  nginxOfflinePreview, nginxOfflineExecute,
-  nginxSwapPreview, nginxSwapExecute,
-  nginxTogglePreview, nginxToggleExecute,
-  nginxBatchPreview, nginxBatchExecute,
-  nginxRollbackPreview, nginxRollbackExecute,
-  getNginxBackups
-} from '../api'
+  getNginxConfigs,
+  getNginxUpstreams,
+  nginxOnlinePreview,
+  nginxOnlineExecute,
+  nginxOfflinePreview,
+  nginxOfflineExecute,
+  nginxSwapPreview,
+  nginxSwapExecute,
+  nginxTogglePreview,
+  nginxToggleExecute,
+  nginxBatchPreview,
+  nginxBatchExecute,
+  nginxRollbackPreview,
+  nginxRollbackExecute,
+  getNginxBackups,
+} from '../../api'
+import { useServerSelector } from '../../composables/useServerSelector'
+import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../constants'
+import { ArrowDown } from '@element-plus/icons-vue'
+import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../constants'
+import BackupDialog from './BackupDialog.vue'
+import PreviewDialog from './PreviewDialog.vue'
+import ConfigViewer from './ConfigViewer.vue'
+import SwapDialog from './SwapDialog.vue'
 
-const servers = ref([])
-const serverId = ref(null)
+// --- 组合式函数 ---
+const { servers, serverId, initServers, refreshServers, saveSelection } = useServerSelector(
+  'nginx',
+  STORAGE_KEYS.NGINX_SERVER,
+  loadConfigs
+)
 const configFiles = ref([])
 const configFile = ref('')
-const upstreams = ref([])
+const upstreams = shallowRef([])
 const backups = ref([])
 const backupDialogVisible = ref(false)
 const previewVisible = ref(false)
@@ -365,11 +377,11 @@ const previewId = ref('')
 const executing = ref(false)
 const output = ref('')
 const outputMeta = ref({ actionType: 'info', actionLabel: '', upstreamNames: [], ipCount: 0, success: true, time: '' })
-const outputCache = new Map()
 const currentAction = ref('')
+const currentBatchInfo = ref(null)
 const expandedUpstreams = ref([])
 const filterKeyword = ref('')
-const statusFilter = ref('all') // 'all' | 'up' | 'down'
+const statusFilter = ref('all')
 const rawConfig = ref('')
 const configDialogVisible = ref(false)
 const loadingUpstreams = ref(false)
@@ -383,36 +395,17 @@ const batchItems = ref([])
 const batchSearch = ref('')
 const batchTableRef = ref(null)
 const batchAllExpanded = ref(false)
-
 const selectedMap = ref({})
 
-// ===== Backup list with parsed timestamps =====
+// ===== Backup list =====
 function parseBackupTime(filename) {
   const match = filename.match(/\.bak\.(\d{14})$/)
   if (!match) return ''
   const t = match[1]
-  return `${t.slice(0,4)}-${t.slice(4,6)}-${t.slice(6,8)} ${t.slice(8,10)}:${t.slice(10,12)}:${t.slice(12,14)}`
+  return `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)} ${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12, 14)}`
 }
 
-const backupList = computed(() => {
-  return backups.value.map(name => ({ name, time: parseBackupTime(name) }))
-})
-
-// ===== Nginx config syntax highlighting =====
-const highlightedConfig = computed(() => {
-  if (!rawConfig.value) return ''
-  const escapeHtml = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
-  return escapeHtml(rawConfig.value)
-    .replace(/(#.*)$/gm, '<span class="hl-comment">$1</span>')
-    .replace(/^(\s*)([\w_]+(?:\s+[\w_]+)*)(?=\s)/gm, (match, indent, directive) => {
-      if (directive.startsWith('#') || directive.startsWith('server')) return match
-      return `${indent}<span class="hl-directive">${directive}</span>`
-    })
-    .replace(/\{/g, '<span class="hl-brace">{</span>')
-    .replace(/\}/g, '<span class="hl-brace">}</span>')
-    .replace(/(\d+\.\d+\.\d+\.\d+(?::\d+)?)/g, '<span class="hl-ip">$1</span>')
-    .replace(/(;)/g, '<span class="hl-semicolon">$1</span>')
-})
+const backupList = computed(() => backups.value.map((name) => ({ name, time: parseBackupTime(name) })))
 
 function serverKey(s) {
   return s.port ? `${s.ip}:${s.port}` : s.ip
@@ -444,7 +437,7 @@ function isUpstreamAllSelected(upstream) {
 function toggleUpstreamAll(upstream, checked) {
   const newMap = { ...selectedMap.value }
   if (checked) {
-    newMap[upstream.name] = new Set(upstream.servers.map(s => serverKey(s)))
+    newMap[upstream.name] = new Set(upstream.servers.map((s) => serverKey(s)))
   } else {
     delete newMap[upstream.name]
   }
@@ -454,7 +447,7 @@ function toggleUpstreamAll(upstream, checked) {
 const selectedServers = computed(() => {
   const result = []
   for (const [upstreamName, keys] of Object.entries(selectedMap.value)) {
-    const upstream = upstreams.value.find(u => u.name === upstreamName)
+    const upstream = upstreams.value.find((u) => u.name === upstreamName)
     if (!upstream) continue
     for (const server of upstream.servers) {
       if (keys.has(serverKey(server))) {
@@ -468,35 +461,30 @@ const selectedServers = computed(() => {
 const filteredUpstreams = computed(() => {
   const kw = filterKeyword.value.trim().toLowerCase()
   let list = kw
-    ? upstreams.value.filter(u => {
+    ? upstreams.value.filter((u) => {
         if (u.name.toLowerCase().includes(kw)) return true
-        return u.servers.some(s => s.ip.toLowerCase().includes(kw) || (s.port && s.port.includes(kw)))
+        return u.servers.some((s) => s.ip.toLowerCase().includes(kw) || (s.port && s.port.includes(kw)))
       })
     : upstreams.value
   if (statusFilter.value === 'up') {
-    list = list.filter(u => u.servers.some(s => s.status === 'up'))
+    list = list.filter((u) => u.servers.some((s) => s.status === 'up'))
   } else if (statusFilter.value === 'down') {
-    list = list.filter(u => u.servers.some(s => s.status === 'down'))
+    list = list.filter((u) => u.servers.some((s) => s.status === 'down'))
   }
-  return list.map(u => {
-    const upCount = u.servers.filter(s => s.status === 'up').length
+  return list.map((u) => {
+    const upCount = u.servers.filter((s) => s.status === 'up').length
     const downCount = u.servers.length - upCount
     return { ...u, upCount, downCount, hasBoth: upCount > 0 && downCount > 0 }
   })
 })
 
-const totalUpCount = computed(() => {
-  return filteredUpstreams.value.reduce((sum, u) => sum + u.upCount, 0)
-})
-
-const totalDownCount = computed(() => {
-  return filteredUpstreams.value.reduce((sum, u) => sum + u.downCount, 0)
-})
+const totalUpCount = computed(() => filteredUpstreams.value.reduce((sum, u) => sum + u.upCount, 0))
+const totalDownCount = computed(() => filteredUpstreams.value.reduce((sum, u) => sum + u.downCount, 0))
 
 const isAllSelected = computed(() => {
   const filtered = filteredUpstreams.value
   if (filtered.length === 0) return false
-  return filtered.every(u => {
+  return filtered.every((u) => {
     const set = selectedMap.value[u.name]
     return set && set.size === u.servers.length
   })
@@ -512,7 +500,7 @@ function toggleSelectAll() {
   } else {
     const newMap = { ...selectedMap.value }
     for (const u of filteredUpstreams.value) {
-      newMap[u.name] = new Set(u.servers.map(s => serverKey(s)))
+      newMap[u.name] = new Set(u.servers.map((s) => serverKey(s)))
     }
     selectedMap.value = newMap
   }
@@ -527,7 +515,7 @@ function toggleExpandAll() {
   if (allExpanded.value) {
     expandedUpstreams.value = []
   } else {
-    expandedUpstreams.value = filteredUpstreams.value.map(u => u.name)
+    expandedUpstreams.value = filteredUpstreams.value.map((u) => u.name)
   }
 }
 
@@ -535,60 +523,35 @@ function toggleStatusFilter(type) {
   statusFilter.value = statusFilter.value === type ? 'all' : type
 }
 
-function getLinePrefix(type) {
-  switch (type) {
-    case 'added': return '+'
-    case 'removed': return '-'
-    default: return ' '
-  }
-}
-
-// 切换服务器或配置文件时，缓存/恢复执行结果
-watch([serverId, configFile], ([newServer, newFile], [oldServer, oldFile]) => {
-  if (oldServer != null) {
-    const oldKey = `${oldServer}:${oldFile}`
-    outputCache.set(oldKey, { output: output.value, meta: outputMeta.value })
-  }
-  const newKey = `${newServer}:${newFile}`
-  const cached = outputCache.get(newKey)
-  if (cached) {
-    output.value = cached.output
-    outputMeta.value = cached.meta
-  } else {
-    output.value = ''
-    outputMeta.value = { actionType: 'info', actionLabel: '', upstreamNames: [], ipCount: 0, success: true, time: '' }
-  }
+useOutputCache([() => serverId.value, () => configFile.value], output, {
+  getExtra: () => outputMeta.value,
+  setExtra: (extra) => {
+    outputMeta.value = extra || {
+      actionType: 'info',
+      actionLabel: '',
+      upstreamNames: [],
+      ipCount: 0,
+      success: true,
+      time: '',
+    }
+  },
 })
 
-onMounted(async () => {
-  try {
-    servers.value = (await getServers('nginx')) || []
-    if (servers.value.length > 0) {
-      const saved = localStorage.getItem(STORAGE_KEYS.NGINX_SERVER)
-      if (saved && servers.value.some(s => s.id === Number(saved))) {
-        serverId.value = Number(saved)
-      } else {
-        serverId.value = servers.value[0].id
-      }
-      await loadConfigs()
-    }
-  } catch (e) {
-    ElMessage.error('加载服务器列表失败')
-  }
+onMounted(initServers)
+
+onActivated(async () => {
+  await refreshServers()
+  if (serverId.value) loadConfigs()
 })
 
 async function loadConfigs() {
   if (!serverId.value) return
-  localStorage.setItem(STORAGE_KEYS.NGINX_SERVER, serverId.value)
+  saveSelection()
   try {
     configFiles.value = await getNginxConfigs(serverId.value)
     if (configFiles.value.length > 0) {
       const saved = localStorage.getItem(STORAGE_KEYS.nginxConfig(serverId.value))
-      if (saved && configFiles.value.includes(saved)) {
-        configFile.value = saved
-      } else {
-        configFile.value = configFiles.value[0]
-      }
+      configFile.value = saved && configFiles.value.includes(saved) ? saved : configFiles.value[0]
       await loadUpstreams()
     }
   } catch (e) {
@@ -611,8 +574,7 @@ async function loadUpstreams() {
     upstreams.value = res.upstreams || []
     rawConfig.value = res.raw || ''
     selectedMap.value = {}
-    // 默认展开所有 upstream
-    expandedUpstreams.value = upstreams.value.map(u => u.name)
+    expandedUpstreams.value = upstreams.value.map((u) => u.name)
     if (upstreams.value.length === 0 && res.raw) {
       ElMessage.warning('未解析到upstream配置，请检查配置文件格式')
     }
@@ -667,29 +629,30 @@ async function handleRefresh() {
 }
 
 async function handleBatchOnline() {
-  const onlineServers = selectedServers.value.filter(s => s.status !== 'up')
+  const onlineServers = selectedServers.value.filter((s) => s.status !== 'up')
   if (onlineServers.length === 0) {
     ElMessage.warning('选中的后端服务均已上线，无需重复操作')
     return
   }
   if (onlineServers.length < selectedServers.value.length) {
-    ElMessage.warning('部分选中的后端服务已上线，将只对未上线的服务执行操作')
+    ElMessage.info('部分选中的后端服务已上线，将只对未上线的服务执行操作')
   }
   const grouped = {}
   for (const { upstreamName, ip } of onlineServers) {
     if (!grouped[upstreamName]) grouped[upstreamName] = []
     grouped[upstreamName].push(ip)
   }
-  const upstreamNames = Object.keys(grouped)
-  const allIps = Object.values(grouped).flat()
-  await handleBatchAction(upstreamNames, allIps, 'online')
+  await handleBatchAction(Object.keys(grouped), Object.values(grouped).flat(), 'online')
 }
 
 async function handleBatchOffline() {
-  const offlineServers = selectedServers.value.filter(s => s.status !== 'down')
+  const offlineServers = selectedServers.value.filter((s) => s.status !== 'down')
   if (offlineServers.length === 0) {
     ElMessage.warning('选中的后端服务均已下线，无需重复操作')
     return
+  }
+  if (offlineServers.length < selectedServers.value.length) {
+    ElMessage.info('部分选中的后端服务已下线，将只对未下线的服务执行操作')
   }
   const grouped = {}
   for (const { upstreamName, ip } of offlineServers) {
@@ -697,17 +660,15 @@ async function handleBatchOffline() {
     grouped[upstreamName].push(ip)
   }
   for (const [upstreamName, ips] of Object.entries(grouped)) {
-    const upstream = upstreams.value.find(u => u.name === upstreamName)
+    const upstream = upstreams.value.find((u) => u.name === upstreamName)
     if (!upstream) continue
-    const totalUp = upstream.servers.filter(s => s.status === 'up').length
+    const totalUp = upstream.servers.filter((s) => s.status === 'up').length
     if (ips.length >= totalUp) {
-      ElMessage.error(`禁止操作：upstream [${upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
+      ElMessage.warning(`禁止操作：upstream [${upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
       return
     }
   }
-  const upstreamNames = Object.keys(grouped)
-  const allIps = Object.values(grouped).flat()
-  await handleBatchAction(upstreamNames, allIps, 'offline')
+  await handleBatchAction(Object.keys(grouped), Object.values(grouped).flat(), 'offline')
 }
 
 function normalizeIPKey(s) {
@@ -716,54 +677,44 @@ function normalizeIPKey(s) {
 }
 
 function handleSwap(upstream, server) {
-  // 找出同 upstream 中状态相反的 server
-  const opposite = upstream.servers.find(s => s.status !== server.status)
+  const opposite = upstream.servers.find((s) => s.status !== server.status)
   if (!opposite) return
-
-  // 确定 offlineIP 和 onlineIP
-  const offlineIP = server.status === 'up' ? normalizeIPKey(server) : normalizeIPKey(opposite)
-  const onlineIP = server.status === 'up' ? normalizeIPKey(opposite) : normalizeIPKey(server)
-
-  swapOfflineIP.value = offlineIP
-  swapOnlineIP.value = onlineIP
-
-  // 扫描所有 upstream，找到同时包含这两个 IP 且状态正确的组
+  swapOfflineIP.value = server.status === 'up' ? normalizeIPKey(server) : normalizeIPKey(opposite)
+  swapOnlineIP.value = server.status === 'up' ? normalizeIPKey(opposite) : normalizeIPKey(server)
   const affected = []
   for (const u of upstreams.value) {
     let hasOffline = false
     let hasOnline = false
     for (const s of u.servers) {
       const key = normalizeIPKey(s)
-      if (key === offlineIP && s.status === 'up') hasOffline = true
-      if (key === onlineIP && s.status === 'down') hasOnline = true
+      if (key === swapOfflineIP.value && s.status === 'up') hasOffline = true
+      if (key === swapOnlineIP.value && s.status === 'down') hasOnline = true
     }
     if (hasOffline && hasOnline) {
       affected.push({
         name: u.name,
         totalCount: u.servers.length,
-        upCount: u.servers.filter(s => s.status === 'up').length,
-        downCount: u.servers.filter(s => s.status === 'down').length,
-        checked: true
+        upCount: u.servers.filter((s) => s.status === 'up').length,
+        downCount: u.servers.filter((s) => s.status === 'down').length,
+        checked: true,
       })
     }
   }
-
   swapAffectedUpstreams.value = affected
   swapDialogVisible.value = true
 }
 
 async function confirmSwap() {
-  const selectedUpstreams = swapAffectedUpstreams.value.filter(i => i.checked).map(i => i.name)
+  const selectedUpstreams = swapAffectedUpstreams.value.filter((i) => i.checked).map((i) => i.name)
   if (selectedUpstreams.length === 0) return
   swapDialogVisible.value = false
-
   try {
     const res = await nginxSwapPreview({
       server_id: serverId.value,
       config_file: configFile.value,
       upstream_names: selectedUpstreams,
       offline_ip: swapOfflineIP.value,
-      online_ip: swapOnlineIP.value
+      online_ip: swapOnlineIP.value,
     })
     previewData.value = res
     previewId.value = res.preview_id
@@ -776,21 +727,22 @@ async function confirmSwap() {
 }
 
 async function handleToggleAll(upstream) {
-  const upCount = upstream.servers.filter(s => s.status === 'up').length
-  const downCount = upstream.servers.filter(s => s.status === 'down').length
+  const upCount = upstream.servers.filter((s) => s.status === 'up').length
+  const downCount = upstream.servers.filter((s) => s.status === 'down').length
   try {
     await ElMessageBox.confirm(
       `将反转 ${upstream.name} 中所有服务器状态：${upCount} 台 up → down，${downCount} 台 down → up。确认执行？`,
       '切换确认',
       { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
     )
-  } catch { return }
-
+  } catch {
+    return
+  }
   try {
     const res = await nginxTogglePreview({
       server_id: serverId.value,
       config_file: configFile.value,
-      upstream_names: [upstream.name]
+      upstream_names: [upstream.name],
     })
     previewData.value = res
     previewId.value = res.preview_id
@@ -803,30 +755,22 @@ async function handleToggleAll(upstream) {
 }
 
 function openBatchDialog() {
-  // 列出所有 upstream 组，让用户选择操作类型
-  const items = upstreams.value.map(u => {
-    const upServers = u.servers.filter(s => s.status === 'up')
-    const downServers = u.servers.filter(s => s.status === 'down')
+  batchItems.value = upstreams.value.map((u) => {
+    const upServers = u.servers.filter((s) => s.status === 'up')
+    const downServers = u.servers.filter((s) => s.status === 'down')
     const hasBoth = upServers.length > 0 && downServers.length > 0
-    const hasMultipleUp = upServers.length >= 2
-
-    // 默认操作：有 up 和 down 的默认 toggle，只有 up 的默认不操作
-    let defaultAction = ''
-    if (hasBoth) defaultAction = 'toggle'
-
     return {
       upstreamName: u.name,
       enabled: false,
-      action: defaultAction,
+      action: hasBoth ? 'toggle' : '',
       backendIPs: [],
       servers: u.servers,
       upCount: upServers.length,
       downCount: downServers.length,
       hasBoth,
-      hasMultipleUp
+      hasMultipleUp: upServers.length >= 2,
     }
   })
-  batchItems.value = items
   batchSearch.value = ''
   batchDialogVisible.value = true
 }
@@ -834,20 +778,20 @@ function openBatchDialog() {
 const filteredBatchItems = computed(() => {
   const q = batchSearch.value.trim().toLowerCase()
   if (!q) return batchItems.value
-  return batchItems.value.filter(item => {
+  return batchItems.value.filter((item) => {
     if (item.upstreamName.toLowerCase().includes(q)) return true
-    return item.servers.some(s => s.ip.includes(q) || s.port.includes(q))
+    return item.servers.some((s) => s.ip.includes(q) || s.port.includes(q))
   })
 })
 
 const isBatchAllSelected = computed(() => {
-  const eligible = filteredBatchItems.value.filter(i => i.hasBoth || i.hasMultipleUp)
-  return eligible.length > 0 && eligible.every(i => i.enabled)
+  const eligible = filteredBatchItems.value.filter((i) => i.hasBoth || i.hasMultipleUp)
+  return eligible.length > 0 && eligible.every((i) => i.enabled)
 })
 
 function toggleBatchSelectAll() {
   const newState = !isBatchAllSelected.value
-  filteredBatchItems.value.forEach(i => {
+  filteredBatchItems.value.forEach((i) => {
     if (i.hasBoth || i.hasMultipleUp) {
       i.enabled = newState
     }
@@ -860,50 +804,41 @@ function toggleBatchExpand(row) {
 
 function toggleBatchExpandAll() {
   const newState = !batchAllExpanded.value
-  filteredBatchItems.value.forEach(row => {
+  filteredBatchItems.value.forEach((row) => {
     batchTableRef.value?.toggleRowExpansion(row, newState)
   })
   batchAllExpanded.value = newState
 }
 
 const batchValidCount = computed(() => {
-  return batchItems.value.filter(i => {
-    if (!i.enabled || !i.action) return false
-    if (i.action === 'toggle') return true
-    return i.backendIPs && i.backendIPs.length > 0
-  }).reduce((sum, i) => {
-    if (i.action === 'toggle') return sum + 1
-    return sum + i.backendIPs.length
-  }, 0)
+  return batchItems.value
+    .filter((i) => {
+      if (!i.enabled || !i.action) return false
+      if (i.action === 'toggle') return true
+      return i.backendIPs && i.backendIPs.length > 0
+    })
+    .reduce((sum, i) => {
+      if (i.action === 'toggle') return sum + 1
+      return sum + i.backendIPs.length
+    }, 0)
 })
 
 function getAvailableActions(item) {
   const actions = []
-  if (item.hasBoth) {
-    actions.push({ label: '切换（反转全部）', value: 'toggle' })
-  }
-  if (item.hasMultipleUp) {
-    actions.push({ label: '下线', value: 'offline' })
-  }
-  if (item.downCount > 0) {
-    actions.push({ label: '上线', value: 'online' })
-  }
+  if (item.hasBoth) actions.push({ label: '切换（反转全部）', value: 'toggle' })
+  if (item.hasMultipleUp) actions.push({ label: '下线', value: 'offline' })
+  if (item.downCount > 0) actions.push({ label: '上线', value: 'online' })
   return actions
 }
 
 function getSelectableServers(item) {
-  if (item.action === 'online') {
-    return item.servers.filter(s => s.status === 'down')
-  } else if (item.action === 'offline') {
-    return item.servers.filter(s => s.status === 'up')
-  }
+  if (item.action === 'online') return item.servers.filter((s) => s.status === 'down')
+  if (item.action === 'offline') return item.servers.filter((s) => s.status === 'up')
   return []
 }
 
-// 获取下线操作时允许全选的服务器（排除第一台，确保至少保留一台在线）
 function getOfflineSafeServers(item) {
-  const upServers = item.servers.filter(s => s.status === 'up')
-  return upServers.slice(1)
+  return item.servers.filter((s) => s.status === 'up').slice(1)
 }
 
 function isBatchIPAllSelected(item) {
@@ -911,21 +846,18 @@ function isBatchIPAllSelected(item) {
   if (selectable.length === 0) return false
   if (item.action === 'offline') {
     const safe = getOfflineSafeServers(item)
-    return safe.length > 0 && safe.every(s => item.backendIPs.includes(normalizeIPKey(s)))
+    return safe.length > 0 && safe.every((s) => item.backendIPs.includes(normalizeIPKey(s)))
   }
-  return selectable.every(s => item.backendIPs.includes(normalizeIPKey(s)))
+  return selectable.every((s) => item.backendIPs.includes(normalizeIPKey(s)))
 }
 
 function toggleBatchIPSelectAll(item) {
   if (isBatchIPAllSelected(item)) {
     item.backendIPs = []
   } else {
-    if (item.action === 'offline') {
-      // 下线全选：排除第一台在线服务器
-      item.backendIPs = getOfflineSafeServers(item).map(s => normalizeIPKey(s))
-    } else {
-      item.backendIPs = getSelectableServers(item).map(s => normalizeIPKey(s))
-    }
+    item.backendIPs = (item.action === 'offline' ? getOfflineSafeServers(item) : getSelectableServers(item)).map((s) =>
+      normalizeIPKey(s)
+    )
   }
 }
 
@@ -934,17 +866,14 @@ function onBatchActionChange(row) {
 }
 
 async function executeBatch() {
-  // 校验：下线操作不能将所有在线服务器下线
   for (const i of batchItems.value) {
     if (!i.enabled || i.action !== 'offline') continue
-    const upServers = i.servers.filter(s => s.status === 'up')
+    const upServers = i.servers.filter((s) => s.status === 'up')
     if (i.backendIPs.length >= upServers.length) {
-      ElMessage.error(`upstream [${i.upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
+      ElMessage.warning(`upstream [${i.upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
       return
     }
   }
-
-  // 展开多选 IP：每个 IP 生成一个独立的 item
   const items = []
   for (const i of batchItems.value) {
     if (!i.enabled || !i.action) continue
@@ -956,25 +885,19 @@ async function executeBatch() {
       }
     }
   }
-
   if (items.length === 0) {
     ElMessage.warning('请至少配置一个操作')
     return
   }
-
   try {
-    const res = await nginxBatchPreview({
-      server_id: serverId.value,
-      config_file: configFile.value,
-      items
-    })
+    const res = await nginxBatchPreview({ server_id: serverId.value, config_file: configFile.value, items })
     previewData.value = res
     previewId.value = res.preview_id
     currentAction.value = 'batch'
     currentBatchInfo.value = {
-      upstreamNames: items.map(i => i.upstream_name),
+      upstreamNames: items.map((i) => i.upstream_name),
       ipCount: items.length,
-      action: 'batch'
+      action: 'batch',
     }
     batchDialogVisible.value = false
     previewVisible.value = true
@@ -985,13 +908,12 @@ async function executeBatch() {
 
 async function handleBatchAction(upstreamNames, ips, action) {
   const previewFn = action === 'online' ? nginxOnlinePreview : nginxOfflinePreview
-
   try {
     const res = await previewFn({
       server_id: serverId.value,
       config_file: configFile.value,
       upstream_names: upstreamNames,
-      backend_ip: ips.join(',')
+      backend_ip: ips.join(','),
     })
     previewData.value = res
     previewId.value = res.preview_id
@@ -1003,8 +925,6 @@ async function handleBatchAction(upstreamNames, ips, action) {
   }
 }
 
-const currentBatchInfo = ref(null)
-
 async function handleRollbackFromDialog(backupFile) {
   try {
     await ElMessageBox.confirm(
@@ -1013,20 +933,10 @@ async function handleRollbackFromDialog(backupFile) {
       { confirmButtonText: '确认回滚', cancelButtonText: '取消', type: 'warning' }
     )
     backupDialogVisible.value = false
-    await handleRollback(backupFile)
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '预览失败')
-    }
-  }
-}
-
-async function handleRollback(backupFile) {
-  try {
     const res = await nginxRollbackPreview({
       server_id: serverId.value,
       config_file: configFile.value,
-      backup_file: backupFile
+      backup_file: backupFile,
     })
     previewData.value = res
     previewId.value = res.preview_id
@@ -1034,23 +944,25 @@ async function handleRollback(backupFile) {
     currentBatchInfo.value = null
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '预览失败')
+    }
   }
 }
 
 const ACTION_META = {
-  online:  { type: 'success', label: '批量上线' },
-  offline: { type: 'danger',  label: '批量下线' },
-  swap:    { type: 'warning', label: '切换' },
-  toggle:  { type: 'warning', label: '组切换' },
-  batch:   { type: 'warning', label: '批量操作' },
-  rollback:{ type: 'info',    label: '回滚' }
+  online: { type: 'success', label: '批量上线' },
+  offline: { type: 'danger', label: '批量下线' },
+  swap: { type: 'warning', label: '切换' },
+  toggle: { type: 'warning', label: '组切换' },
+  batch: { type: 'warning', label: '批量操作' },
+  rollback: { type: 'info', label: '回滚' },
 }
 
 function getNowStr() {
   const d = new Date()
-  const pad = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 async function executePreview() {
@@ -1062,27 +974,22 @@ async function executePreview() {
     swap: nginxSwapExecute,
     toggle: nginxToggleExecute,
     batch: nginxBatchExecute,
-    rollback: nginxRollbackExecute
+    rollback: nginxRollbackExecute,
   }[action]
-
   const meta = ACTION_META[action] || { type: 'info', label: action }
-
   try {
     const res = await executeFn({ preview_id: previewId.value })
-    const msg = res.output || res.message || '执行成功'
-    output.value = msg
+    output.value = res.output || res.message || '执行成功'
     outputMeta.value = {
       actionType: meta.type,
       actionLabel: meta.label,
       upstreamNames: currentBatchInfo.value?.upstreamNames || [],
       ipCount: currentBatchInfo.value?.ipCount || 0,
       success: true,
-      time: getNowStr()
+      time: getNowStr(),
     }
     previewVisible.value = false
     ElMessage.success('执行成功')
-
-    await loadUpstreams()
     await loadConfigs()
   } catch (e) {
     const msg = e.response?.data?.error || e.message || '执行失败'
@@ -1095,7 +1002,7 @@ async function executePreview() {
       upstreamNames: currentBatchInfo.value?.upstreamNames || [],
       ipCount: currentBatchInfo.value?.ipCount || 0,
       success: false,
-      time: getNowStr()
+      time: getNowStr(),
     }
   } finally {
     executing.value = false
@@ -1104,84 +1011,28 @@ async function executePreview() {
 </script>
 
 <style scoped>
-/* ===== Page ===== */
 .nginx-page {
   padding: 2px;
-}
-
-/* ===== Main Card ===== */
-.main-card {
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  box-shadow: none;
-  overflow-y: auto;
-  max-height: calc(100vh - 100px);
-}
-
-:deep(.el-card__header) {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-/* ===== Stat Chips ===== */
-.stat-chip {
-  font-size: 13px;
-  color: #94A3B8;
-  background: var(--bg-elevated);
-  padding: 4px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.stat-chip b {
-  margin-left: 4px;
-  font-size: 14px;
-  color: var(--text-primary);
 }
 
 .stat-chip-danger {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .stat-chip-danger:hover {
   background: rgba(239, 68, 68, 0.15);
 }
-
 .stat-chip-danger.stat-chip-active {
   background: rgba(239, 68, 68, 0.2);
-  color: #EF4444;
+  color: #ef4444;
+}
+.stat-chip-danger.stat-chip-active b {
+  color: #ef4444;
 }
 
-.stat-chip-danger.stat-chip-active b { color: #EF4444; }
-
-.stat-chip-primary b { color: #06B6D4; }
-.stat-chip-success b { color: #22C55E; }
-.stat-chip-danger b { color: #EF4444; }
-.stat-chip-warning b { color: #F59E0B; }
-
-/* ===== Toolbar ===== */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 0;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  flex-wrap: wrap;
-}
-
-.toolbar :deep(.el-dropdown) {
-  display: inline-flex;
-}
-
-/* ===== Upstream Collapse ===== */
 .upstream-collapse {
   border: none;
 }
-
 :deep(.upstream-collapse .el-collapse-item) {
   margin-bottom: 10px;
   border-radius: 10px;
@@ -1190,11 +1041,18 @@ async function executePreview() {
   background: var(--card-bg);
   transition: border-color 0.2s;
 }
-
 :deep(.upstream-collapse .el-collapse-item:hover) {
   border-color: var(--border-strong);
 }
-
+:deep(.upstream-collapse .health-healthy) {
+  border-left: 3px solid #22c55e;
+}
+:deep(.upstream-collapse .health-degraded) {
+  border-left: 3px solid #f59e0b;
+}
+:deep(.upstream-collapse .health-critical) {
+  border-left: 3px solid #ef4444;
+}
 :deep(.upstream-collapse .el-collapse-item__header) {
   background: var(--bg-elevated);
   border-bottom: 1px solid transparent;
@@ -1205,19 +1063,16 @@ async function executePreview() {
   transition: background 0.2s;
   color: var(--text-primary);
 }
-
 :deep(.upstream-collapse .el-collapse-item.is-active .el-collapse-item__header) {
   border-bottom-color: var(--border-default);
 }
-
 :deep(.upstream-collapse .el-collapse-item__wrap) {
   border-bottom: none;
   background: transparent;
 }
-
 :deep(.upstream-collapse .el-collapse-item__content) {
   padding: 0;
-  color: #94A3B8;
+  color: var(--text-regular);
 }
 
 .upstream-header {
@@ -1226,14 +1081,12 @@ async function executePreview() {
   gap: 12px;
   width: 100%;
 }
-
 .upstream-name {
   font-weight: 700;
   color: var(--text-primary);
   font-size: 14px;
   letter-spacing: 0.3px;
 }
-
 .upstream-badges {
   display: flex;
   gap: 6px;
@@ -1248,73 +1101,33 @@ async function executePreview() {
   font-weight: 500;
   line-height: 1;
 }
-
 .badge-info {
   background: rgba(6, 182, 212, 0.12);
-  color: #06B6D4;
+  color: #06b6d4;
 }
-
 .badge-success {
   background: rgba(34, 197, 94, 0.12);
-  color: #22C55E;
+  color: #22c55e;
 }
-
 .badge-danger {
   background: rgba(239, 68, 68, 0.12);
-  color: #EF4444;
+  color: #ef4444;
 }
 
-/* ===== Server Table ===== */
 .server-table {
   border-radius: 0;
 }
-
-@media (max-width: 768px) {
-  .server-table {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x pinch-zoom;
-  }
-
-  :deep(.server-table .el-table__inner-wrapper) {
-    min-width: 460px;
-  }
-
-  .batch-table {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x pinch-zoom;
-  }
-
-  :deep(.batch-table .el-table__inner-wrapper) {
-    min-width: 600px;
-  }
-}
-
-:deep(.batch-table .el-table__expand-column .el-table__expand-icon) {
-  display: none;
-}
-
-:deep(.batch-table td:focus),
-:deep(.batch-table th:focus),
-:deep(.batch-table *:focus),
-:deep(.batch-table *:focus-visible) {
-  outline: none !important;
-}
-
 :deep(.server-table .el-table__header th) {
   background: var(--bg-elevated) !important;
-  color: #94A3B8;
+  color: var(--text-regular);
   font-weight: 600;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-
 :deep(.server-table .el-table__row) {
   transition: background-color 0.15s;
 }
-
 :deep(.server-table .el-table__row:hover > td) {
   background-color: rgba(6, 182, 212, 0.04) !important;
 }
@@ -1327,201 +1140,54 @@ async function executePreview() {
   margin-right: 6px;
   vertical-align: middle;
 }
-
 .status-up {
-  background: #22C55E;
+  background: #22c55e;
   box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  animation: nginx-pulse-up 2.5s ease-in-out infinite;
 }
-
 .status-down {
-  background: #EF4444;
+  background: #ef4444;
   box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+  animation: nginx-pulse-down 1.5s ease-in-out infinite;
+}
+@keyframes nginx-pulse-up {
+  0%,
+  100% {
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.7);
+  }
+}
+@keyframes nginx-pulse-down {
+  0%,
+  100% {
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+  }
 }
 
 :deep(.selected-row) {
   background-color: rgba(6, 182, 212, 0.08) !important;
 }
-
 :deep(.selected-row:hover > td) {
   background-color: rgba(6, 182, 212, 0.12) !important;
 }
 
-/* ===== Empty State ===== */
 .empty-state {
   text-align: center;
   padding: 40px 0;
-  color: #64748B;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
-/* ===== Preview ===== */
-.preview-desc {
-  font-size: 14px;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  border-left: 3px solid #06B6D4;
-}
-
-/* ===== Diff Viewer ===== */
-.diff-container {
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  overflow: hidden;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
-  font-size: 13px;
-}
-
-.diff-header {
-  background: var(--bg-elevated);
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-default);
-}
-
-.diff-filename {
-  color: #22D3EE;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.diff-body {
-  max-height: 500px;
-  overflow-y: auto;
-  background: #0B0D13;
-}
-
-.diff-line {
-  display: flex;
-  padding: 1px 0;
-  line-height: 1.6;
-}
-
-.diff-line:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.diff-line-num {
-  width: 50px;
-  text-align: right;
-  padding-right: 12px;
-  color: #475569;
-  user-select: none;
-  flex-shrink: 0;
-  font-size: 12px;
-}
-
-.diff-line-prefix {
-  width: 24px;
-  text-align: center;
-  user-select: none;
-  flex-shrink: 0;
-  font-weight: 700;
-}
-
-.diff-line-content {
-  flex: 1;
-  white-space: pre;
-  overflow-x: auto;
-  padding-right: 16px;
-}
-
-.diff-same {
-  background: transparent;
-}
-
-.diff-same .diff-line-content {
-  color: #94A3B8;
-}
-
-.diff-added {
-  background: rgba(34, 197, 94, 0.08);
-}
-
-.diff-added .diff-line-prefix {
-  color: #22C55E;
-}
-
-.diff-added .diff-line-content {
-  color: #86efac;
-}
-
-.diff-removed {
-  background: rgba(239, 68, 68, 0.08);
-}
-
-.diff-removed .diff-line-prefix {
-  color: #EF4444;
-}
-
-.diff-removed .diff-line-content {
-  color: #fca5a5;
-}
-
-/* ===== Terminal Pre ===== */
-.terminal-pre {
-  background: #0B0D13;
-  color: #22D3EE;
-  padding: 16px;
-  border-radius: 8px;
-  max-height: 400px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
-  font-size: 13px;
-  line-height: 1.6;
-  margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.terminal-pre::selection,
-.terminal-pre *::selection {
-  background: rgba(34, 211, 238, 0.5) !important;
-  color: #fff !important;
-}
-
-.diff-body::selection,
-.diff-line-content::selection,
-.diff-body *::selection {
-  background: rgba(34, 211, 238, 0.5) !important;
-  color: #fff !important;
-}
-
-.terminal-lg {
-  max-height: 600px;
-}
-
-/* ===== Nginx Syntax Highlighting ===== */
-:deep(.hl-comment) {
-  color: #6a9955;
-  font-style: italic;
-}
-
-:deep(.hl-directive) {
-  color: #22D3EE;
-  font-weight: 600;
-}
-
-:deep(.hl-brace) {
-  color: #F59E0B;
-  font-weight: 700;
-}
-
-:deep(.hl-ip) {
-  color: #ce9178;
-}
-
-:deep(.hl-semicolon) {
-  color: #475569;
-}
-
-/* ===== Output Area ===== */
 .output-body {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-
 .output-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1531,153 +1197,102 @@ async function executePreview() {
   border-radius: 8px;
   border: 1px solid var(--border-default);
 }
-
 .output-meta-item {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 .output-meta-label {
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-secondary);
   white-space: nowrap;
 }
-
 .output-meta-value {
   font-size: 13px;
   color: var(--text-primary);
   font-weight: 600;
 }
-
 .output-meta-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 }
 
-:deep(.el-loading-mask) {
+.terminal-pre {
+  background: var(--terminal-bg);
+  color: var(--terminal-text);
+  padding: 16px;
   border-radius: 8px;
-}
-
-/* ===== Swap Dialog ===== */
-.swap-dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.swap-ip-pair {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-
-.swap-label {
-  font-size: 13px;
-  color: #94A3B8;
-  font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.swap-arrow {
-  font-size: 28px;
-  color: #06B6D4;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.swap-upstream-list {
   max-height: 400px;
   overflow-y: auto;
-}
-
-.swap-upstream-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: var(--font-base);
+  line-height: 1.6;
+  margin: 0;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
-  margin-bottom: 8px;
-  transition: background 0.15s;
+}
+.terminal-pre::selection,
+.terminal-pre *::selection {
+  background: rgba(34, 211, 238, 0.5) !important;
+  color: #fff !important;
+}
+.terminal-lg {
+  max-height: 600px;
 }
 
-.swap-upstream-item:hover {
-  background: var(--bg-elevated);
-}
-
-.swap-upstream-item .upstream-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-/* ===== Batch Dialog ===== */
 .batch-dialog-body {
   max-height: 550px;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
-
 .batch-dialog-header {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-
 .batch-hint-text {
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-secondary);
 }
-
 .batch-hint {
   display: flex;
   align-items: center;
   font-size: 13px;
-  color: #64748B;
+  color: var(--text-secondary);
   margin-bottom: 12px;
   padding: 8px 12px;
   background: var(--bg-elevated);
   border-radius: 6px;
 }
-
 .batch-table {
   width: 100%;
 }
-
 .batch-empty {
   text-align: center;
-  color: #64748B;
+  color: var(--text-secondary);
   padding: 30px 0;
   font-size: 14px;
 }
-
 .batch-offline-hint {
   font-size: 11px;
-  color: #F59E0B;
+  color: #f59e0b;
   margin-top: 2px;
   line-height: 1.2;
 }
-
 .batch-upstream-name {
-  color: #06B6D4;
+  color: #06b6d4;
   cursor: pointer;
   font-weight: 500;
 }
-
 .batch-upstream-name:hover {
   text-decoration: underline;
 }
-
 .batch-expand-servers {
   padding: 8px 12px 8px 76px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 16px;
 }
-
 .batch-server-item {
   display: inline-flex;
   align-items: center;
@@ -1685,32 +1300,55 @@ async function executePreview() {
   font-size: 13px;
   line-height: 1;
 }
-
 .batch-server-ip {
   font-family: monospace;
   color: var(--text-primary);
 }
-
 .batch-server-port {
-  color: #64748B;
+  color: var(--text-secondary);
   font-family: monospace;
 }
-
 .batch-server-weight {
-  color: #64748B;
+  color: var(--text-secondary);
   font-size: 12px;
   margin-left: 2px;
 }
 
-/* ===== Upstream Toggle Button ===== */
+:deep(.batch-table .el-table__expand-column .el-table__expand-icon) {
+  display: none;
+}
+:deep(.batch-table td:focus),
+:deep(.batch-table th:focus),
+:deep(.batch-table *:focus),
+:deep(.batch-table *:focus-visible) {
+  outline: none !important;
+}
+
 .upstream-toggle-btn {
   margin-left: auto;
   margin-right: 8px;
 }
 
-/* ===== Backup Table ===== */
-:deep(.backup-table .el-table__header th) {
-  background: var(--bg-elevated) !important;
-  font-weight: 600;
+:deep(.el-loading-mask) {
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .server-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
+  }
+  :deep(.server-table .el-table__inner-wrapper) {
+    min-width: 460px;
+  }
+  .batch-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pinch-zoom;
+  }
+  :deep(.batch-table .el-table__inner-wrapper) {
+    min-width: 600px;
+  }
 }
 </style>

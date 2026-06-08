@@ -267,17 +267,45 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	// 提取资源名称列表，区分批量/全量操作（与 HTTP handler 保持一致）
+	var projectNames string
+	var projectCount int
+	var auditAction string
+	if names, ok := preview.Params["resource_names"].([]interface{}); ok {
+		var strNames []string
+		for _, n := range names {
+			if s, ok := n.(string); ok && s != "" {
+				strNames = append(strNames, s)
+			}
+		}
+		if len(strNames) > 0 {
+			projectNames = strings.Join(strNames, ",")
+			projectCount = len(strNames)
+			auditAction = "batch_" + preview.Action
+		} else {
+			projectNames = "*"
+			projectCount = 0
+			auditAction = "full_" + preview.Action
+		}
+	} else {
+		projectNames = "*"
+		projectCount = 0
+		auditAction = "full_" + preview.Action
+	}
+
 	logEntry := model.OperationLog{
-		UserID:     claims.UserID,
-		Username:   usernameStr,
-		Module:     "preprod",
-		Action:     preview.Action,
-		Target:     command,
-		Detail:     command,
-		PreviewID:  msg.PreviewID,
-		ServerID:   server.ID,
-		ServerName: server.Name,
-		IP:         getClientIP(c),
+		UserID:       claims.UserID,
+		Username:     usernameStr,
+		Module:       "preprod",
+		Action:       auditAction,
+		Target:       command,
+		Detail:       command,
+		PreviewID:    msg.PreviewID,
+		ServerID:     server.ID,
+		ServerName:   server.Name,
+		IP:           getClientIP(c),
+		ProjectNames: projectNames,
+		ProjectCount: projectCount,
 	}
 
 	// Stream execution

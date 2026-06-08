@@ -4,21 +4,46 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
-          <el-button type="success" @click="showLdapImport" v-if="ldapEnabled">导入 LDAP 用户</el-button>
-          <el-button :type="batchToggleType" @click="handleBatchToggle" :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-button>
-          <el-button type="primary" @click="handleEditSelected" :disabled="selectedRows.length !== 1">编辑</el-button>
-          <el-button type="warning" @click="handleResetPwdSelected" :disabled="selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'">重置密码</el-button>
-          <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0">删除</el-button>
-          <el-button type="info" class="el-button--cyan" @click="handleRefresh" :loading="loading">刷新</el-button>
-          <el-input v-model="searchQuery" placeholder="搜索用户信息" clearable style="width: 300px; margin-left: auto;" />
+          <el-button v-if="ldapEnabled" type="success" @click="showLdapImport">导入 LDAP 用户</el-button>
+          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
+            batchToggleLabel
+          }}</el-button>
+          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
+          <el-button
+            type="warning"
+            :disabled="
+              selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'
+            "
+            @click="handleResetPwdSelected"
+            >重置密码</el-button
+          >
+          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
+          <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索用户信息"
+            clearable
+            style="width: 300px; margin-left: auto"
+          />
         </div>
       </template>
 
-      <el-table :data="paginatedUsers" stripe border :row-class-name="({ row }) => row.enabled === false ? 'disabled-row' : ''" @selection-change="handleSelectionChange" ref="tableRef" v-force-reflow max-height="calc(100vh - 250px)">
+      <el-table
+        ref="tableRef"
+        v-force-reflow
+        :data="paginatedUsers"
+        stripe
+        border
+        :row-class-name="({ row }) => (row.enabled === false ? 'disabled-row' : '')"
+        max-height="calc(100vh - 250px)"
+        @selection-change="handleSelectionChange"
+      >
         <el-table-column type="selection" width="55" />
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '已启用' : '已禁用' }}</el-tag>
+            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
+              row.enabled ? '已启用' : '已禁用'
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="100" />
@@ -26,12 +51,16 @@
         <el-table-column prop="email" label="邮箱" min-width="180" />
         <el-table-column label="角色" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.role === 'admin' ? 'danger' : 'info'">{{ row.role === 'admin' ? '管理员' : '普通用户' }}</el-tag>
+            <el-tag :type="row.role === 'admin' ? 'danger' : 'info'">{{
+              row.role === 'admin' ? '管理员' : '普通用户'
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="认证来源" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.auth_source === 'ldap' ? 'warning' : 'info'" size="small">{{ row.auth_source === 'ldap' ? 'LDAP' : '本地' }}</el-tag>
+            <el-tag :type="row.auth_source === 'ldap' ? 'warning' : 'info'" size="small">{{
+              row.auth_source === 'ldap' ? 'LDAP' : '本地'
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" min-width="160">
@@ -39,9 +68,14 @@
         </el-table-column>
       </el-table>
 
+      <div v-if="!loading && paginatedUsers.length === 0" class="empty-state">
+        <el-icon class="empty-state-icon"><UserFilled /></el-icon>
+        <span class="empty-state-text">{{ searchQuery ? '没有匹配的用户' : '暂无用户数据' }}</span>
+      </div>
+
       <div class="pagination-wrapper">
         <div class="pagination-left">
-          <span class="selection-count">已选 {{ selectedRows.length }}</span>
+          <span v-if="selectedRows.length > 0" class="selection-count">已选 {{ selectedRows.length }} 项</span>
         </div>
         <el-pagination
           v-model:current-page="currentPage"
@@ -56,7 +90,7 @@
     </el-card>
 
     <!-- Add/Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑用户' : '添加用户'" width="500px">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑用户' : '添加用户'" width="min(500px, 90vw)" align-center>
       <el-form :model="form" label-width="80px">
         <el-form-item label="用户名" required>
           <el-input v-model="form.username" :disabled="isEdit" />
@@ -87,7 +121,7 @@
     </el-dialog>
 
     <!-- Reset Password Dialog -->
-    <el-dialog v-model="resetPwdVisible" title="重置密码" width="400px">
+    <el-dialog v-model="resetPwdVisible" title="重置密码" width="min(400px, 90vw)" align-center>
       <el-form :model="resetPwdForm" label-width="80px">
         <el-form-item label="用户名">
           <el-input :model-value="resetPwdForm.username" disabled />
@@ -103,20 +137,30 @@
     </el-dialog>
 
     <!-- LDAP Import Dialog -->
-    <el-dialog v-model="ldapImportVisible" title="导入 LDAP 用户" width="800px" @close="handleLdapDialogClose">
-      <div v-if="ldapLoading" style="text-align: center; padding: 40px;">
+    <el-dialog v-model="ldapImportVisible" title="导入 LDAP 用户" width="min(800px, 95vw)" align-center @close="handleLdapDialogClose">
+      <div v-if="ldapLoading" style="text-align: center; padding: 40px">
         <el-icon class="is-loading" :size="32"><Loading /></el-icon>
-        <p style="margin-top: 12px; color: #94A3B8;">正在从 LDAP 获取用户列表...</p>
+        <p style="margin-top: 12px; color: var(--text-regular)">正在从 LDAP 获取用户列表...</p>
       </div>
       <div v-else>
-        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 14px; color: #94A3B8;">选择要导入的用户，已导入的用户将自动跳过</span>
-          <div style="display: flex; gap: 8px;">
-            <el-input v-model="ldapSearch" placeholder="搜索用户" clearable style="width: 200px;" />
-            <el-button type="info" class="el-button--cyan" @click="showLdapImport" :loading="ldapLoading">刷新</el-button>
+        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center">
+          <span style="font-size: 14px; color: var(--text-regular)">选择要导入的用户，已导入的用户将自动跳过</span>
+          <div style="display: flex; gap: 8px">
+            <el-input v-model="ldapSearch" placeholder="搜索用户" clearable style="width: 200px" />
+            <el-button type="info" class="el-button--cyan" :loading="ldapLoading" @click="showLdapImport"
+              >刷新</el-button
+            >
           </div>
         </div>
-        <el-table :data="paginatedLdapUsers" stripe border max-height="400" @selection-change="handleLdapSelectionChange" @sort-change="handleLdapSortChange" ref="ldapTableRef">
+        <el-table
+          ref="ldapTableRef"
+          :data="paginatedLdapUsers"
+          stripe
+          border
+          max-height="400"
+          @selection-change="handleLdapSelectionChange"
+          @sort-change="handleLdapSortChange"
+        >
           <el-table-column type="selection" width="55" :selectable="(row) => !row.imported" />
           <el-table-column prop="username" label="用户名" width="120" sortable="custom" />
           <el-table-column prop="name" label="姓名" min-width="120" sortable="custom" />
@@ -129,7 +173,7 @@
           </el-table-column>
         </el-table>
         <div class="ldap-pagination">
-          <span class="selection-count">已选 {{ selectedLdapUsers.length }}</span>
+          <span v-if="selectedLdapUsers.length > 0" class="selection-count">已选 {{ selectedLdapUsers.length }} 项</span>
           <el-pagination
             v-model:current-page="ldapCurrentPage"
             v-model:page-size="ldapPageSize"
@@ -144,7 +188,12 @@
       </div>
       <template #footer>
         <el-button @click="ldapImportVisible = false">取消</el-button>
-        <el-button type="primary" :loading="importing" :disabled="selectedLdapUsers.length === 0" @click="handleImportLdapUsers">
+        <el-button
+          type="primary"
+          :loading="importing"
+          :disabled="selectedLdapUsers.length === 0"
+          @click="handleImportLdapUsers"
+        >
           导入 ({{ selectedLdapUsers.length }})
         </el-button>
       </template>
@@ -153,11 +202,22 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
-import { getUsers, createUser, updateUser, batchDeleteUsers, batchToggleUsers, resetPassword, toggleUserEnabled, getLdapUsers, importLdapUsers } from '../api'
+import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import {
+  getUsers,
+  createUser,
+  updateUser,
+  batchDeleteUsers,
+  batchToggleUsers,
+  resetPassword,
+  toggleUserEnabled,
+  getLdapUsers,
+  importLdapUsers,
+} from '../api'
+import { showBatchResult } from '../utils/message'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, UserFilled } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const currentUserId = computed(() => userStore.userInfo?.id)
@@ -170,7 +230,7 @@ const pageSize = ref(20)
 const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return users.value
-  return users.value.filter(u => {
+  return users.value.filter((u) => {
     // 状态映射
     const statusText = u.enabled ? '已启用' : '已禁用'
     // 角色映射
@@ -201,13 +261,13 @@ const paginatedUsers = computed(() => {
 const batchToggleType = computed(() => {
   if (selectedRows.value.length === 0) return 'success'
   // 如果选中的都是禁用状态，则显示启用按钮；否则显示禁用按钮
-  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  const allDisabled = selectedRows.value.every((r) => !r.enabled)
   return allDisabled ? 'success' : 'warning'
 })
 
 const batchToggleLabel = computed(() => {
   if (selectedRows.value.length === 0) return '启用'
-  const allDisabled = selectedRows.value.every(r => !r.enabled)
+  const allDisabled = selectedRows.value.every((r) => !r.enabled)
   return allDisabled ? '启用' : '禁用'
 })
 
@@ -242,10 +302,11 @@ const filteredLdapUsers = computed(() => {
   const q = ldapSearch.value.trim().toLowerCase()
   let list = ldapUsers.value
   if (q) {
-    list = list.filter(u =>
-      u.username.toLowerCase().includes(q) ||
-      (u.name && u.name.toLowerCase().includes(q)) ||
-      (u.email && u.email.toLowerCase().includes(q))
+    list = list.filter(
+      (u) =>
+        u.username.toLowerCase().includes(q) ||
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
     )
   }
   if (ldapSortProp.value && ldapSortOrder.value) {
@@ -263,7 +324,7 @@ const filteredLdapUsers = computed(() => {
 })
 
 const selectedLdapUsers = computed(() => {
-  return ldapUsers.value.filter(u => selectedLdapUsernames.value.has(u.username))
+  return ldapUsers.value.filter((u) => selectedLdapUsernames.value.has(u.username))
 })
 
 const paginatedLdapUsers = computed(() => {
@@ -285,40 +346,21 @@ function handleLdapSortChange({ prop, order }) {
 }
 
 // 翻页或数据变化后，恢复当前页中已选用户的勾选状态
-watch(paginatedLdapUsers, () => {
-  if (!ldapTableRef.value) return
-  const names = selectedLdapUsernames.value
-  paginatedLdapUsers.value.forEach(row => {
-    ldapTableRef.value.toggleRowSelection(row, names.has(row.username))
-  })
-}, { flush: 'post' })
+watch(
+  paginatedLdapUsers,
+  () => {
+    if (!ldapTableRef.value) return
+    const names = selectedLdapUsernames.value
+    paginatedLdapUsers.value.forEach((row) => {
+      ldapTableRef.value.toggleRowSelection(row, names.has(row.username))
+    })
+  },
+  { flush: 'post' }
+)
 
 function formatTime(t) {
   if (!t) return ''
   return new Date(t).toLocaleString('zh-CN')
-}
-
-// HTML 转义，防止 XSS
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-}
-
-// 显示批量操作结果消息
-function showBatchResult(res) {
-  const message = res.message || '操作完成'
-  const success = res.deleted || res.updated || 0
-  const failed = res.failed || 0
-
-  // 转义 HTML 后将换行符转换为 <br>
-  const htmlMessage = escapeHtml(message).replace(/\n/g, '<br>')
-
-  if (failed === 0) {
-    ElMessage({ message: htmlMessage, type: 'success', dangerouslyUseHTMLString: true })
-  } else if (success === 0) {
-    ElMessage({ message: htmlMessage, type: 'error', dangerouslyUseHTMLString: true })
-  } else {
-    ElMessage({ message: htmlMessage, type: 'warning', dangerouslyUseHTMLString: true, duration: 5000 })
-  }
 }
 
 function handleSelectionChange(rows) {
@@ -353,6 +395,10 @@ watch(searchQuery, () => {
 onMounted(() => {
   loadData()
   checkLdapEnabled()
+})
+
+onActivated(() => {
+  loadData()
 })
 
 async function loadData(showMessage = false) {
@@ -397,7 +443,14 @@ function handleEditSelected() {
 function handleEdit(row) {
   isEdit.value = true
   editId.value = row.id
-  form.value = { username: row.username, name: row.name, email: row.email, password: '', role: row.role, enabled: row.enabled }
+  form.value = {
+    username: row.username,
+    name: row.name,
+    email: row.email,
+    password: '',
+    role: row.role,
+    enabled: row.enabled,
+  }
   dialogVisible.value = true
 }
 
@@ -425,20 +478,28 @@ async function handleBatchToggle() {
   if (selectedRows.value.length === 0) return
 
   // 过滤掉 admin 和当前用户
-  const operable = selectedRows.value.filter(r => r.username !== 'admin' && r.id !== currentUserId.value)
+  const operable = selectedRows.value.filter((r) => r.username !== 'admin' && r.id !== currentUserId.value)
   if (operable.length === 0) {
     ElMessage.warning('选中的用户中没有可操作的用户')
     return
+  }
+  if (operable.length < selectedRows.value.length) {
+    ElMessage.info(`已自动跳过 admin 和当前用户，将对剩余 ${operable.length} 个用户执行操作`)
   }
 
   // 根据按钮标签判断操作：如果当前显示"禁用"，则执行禁用（enabled=false）；否则执行启用（enabled=true）
   const enabled = batchToggleLabel.value === '启用'
   const action = enabled ? '启用' : '禁用'
 
-  const names = operable.map(r => r.username).join('、')
+  const names = operable.map((r) => r.username).join('、')
   try {
-    await ElMessageBox.confirm(`确定要${action}以下 ${operable.length} 个用户吗？\n${names}`, `批量${action}`, { type: 'warning' })
-    const res = await batchToggleUsers(operable.map(r => r.id), enabled)
+    await ElMessageBox.confirm(`确定要${action}以下 ${operable.length} 个用户吗？\n${names}`, `批量${action}`, {
+      type: 'warning',
+    })
+    const res = await batchToggleUsers(
+      operable.map((r) => r.id),
+      enabled
+    )
     showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
@@ -454,16 +515,21 @@ async function handleBatchDelete() {
   if (selectedRows.value.length === 0) return
 
   // 过滤掉 admin 和当前用户
-  const deletable = selectedRows.value.filter(r => r.username !== 'admin' && r.id !== currentUserId.value)
+  const deletable = selectedRows.value.filter((r) => r.username !== 'admin' && r.id !== currentUserId.value)
   if (deletable.length === 0) {
     ElMessage.warning('选中的用户中没有可删除的用户')
     return
   }
+  if (deletable.length < selectedRows.value.length) {
+    ElMessage.info(`已自动跳过 admin 和当前用户，将对剩余 ${deletable.length} 个用户执行删除`)
+  }
 
-  const names = deletable.map(r => r.username).join('、')
+  const names = deletable.map((r) => r.username).join('、')
   try {
-    await ElMessageBox.confirm(`确定要删除以下 ${deletable.length} 个用户吗？\n${names}`, '批量删除', { type: 'warning' })
-    const res = await batchDeleteUsers(deletable.map(r => r.id))
+    await ElMessageBox.confirm(`确定要删除以下 ${deletable.length} 个用户吗？\n${names}`, '批量删除', {
+      type: 'warning',
+    })
+    const res = await batchDeleteUsers(deletable.map((r) => r.id))
     showBatchResult(res)
     selectedRow.value = null
     selectedRows.value = []
@@ -506,7 +572,13 @@ async function handleSubmit() {
   submitting.value = true
   try {
     if (isEdit.value) {
-      await updateUser(editId.value, { username: form.value.username, name: form.value.name, email: form.value.email, role: form.value.role, enabled: form.value.enabled })
+      await updateUser(editId.value, {
+        username: form.value.username,
+        name: form.value.name,
+        email: form.value.email,
+        role: form.value.role,
+        enabled: form.value.enabled,
+      })
       ElMessage.success('更新成功')
     } else {
       await createUser(form.value)
@@ -558,10 +630,10 @@ async function showLdapImport() {
   try {
     const ldapList = await getLdapUsers()
     // 标记已导入的用户
-    const importedUsernames = new Set(users.value.filter(u => u.auth_source === 'ldap').map(u => u.username))
-    ldapUsers.value = (ldapList || []).map(u => ({
+    const importedUsernames = new Set(users.value.filter((u) => u.auth_source === 'ldap').map((u) => u.username))
+    ldapUsers.value = (ldapList || []).map((u) => ({
       ...u,
-      imported: importedUsernames.has(u.username)
+      imported: importedUsernames.has(u.username),
     }))
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '获取 LDAP 用户失败')
@@ -572,8 +644,8 @@ async function showLdapImport() {
 }
 
 function handleLdapSelectionChange(rows) {
-  const currentPageUsernames = new Set(paginatedLdapUsers.value.map(r => r.username))
-  const selectedOnPage = new Set(rows.map(r => r.username))
+  const currentPageUsernames = new Set(paginatedLdapUsers.value.map((r) => r.username))
+  const selectedOnPage = new Set(rows.map((r) => r.username))
   const newSet = new Set(selectedLdapUsernames.value)
   // 移除当前页中未选中的
   for (const name of currentPageUsernames) {
@@ -606,45 +678,6 @@ async function handleImportLdapUsers() {
 </script>
 
 <style scoped>
-:deep(.el-card__header) {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  flex-wrap: wrap;
-}
-:deep(.disabled-row) {
-  background-color: var(--bg-elevated) !important;
-  opacity: 0.6;
-}
-:deep(.disabled-row:hover > td) {
-  background-color: var(--bg-elevated) !important;
-}
-.pagination-wrapper {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 16px;
-  padding: 8px 0;
-}
-.pagination-left {
-  display: flex;
-  align-items: center;
-}
-.selection-count {
-  font-size: var(--el-pagination-font-size, 13px);
-  color: var(--el-text-color-regular);
-  white-space: nowrap;
-  line-height: 32px;
-}
 .ldap-pagination {
   display: flex;
   justify-content: space-between;
