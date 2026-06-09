@@ -548,7 +548,7 @@ function makeActionBarOption(module) {
     xAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } },
+      splitLine: { lineStyle: { color: themeColors.value.border } },
       axisLabel: { color: themeColors.value.muted, fontSize: 12 },
     },
     yAxis: {
@@ -631,7 +631,7 @@ const deployLineOption = computed(() => {
   return {
     tooltip: tooltipConf({
       trigger: 'axis',
-      axisPointer: { type: 'cross', lineStyle: { color: themeColors.value.muted, type: 'dashed' } },
+      axisPointer: { type: 'cross', lineStyle: { color: themeColors.value.muted } },
     }),
     legend: {
       data: modules.map((m) => MODULE_NAMES[m]),
@@ -652,7 +652,7 @@ const deployLineOption = computed(() => {
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } },
+      splitLine: { lineStyle: { color: themeColors.value.border } },
       axisLabel: { color: themeColors.value.muted, fontSize: 11 },
     },
     dataZoom: showZoom
@@ -695,7 +695,7 @@ const loginBarOption = computed(() => {
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } },
+      splitLine: { lineStyle: { color: themeColors.value.border } },
       axisLabel: { color: themeColors.value.muted, fontSize: 11 },
     },
     dataZoom: showZoom
@@ -800,7 +800,7 @@ const k8sTrendOption = computed(() => {
       data: periods,
       axisLabel: { color: themeColors.value.subText, fontSize: 11, rotate: showZoom ? 30 : 0 },
     },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
     color: ['#F59E0B', '#06B6D4', '#22C55E', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'],
     dataZoom: showZoom
       ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 4, borderColor: 'transparent' }]
@@ -886,7 +886,7 @@ const preprodTrendOption = computed(() => {
       data: periods,
       axisLabel: { color: themeColors.value.subText, fontSize: 11, rotate: showZoom ? 30 : 0 },
     },
-    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: themeColors.value.border } }, axisLabel: { color: themeColors.value.muted, fontSize: 11 } },
     color: ['#EF4444', '#06B6D4', '#22C55E', '#F59E0B', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316'],
     dataZoom: showZoom
       ? [{ type: 'inside' }, { type: 'slider', height: 16, bottom: 4, borderColor: 'transparent' }]

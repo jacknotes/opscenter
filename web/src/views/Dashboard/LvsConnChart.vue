@@ -211,7 +211,7 @@ const chartOption = computed(() => {
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } },
+      splitLine: { lineStyle: { color: themeColors.value.border } },
       axisLabel: { color: themeColors.value.muted, fontSize: 11 },
     },
     series: [
