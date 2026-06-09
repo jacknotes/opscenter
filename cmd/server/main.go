@@ -166,6 +166,7 @@ func main() {
 	// Cleanup resources
 	collectorCancel()
 	lvsCollector.Stop()
+	lvsCollector.Wait() // 等待采集 goroutine 退出后再关闭 SSH 连接
 	app.SSHManager.Close()
 	app.LockManager.Stop()
 	app.PreviewMgr.Stop()

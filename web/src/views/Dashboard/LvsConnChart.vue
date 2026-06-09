@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onActivated, onDeactivated } from 'vue'
+import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue'
 import { getServers } from '../../api'
 import { getLvsList } from '../../api/lvs'
 import { getLvsConnStats } from '../../api/dashboard'
@@ -355,8 +355,8 @@ async function init() {
   }
 }
 
-onMounted(() => {
-  init()
+onMounted(async () => {
+  await init()
   startAutoRefresh()
 })
 
@@ -365,6 +365,10 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
+  stopAutoRefresh()
+})
+
+onUnmounted(() => {
   stopAutoRefresh()
 })
 </script>

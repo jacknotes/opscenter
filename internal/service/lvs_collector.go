@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"opscenter/internal/config"
 	"opscenter/internal/model"
 
 	"gorm.io/gorm"
@@ -19,6 +20,8 @@ type LvsCollector struct {
 	lvsService *LVSService
 	interval   time.Duration
 	stopCh     chan struct{}
+	stopOnce   sync.Once
+	doneCh     chan struct{} // 采集 goroutine 退出后关闭，用于优雅停机
 }
 
 // NewLvsCollector 创建 LVS 连接数采集器。
@@ -30,18 +33,21 @@ func NewLvsCollector(db *gorm.DB, sshManager *SSHManager, interval time.Duration
 		lvsService: NewLVSService(sshManager),
 		interval:   interval,
 		stopCh:     make(chan struct{}),
+		doneCh:     make(chan struct{}),
 	}
 }
 
 // Start 启动后台采集循环，通过 ctx 控制生命周期。
-// 首次采集在启动后立即执行一次。
+// 首次采集在 goroutine 中异步执行，不阻塞调用方。
 func (c *LvsCollector) Start(ctx context.Context) {
 	log.Printf("[LvsCollector] 启动，采集间隔: %v", c.interval)
 
-	// 首次采集
-	c.collect(ctx)
-
 	go func() {
+		defer close(c.doneCh)
+
+		// 首次采集
+		c.collect(ctx)
+
 		ticker := time.NewTicker(c.interval)
 		defer ticker.Stop()
 		for {
@@ -59,9 +65,14 @@ func (c *LvsCollector) Start(ctx context.Context) {
 	}()
 }
 
-// Stop 停止采集器。
+// Stop 停止采集器。可安全重复调用。
 func (c *LvsCollector) Stop() {
-	close(c.stopCh)
+	c.stopOnce.Do(func() { close(c.stopCh) })
+}
+
+// Wait 等待采集 goroutine 完全退出。用于优雅停机，确保 SSH 连接关闭前采集已结束。
+func (c *LvsCollector) Wait() {
+	<-c.doneCh
 }
 
 // collect 执行一次数据采集：查询所有 LVS 服务器，并发获取连接数据并批量写入。
@@ -109,11 +120,9 @@ func (c *LvsCollector) collect(ctx context.Context) {
 
 // collectOne 从单台 LVS 服务器采集连接数据。
 func (c *LvsCollector) collectOne(ctx context.Context, server *model.Server, now time.Time) []model.LvsConnStat {
-	// 设置单台服务器的采集超时为 20 秒
-	sshCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
+	timeout := config.Global.Timeouts.DashboardSSH
 
-	output, err := c.sshManager.Execute(sshCtx, server, server.ScriptPath+" list")
+	output, err := c.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list", timeout)
 	if err != nil {
 		log.Printf("[LvsCollector] %s 执行 list 失败: %v", server.Name, err)
 		return nil
@@ -125,7 +134,7 @@ func (c *LvsCollector) collectOne(ctx context.Context, server *model.Server, now
 	}
 
 	// 获取 status 补充离线 RS
-	statusOutput, statusErr := c.sshManager.Execute(sshCtx, server, server.ScriptPath+" status")
+	statusOutput, statusErr := c.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" status", timeout)
 	if statusErr == nil && statusOutput != "" {
 		statusGroups := c.lvsService.ParseStatusOutput(statusOutput)
 		vsList = c.lvsService.MergeOfflineRS(vsList, statusGroups)
