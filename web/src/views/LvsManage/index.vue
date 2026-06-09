@@ -1032,12 +1032,21 @@ async function handleDeleteVSTag(formData) {
 }
 @media (max-width: 768px) {
   :deep(.el-table) {
-    overflow-x: auto;
+    overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x pinch-zoom;
   }
   :deep(.el-table .el-table__inner-wrapper) {
-    min-width: 800px;
+    overflow: visible !important;
+  }
+  :deep(.el-table .el-table__header-wrapper > table),
+  :deep(.el-table .el-table__body-wrapper > table) {
+    width: max-content !important;
+    min-width: 100%;
+  }
+  :deep(.el-table .el-table__body-wrapper) {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
 }
 </style>

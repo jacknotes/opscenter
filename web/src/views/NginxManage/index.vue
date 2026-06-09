@@ -1335,20 +1335,38 @@ async function executePreview() {
 
 @media (max-width: 768px) {
   .server-table {
-    overflow-x: auto;
+    overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x pinch-zoom;
   }
   :deep(.server-table .el-table__inner-wrapper) {
-    min-width: 460px;
+    overflow: visible !important;
+  }
+  :deep(.server-table .el-table__header-wrapper > table),
+  :deep(.server-table .el-table__body-wrapper > table) {
+    width: max-content !important;
+    min-width: 100%;
+  }
+  :deep(.server-table .el-table__body-wrapper) {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
   .batch-table {
-    overflow-x: auto;
+    overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x pinch-zoom;
   }
   :deep(.batch-table .el-table__inner-wrapper) {
-    min-width: 600px;
+    overflow: visible !important;
+  }
+  :deep(.batch-table .el-table__header-wrapper > table),
+  :deep(.batch-table .el-table__body-wrapper > table) {
+    width: max-content !important;
+    min-width: 100%;
+  }
+  :deep(.batch-table .el-table__body-wrapper) {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
 }
 </style>
