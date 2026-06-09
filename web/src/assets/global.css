@@ -339,15 +339,25 @@ html .el-dialog ::selection {
     flex-shrink: 1 !important;
   }
 
-  /* 工具栏按钮换行 + 紧凑 */
+  /* 工具栏：单行横向滑动，节省纵向空间 */
   .toolbar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     gap: 6px;
     padding: 8px 10px;
+    scrollbar-width: none;          /* Firefox */
+  }
+  .toolbar::-webkit-scrollbar {      /* Chrome/Safari */
+    display: none;
+  }
+  .toolbar > * {
+    flex-shrink: 0;
   }
   .toolbar .el-button {
     font-size: var(--font-sm);
     padding: 6px 10px;
+    white-space: nowrap;
   }
   .stat-chip {
     font-size: var(--font-sm);
