@@ -177,6 +177,21 @@ html {
   display: inline-flex;
 }
 
+/* 工具栏内搜索框 - PC 端靠右，固定宽度 */
+.toolbar-search-input {
+  margin-left: auto;
+  width: 250px !important;
+  flex-shrink: 0;
+}
+.toolbar-search-input .el-input__wrapper,
+.toolbar-search-input .el-input__inner {
+  width: 100% !important;
+}
+/* PC 端：含搜索框的工具栏强制不换行，搜索框始终与按钮同行 */
+.main-card .toolbar:has(.toolbar-search-input) {
+  flex-wrap: nowrap;
+}
+
 /* 表格固定表头通过 el-table 的 max-height prop 实现 */
 
 /* Empty State - 统一空状态样式 */
@@ -364,12 +379,17 @@ html .el-dialog ::selection {
     padding: 1px 8px;
   }
 
-  /* 搜索框独立一行 */
-  .toolbar-search {
-    padding: 6px 0 0;
+  /* 含搜索框的工具栏：允许换行 */
+  .main-card .toolbar:has(.toolbar-search-input) {
+    flex-wrap: wrap !important;
   }
-  .toolbar-search .el-input {
+
+  /* 搜索框：视觉上提到最上面一行，全宽 */
+  .toolbar-search-input {
+    order: -1;
+    flex-basis: 100%;
     width: 100% !important;
+    margin-left: 0;
   }
 
   /* 弹窗：手机端宽屏 */

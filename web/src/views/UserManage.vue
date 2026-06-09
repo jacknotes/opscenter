@@ -19,12 +19,11 @@
           >
           <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
-        </div>
-        <div class="toolbar-search">
           <el-input
             v-model="searchQuery"
             placeholder="搜索用户信息"
             clearable
+            class="toolbar-search-input"
           />
         </div>
       </template>
