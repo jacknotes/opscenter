@@ -68,7 +68,8 @@ type TimeoutConfig struct {
 	WSPing       time.Duration `yaml:"ws_ping"`       // WebSocket ping 间隔，默认 30s
 	Lock         time.Duration `yaml:"lock"`          // 分布式锁超时，默认 10m
 	Preview      time.Duration `yaml:"preview"`       // 预览数据过期时间，默认 5m
-	DashboardSSH time.Duration `yaml:"dashboard_ssh"` // Dashboard SSH 命令超时，默认 20s
+	DashboardSSH    time.Duration `yaml:"dashboard_ssh"`     // Dashboard SSH 命令超时，默认 20s
+	LvsCollectInterval time.Duration `yaml:"lvs_collect_interval"` // LVS 连接数据采集间隔，默认 30s
 }
 
 // NginxConfig 是 Nginx 相关配置。
@@ -253,6 +254,9 @@ func Load(path string) error {
 	}
 	if Global.Timeouts.DashboardSSH == 0 {
 		Global.Timeouts.DashboardSSH = 20 * time.Second
+	}
+	if Global.Timeouts.LvsCollectInterval == 0 {
+		Global.Timeouts.LvsCollectInterval = 30 * time.Second
 	}
 	// Nginx 默认值
 	if Global.Nginx.MaxBackups == 0 {

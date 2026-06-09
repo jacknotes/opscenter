@@ -64,6 +64,8 @@ timeouts:
   preview: 5m
   # Dashboard SSH 命令超时（默认 20s）
   dashboard_ssh: 20s
+  # LVS 连接数据采集间隔（默认 30s）
+  lvs_collect_interval: 30s
 
 # Nginx 相关配置（可选，不配置则使用默认值）
 nginx:

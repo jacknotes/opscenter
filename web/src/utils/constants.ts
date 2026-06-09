@@ -9,6 +9,10 @@ export const STORAGE_KEYS = {
   LVS_VS_FILTER: 'lvs_vs_filter',
   NGINX_SERVER: 'nginx_server',
   PREPROD_SERVER: 'preprod_server',
+  LVS_CONN_SERVER: 'lvs_conn_server',
+  LVS_CONN_VS: 'lvs_conn_vs',
+  LVS_CONN_RS: 'lvs_conn_rs',
+  LVS_CONN_DURATION: 'lvs_conn_duration',
   nginxConfig: (serverId: number | string) => `nginx_config_${serverId}`,
 } as const
 

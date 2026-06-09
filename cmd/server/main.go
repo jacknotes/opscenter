@@ -23,6 +23,7 @@ import (
 	"opscenter/internal/handler"
 	"opscenter/internal/model"
 	"opscenter/internal/router"
+	"opscenter/internal/service"
 )
 
 //	@title			OpsCenter API
@@ -81,7 +82,7 @@ func main() {
 	}
 
 	// Auto migrate
-	if err := db.AutoMigrate(&model.User{}, &model.Server{}, &model.OperationLog{}, &model.LvsRSTag{}, &model.LvsVSTag{}, &model.LvsPreprodBinding{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}, &model.Server{}, &model.OperationLog{}, &model.LvsRSTag{}, &model.LvsVSTag{}, &model.LvsPreprodBinding{}, &model.LvsConnStat{}); err != nil {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 
@@ -128,6 +129,11 @@ func main() {
 	app.LockManager.ClearAll()
 	app.PreviewMgr.ClearAll()
 
+	// 启动 LVS 连接数后台采集器
+	collectorCtx, collectorCancel := context.WithCancel(context.Background())
+	lvsCollector := service.NewLvsCollector(db, app.SSHManager, config.Global.Timeouts.LvsCollectInterval)
+	lvsCollector.Start(collectorCtx)
+
 	// Create HTTP server
 	addr := fmt.Sprintf("%s:%d", config.Global.Server.Host, config.Global.Server.Port)
 	srv := &http.Server{
@@ -158,6 +164,8 @@ func main() {
 	}
 
 	// Cleanup resources
+	collectorCancel()
+	lvsCollector.Stop()
 	app.SSHManager.Close()
 	app.LockManager.Stop()
 	app.PreviewMgr.Stop()

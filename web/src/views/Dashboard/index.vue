@@ -87,6 +87,11 @@
       </template>
     </div>
 
+    <!-- LVS 连接统计 -->
+    <div class="dash-row">
+      <LvsConnChart />
+    </div>
+
     <!-- 发布趋势 + 操作动作明细 -->
     <div class="dash-row trend-action-row">
       <el-card class="chart-card" shadow="hover">
@@ -362,6 +367,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { formatTimeShort } from '../../utils/format'
 import StatCards from './StatCards.vue'
 import ModulePies from './ModulePies.vue'
+import LvsConnChart from './LvsConnChart.vue'
 
 use([
   PieChart,

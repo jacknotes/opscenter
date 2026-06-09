@@ -1093,6 +1093,75 @@ func (h *DashboardHandler) fetchPreprodStats(ctx context.Context) (gin.H, error)
 	}, nil
 }
 
+// LvsConnStats godoc
+//
+//	@Summary		获取 LVS 连接数时序统计
+//	@Description	查询指定 VS/RS 的 ActiveConn 和 InActConn 时序数据，用于折线图展示
+//	@Tags			仪表盘
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			server_id	query		int		true	"LVS 服务器 ID"
+//	@Param			vs_ip		query		string	true	"Virtual Server IP"
+//	@Param			rs_ip		query		string	true	"Real Server IP"
+//	@Param			duration	query		int		false	"时间窗口（分钟）: 5/15/30/60，默认 15"
+//	@Success		200			{object}	object
+//	@Failure		400			{object}	object
+//	@Router			/dashboard/lvs-conn-stats [get]
+func (h *DashboardHandler) LvsConnStats(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	serverID := c.Query("server_id")
+	vsIP := c.Query("vs_ip")
+	rsIP := c.Query("rs_ip")
+	if serverID == "" || vsIP == "" || rsIP == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请指定 server_id、vs_ip 和 rs_ip"})
+		return
+	}
+
+	duration := 15 // 默认 15 分钟
+	if d := c.Query("duration"); d != "" {
+		switch d {
+		case "5", "15", "30", "60":
+			duration = parseInt(d)
+		}
+	}
+
+	startTime := time.Now().Add(-time.Duration(duration) * time.Minute)
+
+	type connStat struct {
+		CollectedAt time.Time `json:"collected_at"`
+		ActiveConn  int       `json:"active_conn"`
+		InActConn   int       `json:"inact_conn"`
+	}
+
+	var data []connStat
+	if err := h.db.WithContext(ctx).
+		Model(&model.LvsConnStat{}).
+		Select("collected_at, SUM(active_conn) as active_conn, SUM(in_act_conn) as in_act_conn").
+		Where("server_id = ? AND vs_ip = ? AND rs_ip = ? AND collected_at >= ?", serverID, vsIP, rsIP, startTime).
+		Group("collected_at").
+		Order("collected_at ASC").
+		Scan(&data).Error; err != nil {
+		log.Printf("[Dashboard] 查询 LVS 连接统计失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+func parseInt(s string) int {
+	n := 0
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		} else {
+			break
+		}
+	}
+	return n
+}
+
 func (h *DashboardHandler) fetchSinglePreprod(ctx context.Context, server *model.Server) ([]service.PreprodResource, error) {
 	listOutput, err := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
 	if err != nil {
