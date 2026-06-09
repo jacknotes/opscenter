@@ -35,9 +35,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue'
-import { getServers } from '../../api'
 import { getLvsList } from '../../api/lvs'
 import { getLvsConnStats } from '../../api/dashboard'
+import { useServerSelector } from '../../composables/useServerSelector'
 import { STORAGE_KEYS } from '../../utils/constants'
 import { DataLine, Refresh } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -49,19 +49,6 @@ import { CanvasRenderer } from 'echarts/renderers'
 use([LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 // ---- localStorage 读写 ----
-function loadSaved() {
-  try {
-    return {
-      serverId: Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_SERVER)) || null,
-      vsIp: localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS) || null,
-      rsIp: localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS) || null,
-      duration: Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_DURATION)) || 15,
-    }
-  } catch {
-    return { serverId: null, vsIp: null, rsIp: null, duration: 15 }
-  }
-}
-
 function saveKey(key, val) {
   try {
     if (val === null || val === undefined || val === '') {
@@ -87,12 +74,10 @@ const themeColors = computed(() => ({
 }))
 
 // ---- 筛选状态 ----
-const saved = loadSaved()
-const lvsServers = ref([])
-const serverId = ref(saved.serverId)
-const vsIp = ref(saved.vsIp)
-const rsIp = ref(saved.rsIp)
-const duration = ref(saved.duration)
+const { servers: lvsServers, serverId, initServers, refreshServers } = useServerSelector('lvs', STORAGE_KEYS.LVS_CONN_SERVER)
+const vsIp = ref(localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS) || null)
+const rsIp = ref(localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS) || null)
+const duration = ref(Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_DURATION)) || 15)
 const vsList = ref([])
 const rsList = ref([])
 
@@ -110,14 +95,6 @@ const emptyText = computed(() => {
   return '暂无连接数据（等待首次采集）'
 })
 
-// ---- 加载 LVS 服务器列表 ----
-async function loadLvsServers() {
-  try {
-    const res = await getServers('lvs')
-    lvsServers.value = Array.isArray(res) ? res : []
-  } catch {}
-}
-
 // ---- 服务器变更：加载 VS 列表 ----
 async function onServerChange() {
   saveKey(STORAGE_KEYS.LVS_CONN_SERVER, serverId.value)
@@ -132,13 +109,6 @@ async function onServerChange() {
 
   if (!serverId.value) return
   await loadVsRsList()
-
-  // 如果保存的 VS 在列表中，恢复它
-  if (saved.vsIp && vsList.value.includes(saved.vsIp)) {
-    vsIp.value = saved.vsIp
-    rsList.value = vsRsMap[vsIp.value] || []
-    saved.vsIp = null // 只恢复一次
-  }
 }
 
 // ---- VS 变更：加载 RS 列表 ----
@@ -148,13 +118,6 @@ function onVsChange() {
   rsList.value = vsRsMap[vsIp.value] || []
   chartData.value = []
   saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
-
-  // 如果保存的 RS 在列表中，恢复它
-  if (saved.rsIp && rsList.value.includes(saved.rsIp)) {
-    rsIp.value = saved.rsIp
-    saved.rsIp = null // 只恢复一次
-    loadData()
-  }
 }
 
 // ---- RS 变更 ----
@@ -317,40 +280,26 @@ function stopAutoRefresh() {
 
 // ---- 初始化：恢复保存的选择并级联加载 ----
 async function init() {
-  await loadLvsServers()
+  // 保存 localStorage 中的值，以便 initServers 完成后恢复
+  const savedVsIp = localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS)
+  const savedRsIp = localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS)
+
+  await initServers()
 
   // 如果保存了 serverId，恢复 VS/RS 列表并自动加载数据
   if (serverId.value) {
-    // 检查保存的服务器是否仍在列表中
-    const exists = lvsServers.value.some((s) => s.id === serverId.value)
-    if (!exists) {
-      serverId.value = null
-      vsIp.value = null
-      rsIp.value = null
-      saveKey(STORAGE_KEYS.LVS_CONN_SERVER, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_VS, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
-      return
-    }
-
     await loadVsRsList()
 
     // 恢复 VS
-    if (vsIp.value && vsList.value.includes(vsIp.value)) {
-      rsList.value = vsRsMap[vsIp.value] || []
+    if (savedVsIp && vsList.value.includes(savedVsIp)) {
+      vsIp.value = savedVsIp
+      rsList.value = vsRsMap[savedVsIp] || []
 
       // 恢复 RS
-      if (rsIp.value && rsList.value.includes(rsIp.value)) {
+      if (savedRsIp && rsList.value.includes(savedRsIp)) {
+        rsIp.value = savedRsIp
         loadData()
-      } else {
-        rsIp.value = null
-        saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
       }
-    } else {
-      vsIp.value = null
-      rsIp.value = null
-      saveKey(STORAGE_KEYS.LVS_CONN_VS, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
     }
   }
 }
@@ -360,7 +309,8 @@ onMounted(async () => {
   startAutoRefresh()
 })
 
-onActivated(() => {
+onActivated(async () => {
+  await refreshServers()
   startAutoRefresh()
 })
 
