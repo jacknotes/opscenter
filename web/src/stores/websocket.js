@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef, triggerRef } from 'vue'
+import { ref } from 'vue'
 
 /**
  * 全局 WebSocket store，用于跨页面保持命令执行状态。
@@ -10,32 +10,19 @@ import { ref, shallowRef, triggerRef } from 'vue'
  */
 export const useWebSocketStore = defineStore('websocket', () => {
   const MAX_OUTPUT_LINES = 2000
-  const outputLines = shallowRef([])
+  const outputLines = ref([])
   const status = ref('idle') // idle, connecting, streaming, done, error
   const lastError = ref('') // 最后一次错误信息，组件 watch 时读取后清空
   const wsRef = ref(null)
   let connectTimer = null
   let lineSeq = 0
 
-  // 批量触发 reactive 更新，避免每条消息都触发一次 Vue diff
-  let flushPending = false
-  function scheduleFlush() {
-    if (flushPending) return
-    flushPending = true
-    requestAnimationFrame(() => {
-      flushPending = false
-      triggerRef(outputLines)
-    })
-  }
-
   function appendLine(text, stream) {
     const lines = outputLines.value
     if (lines.length >= MAX_OUTPUT_LINES) {
-      // 保留最近 1500 行，留出缓冲；整批替换时直接触发
       outputLines.value = lines.slice(-1500).concat({ id: ++lineSeq, text, stream })
     } else {
       lines.push({ id: ++lineSeq, text, stream })
-      scheduleFlush()
     }
   }
 
@@ -160,7 +147,6 @@ export const useWebSocketStore = defineStore('websocket', () => {
 
   /** 恢复缓存的输出行（触发响应式更新） */
   function restoreOutput(lines) {
-    // 确保恢复的行也有 id
     outputLines.value = lines.map((l) => (l.id ? l : { ...l, id: ++lineSeq }))
   }
 

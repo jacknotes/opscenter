@@ -434,17 +434,10 @@ async function handleBatchDelete() {
 async function handleBatchTest() {
   if (selectedRows.value.length === 0) return
 
-  const loading = ElMessage({
-    message: `正在测试 ${selectedRows.value.length} 个服务器连接...`,
-    type: 'info',
-    duration: 0,
-  })
   try {
     const res = await batchTestServers(selectedRows.value.map((r) => r.id))
-    loading.close()
     showBatchResult(res)
   } catch (e) {
-    loading.close()
     ElMessage.error(e.response?.data?.error || '批量测试失败')
   }
 }

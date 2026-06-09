@@ -1,19 +1,16 @@
 <template>
-  <el-card style="margin-top: 20px">
-    <template #header>
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <span>执行结果</span>
-        <div style="display: flex; align-items: center; gap: 10px">
-          <el-tag v-if="status === 'streaming'" type="warning" size="small">执行中...</el-tag>
-          <el-tag v-else-if="status === 'done'" type="success" size="small">执行完成</el-tag>
-          <el-tag v-else-if="status === 'error'" type="danger" size="small">执行失败</el-tag>
-          <el-tag v-else-if="status === 'connecting'" type="info" size="small">连接中...</el-tag>
-          <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')"
-            >取消</el-button
-          >
-        </div>
+  <div>
+    <div class="stream-header">
+      <div class="stream-status">
+        <el-tag v-if="status === 'streaming'" type="warning" size="small">执行中...</el-tag>
+        <el-tag v-else-if="status === 'done'" type="success" size="small">执行完成</el-tag>
+        <el-tag v-else-if="status === 'error'" type="danger" size="small">执行失败</el-tag>
+        <el-tag v-else-if="status === 'connecting'" type="info" size="small">连接中...</el-tag>
       </div>
-    </template>
+      <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')"
+        >取消</el-button
+      >
+    </div>
     <div ref="container" class="stream-output" @scroll="onScroll">
       <div
         v-for="line in visibleLines"
@@ -24,7 +21,7 @@
       </div>
       <div v-if="status === 'streaming'" class="cursor">_</div>
     </div>
-  </el-card>
+  </div>
 </template>
 
 <script setup>
@@ -85,6 +82,13 @@ watch(
 </script>
 
 <style scoped>
+.stream-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .stream-output {
   background: var(--terminal-bg, #0b0d13);
   color: var(--terminal-text, #22d3ee);

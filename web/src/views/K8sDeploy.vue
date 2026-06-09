@@ -72,7 +72,7 @@
       <div v-if="!loading && paginatedRollouts.length === 0" class="empty-state">
         <el-icon class="empty-state-icon"><Box /></el-icon>
         <span class="empty-state-text">{{
-          search || statusFilter !== 'all' ? '没有匹配的 Rollout' : '暂无 Rollout 数据'
+          search || statusFilter !== 'all' ? '没有匹配的 Rollout' : '暂无 Paused 状态的 Rollout'
         }}</span>
       </div>
 
@@ -145,13 +145,13 @@ import { useOutputCache } from '../composables/useOutputCache'
 import { usePreviewExecute } from '../composables/usePreviewExecute'
 import { ElMessage } from 'element-plus'
 import { Box } from '@element-plus/icons-vue'
-import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../constants'
+import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
 const rollouts = ref([])
 const search = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
-const statusFilterLabels = { all: '全部', pending: '待发布', online: '已上线' }
+const statusFilterLabels = { all: '全部暂停', pending: '待发布', online: '已上线' }
 const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)

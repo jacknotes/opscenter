@@ -1,7 +1,8 @@
 /**
  * 格式化时间为中文本地格式
  */
-export function formatTime(t: string | Date | number): string {
+export function formatTime(t: string | Date | number | null | undefined): string {
+  if (!t) return ''
   return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
 }
 
@@ -22,6 +23,7 @@ export function formatTimeShort(t: string | Date | number): string {
  */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
+  if (bytes < 0) return '-' + formatBytes(-bytes)
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))

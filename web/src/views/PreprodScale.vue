@@ -364,12 +364,7 @@
     <!-- Streaming Output Area -->
     <el-card v-if="wsStore.status !== 'idle'" class="output-card" shadow="hover">
       <template #header>
-        <div class="card-header">
-          <span class="chart-title">执行输出</span>
-          <el-tag :type="wsStore.status === 'done' ? 'success' : wsStore.status === 'error' ? 'danger' : 'warning'" size="small">
-            {{ wsStore.status === 'connecting' ? '连接中' : wsStore.status === 'streaming' ? '执行中' : wsStore.status === 'done' ? '已完成' : '失败' }}
-          </el-tag>
-        </div>
+        <span class="chart-title">执行输出</span>
       </template>
       <StreamOutput
         :lines="wsStore.outputLines"
@@ -401,7 +396,7 @@ import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ZoomOut } from '@element-plus/icons-vue'
-import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../constants'
+import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
 const BATCH_THRESHOLD = 10
 
@@ -475,8 +470,7 @@ watch(
       executing.value = false
       ElMessage.error(wsStore.lastError || '执行失败')
     }
-  },
-  { immediate: true }
+  }
 )
 
 // 切换服务器时，缓存/恢复执行结果
@@ -569,6 +563,10 @@ onMounted(async () => {
 })
 
 onActivated(async () => {
+  // 重置上次操作的终端状态，防止 watch 立即触发过期的成功/失败提示
+  if (wsStore.status === 'done' || wsStore.status === 'error') {
+    wsStore.reset()
+  }
   await refreshServers()
   if (serverId.value) loadData()
 })
@@ -697,8 +695,9 @@ async function handleBatchScaleDown() {
       })
       if (!confirmed) return
     }
-  } catch {
-    // 检查失败不阻塞操作
+  } catch (e) {
+    ElMessage.error(`LVS 安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+    return
   }
 
   // 全量操作时脚本自动处理依赖，跳过警告
@@ -806,11 +805,6 @@ function executePreview() {
 }
 .output-card {
   margin-top: 16px;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 .chart-title {
   font-weight: 600;

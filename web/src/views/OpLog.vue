@@ -100,7 +100,8 @@ import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import { getLogs } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
-import { DEFAULT_PAGE_SIZE } from '../constants'
+import { DEFAULT_PAGE_SIZE } from '../utils/constants'
+import { formatTime } from '../utils/format'
 
 const userStore = useUserStore()
 
@@ -181,11 +182,6 @@ function moduleLabel(m) {
 
 function moduleTagType(m) {
   return moduleTagTypes[m] || ''
-}
-
-function formatTime(t) {
-  if (!t) return ''
-  return new Date(t).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })
 }
 
 function onDateChange() {

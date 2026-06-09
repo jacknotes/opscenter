@@ -239,11 +239,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { useAppStore } from '../stores/app'
 import { getUserInfo, changePassword, logout } from '../api'
+import { clearServerCache } from '../composables/useServerSelector'
 import { useWebSocketStore } from '../stores/websocket'
 import { ElMessage } from 'element-plus'
 import {
@@ -294,6 +295,16 @@ onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
 })
 
+// keep-alive 缓存场景：重新激活时刷新用户信息（如 session 过期重新登录后）
+onActivated(async () => {
+  try {
+    const info = await getUserInfo()
+    userStore.setUserInfo(info)
+  } catch (e) {
+    // 静默失败，不影响页面使用
+  }
+})
+
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
 })
@@ -314,12 +325,11 @@ function handleCommand(cmd) {
   if (cmd === 'profile') {
     profileVisible.value = true
   } else if (cmd === 'logout') {
-    logout()
-      .catch(() => {})
-      .finally(() => {
-        userStore.logout()
-        router.push('/login').catch(() => {})
-      })
+    // 先清理本地状态并跳转，API 调用异步执行不阻塞
+    clearServerCache()
+    userStore.logout()
+    router.push('/login').catch(() => {})
+    logout().catch(() => {})
   } else if (cmd === 'changePwd') {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true

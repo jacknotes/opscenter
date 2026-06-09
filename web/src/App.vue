@@ -1,6 +1,9 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <router-view v-slot="{ Component }">
+    <!-- Login 页面不做缓存和过渡动画，避免与 keep-alive + transition 冲突 -->
+    <router-view v-if="$route.path === '/login'" />
+    <!-- 其他页面使用 keep-alive + 过渡动画 -->
+    <router-view v-else v-slot="{ Component }">
       <transition name="page-slide" mode="out-in">
         <keep-alive>
           <component :is="Component" />

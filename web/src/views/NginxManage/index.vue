@@ -162,7 +162,7 @@
       v-model="swapDialogVisible"
       :offline-ip="swapOfflineIP"
       :online-ip="swapOnlineIP"
-      :affected-upstreams="swapAffectedUpstreams"
+      v-model:affected-upstreams="swapAffectedUpstreams"
       @confirm="confirmSwap"
     />
 
@@ -354,7 +354,7 @@ import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
-import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../constants'
+import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../utils/constants'
 import BackupDialog from './BackupDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
 import ConfigViewer from './ConfigViewer.vue'
@@ -635,7 +635,7 @@ async function handleBatchOnline() {
     return
   }
   if (onlineServers.length < selectedServers.value.length) {
-    ElMessage.info('部分选中的后端服务已上线，将只对未上线的服务执行操作')
+    ElMessage.warning('部分选中的后端服务已上线，将只对未上线的服务执行操作')
   }
   const grouped = {}
   for (const { upstreamName, ip } of onlineServers) {
@@ -651,9 +651,6 @@ async function handleBatchOffline() {
     ElMessage.warning('选中的后端服务均已下线，无需重复操作')
     return
   }
-  if (offlineServers.length < selectedServers.value.length) {
-    ElMessage.info('部分选中的后端服务已下线，将只对未下线的服务执行操作')
-  }
   const grouped = {}
   for (const { upstreamName, ip } of offlineServers) {
     if (!grouped[upstreamName]) grouped[upstreamName] = []
@@ -667,6 +664,9 @@ async function handleBatchOffline() {
       ElMessage.warning(`禁止操作：upstream [${upstreamName}] 中所有在线服务器都将被下线，至少需要保留一台在线服务器`)
       return
     }
+  }
+  if (offlineServers.length < selectedServers.value.length) {
+    ElMessage.warning('部分选中的后端服务已下线，将只对未下线的服务执行操作')
   }
   await handleBatchAction(Object.keys(grouped), Object.values(grouped).flat(), 'offline')
 }

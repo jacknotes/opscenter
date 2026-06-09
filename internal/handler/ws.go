@@ -253,6 +253,8 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		})
 		return
 	}
+	defer h.lockManager.Unlock(preview.ServerID, usernameStr)
+	defer h.previewMgr.Delete(msg.PreviewID)
 
 	h.clients.Store(connID, &ConnInfo{
 		Username: usernameStr,
@@ -263,7 +265,6 @@ func (h *WSHandler) Handle(c *gin.Context) {
 	command, _ := preview.Params["command"].(string)
 	if command == "" {
 		sc.WriteJSON(WSMessage{Type: "error", Message: "预览命令为空"})
-		h.lockManager.Unlock(preview.ServerID, usernameStr)
 		return
 	}
 
@@ -351,7 +352,12 @@ func (h *WSHandler) Handle(c *gin.Context) {
 			execErr = err
 		}
 	} else {
-		<-errCh
+		// 客户端已断开，设置超时防止阻塞（SSH 命令可能长时间运行）
+		select {
+		case <-errCh:
+		case <-time.After(30 * time.Second):
+			log.Printf("[WS] Drain timeout, SSH session may still be running")
+		}
 	}
 
 	// Send completion status
@@ -370,6 +376,4 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		log.Printf("[WARN] 审计日志写入失败: %v (module=preprod, action=%s)", err, preview.Action)
 	}
 	outputAuditJSON(&logEntry)
-	h.previewMgr.Delete(msg.PreviewID)
-	h.lockManager.Unlock(preview.ServerID, usernameStr)
 }

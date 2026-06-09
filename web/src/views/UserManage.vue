@@ -215,6 +215,7 @@ import {
   importLdapUsers,
 } from '../api'
 import { showBatchResult } from '../utils/message'
+import { formatTime } from '../utils/format'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, UserFilled } from '@element-plus/icons-vue'
@@ -357,11 +358,6 @@ watch(
   },
   { flush: 'post' }
 )
-
-function formatTime(t) {
-  if (!t) return ''
-  return new Date(t).toLocaleString('zh-CN')
-}
 
 function handleSelectionChange(rows) {
   selectedRows.value = rows

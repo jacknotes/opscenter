@@ -329,7 +329,7 @@ import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, ArrowDown, Connection } from '@element-plus/icons-vue'
-import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../constants'
+import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../utils/constants'
 import TagDialog from './TagDialog.vue'
 import VSTagDialog from './VSTagDialog.vue'
 import StatusDialog from './StatusDialog.vue'
@@ -740,9 +740,6 @@ async function handleBatchOnline() {
     ElMessage.warning('所选服务器均已在线，无需上线')
     return
   }
-  const skipped = allDetails.length - targets.length
-  if (skipped > 0)
-    ElMessage.warning(`${skipped} 台已在线将跳过，将上线 ${targets.length} 台离线服务器`)
   for (const { vip, rsIp } of targets) {
     try {
       const checkRes = await checkLvsOnlineForPreprod({ vs_ip: vip, rs_ip: rsIp })
@@ -755,8 +752,14 @@ async function handleBatchOnline() {
         })
         if (!confirmed) return
       }
-    } catch {}
+    } catch (e) {
+      ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+      return
+    }
   }
+  const skipped = allDetails.length - targets.length
+  if (skipped > 0)
+    ElMessage.warning(`${skipped} 台已在线将跳过，将上线 ${targets.length} 台离线服务器`)
   const byVip = {}
   for (const { vip, rsIp } of targets) {
     if (!byVip[vip]) byVip[vip] = []
@@ -815,7 +818,7 @@ async function handleBatchOffline() {
     }
   }
   const skipped = allDetails.length - targets.length
-  if (skipped > 0) ElMessage.info(`${skipped} 台服务器已离线，将自动跳过`)
+  if (skipped > 0) ElMessage.warning(`${skipped} 台服务器已离线，将自动跳过`)
   try {
     const previews = []
     for (const [vip, rsIps] of Object.entries(byVip)) {
@@ -850,7 +853,10 @@ async function handleSwap() {
       })
       if (!confirmed) return
     }
-  } catch {}
+  } catch (e) {
+    ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+    return
+  }
   try {
     const res = await lvsSwapPreview({ server_id: serverId.value, vs_ip: vip, rs_ip1: upRs.rsIp, rs_ip2: downRs.rsIp })
     previewData.value = res
@@ -867,12 +873,22 @@ async function executePreview() {
   try {
     if (currentAction.value === 'batch-op') {
       let allOutput = ''
+      let hasError = false
       for (const p of batchPreviews.value) {
-        const res = await lvsOpExecute({ preview_id: p.preview_id })
-        allOutput += (res.output || '') + '\n'
+        try {
+          const res = await lvsOpExecute({ preview_id: p.preview_id })
+          allOutput += (res.output || '') + '\n'
+        } catch (e) {
+          allOutput += `[错误] ${e.response?.data?.error || e.message || '执行失败'}\n`
+          hasError = true
+        }
       }
       output.value = allOutput.trim()
-      ElMessage.success('批量执行成功')
+      if (hasError) {
+        ElMessage.warning('批量执行部分失败，请查看输出详情')
+      } else {
+        ElMessage.success('批量执行成功')
+      }
     } else {
       const executeFn = currentAction.value === 'swap' ? lvsSwapExecute : lvsOpExecute
       const res = await executeFn({ preview_id: previewId.value })

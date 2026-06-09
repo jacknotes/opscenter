@@ -72,7 +72,7 @@ parallel_scale() {
     local resource_type=$3
     local resource_name=$4
     local target_replicas=$5
-    
+
     # 执行缩放操作并捕获输出
     output=$(scale_resource "$action" "$namespace" "$resource_type" "$resource_name" "$target_replicas" 2>&1)
 

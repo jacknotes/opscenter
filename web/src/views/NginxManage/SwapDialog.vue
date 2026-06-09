@@ -8,15 +8,15 @@
       </div>
       <div class="swap-upstream-list">
         <div class="swap-label">选择要执行切换的 Upstream 组：</div>
-        <div v-for="item in affectedUpstreams" :key="item.name" class="swap-upstream-item">
-          <el-checkbox v-model="item.checked" />
+        <div v-for="(item, index) in localUpstreams" :key="item.name" class="swap-upstream-item">
+          <el-checkbox :model-value="item.checked" @change="toggleChecked(index)" />
           <span class="upstream-name">{{ item.name }}</span>
           <span class="badge badge-info">{{ item.totalCount }} 台</span>
           <span class="badge badge-success">{{ item.upCount }} up</span>
           <span class="badge badge-danger">{{ item.downCount }} down</span>
         </div>
         <div
-          v-if="affectedUpstreams.length === 0"
+          v-if="localUpstreams.length === 0"
           style="color: var(--text-secondary); padding: 20px 0; text-align: center"
         >
           未找到同时包含这两台服务器的 Upstream 组
@@ -27,7 +27,7 @@
       <el-button @click="visible = false">取消</el-button>
       <el-button
         type="primary"
-        :disabled="affectedUpstreams.filter((i) => i.checked).length === 0"
+        :disabled="localUpstreams.filter((i) => i.checked).length === 0"
         @click="$emit('confirm')"
         >确认切换</el-button
       >
@@ -36,15 +36,33 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, watch } from 'vue'
+
+const props = defineProps({
   offlineIP: { type: String, default: '' },
   onlineIP: { type: String, default: '' },
   affectedUpstreams: { type: Array, default: () => [] },
 })
 
-defineEmits(['confirm'])
+const emit = defineEmits(['confirm', 'update:affectedUpstreams'])
 
 const visible = defineModel({ type: Boolean, default: false })
+
+// 本地副本，避免直接修改 prop
+const localUpstreams = ref([])
+
+watch(
+  () => props.affectedUpstreams,
+  (val) => {
+    localUpstreams.value = val.map((item) => ({ ...item }))
+  },
+  { immediate: true, deep: true }
+)
+
+function toggleChecked(index) {
+  localUpstreams.value[index].checked = !localUpstreams.value[index].checked
+  emit('update:affectedUpstreams', localUpstreams.value.map((item) => ({ ...item })))
+}
 </script>
 
 <style scoped>
