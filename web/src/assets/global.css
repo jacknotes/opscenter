@@ -364,6 +364,14 @@ html .el-dialog ::selection {
     padding: 1px 8px;
   }
 
+  /* 搜索框独立一行 */
+  .toolbar-search {
+    padding: 6px 0 0;
+  }
+  .toolbar-search .el-input {
+    width: 100% !important;
+  }
+
   /* 弹窗：手机端宽屏 */
   .el-dialog {
     width: 95% !important;
