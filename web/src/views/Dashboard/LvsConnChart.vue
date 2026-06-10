@@ -1,5 +1,5 @@
 <template>
-  <el-card class="chart-card" shadow="hover">
+  <el-card class="chart-card" shadow="hover" :class="{ 'fullscreen-card-el': fullscreen }">
     <template #header>
       <div class="card-header">
         <span class="chart-title">LVS 连接统计</span>
@@ -22,10 +22,13 @@
           <el-button text type="primary" size="small" :loading="loading" @click="loadData">
             <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
           </el-button>
+          <el-button text type="primary" size="small" @click="$emit('toggleFullscreen')">
+            <el-icon><component :is="isFullscreen ? ScaleToOriginal : FullScreen" /></el-icon>
+          </el-button>
         </div>
       </div>
     </template>
-    <v-chart v-if="chartData.length > 0" class="conn-chart" :option="chartOption" autoresize />
+    <v-chart v-if="chartData.length > 0" class="conn-chart" :class="{ 'fullscreen-chart-el': fullscreen }" :option="chartOption" autoresize />
     <div v-else class="empty-state">
       <el-icon class="empty-state-icon"><DataLine /></el-icon>
       <span class="empty-state-text">{{ emptyText }}</span>
@@ -39,7 +42,20 @@ import { getLvsList } from '../../api/lvs'
 import { getLvsConnStats } from '../../api/dashboard'
 import { useServerSelector } from '../../composables/useServerSelector'
 import { STORAGE_KEYS } from '../../utils/constants'
-import { DataLine, Refresh } from '@element-plus/icons-vue'
+import { DataLine, Refresh, FullScreen, ScaleToOriginal } from '@element-plus/icons-vue'
+
+defineProps({
+  isFullscreen: {
+    type: Boolean,
+    default: false
+  },
+  fullscreen: {
+    type: Boolean,
+    default: false
+  }
+})
+
+defineEmits(['toggleFullscreen'])
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -192,6 +208,7 @@ const chartOption = computed(() => {
       backgroundColor: themeColors.value.tooltipBg,
       borderColor: themeColors.value.tooltipBorder,
       textStyle: { color: themeColors.value.text, fontSize: 13 },
+      confine: true,
     },
     legend: {
       data: ['ActiveConn', 'InActConn'],
@@ -342,10 +359,10 @@ onUnmounted(() => {
   font-size: 14px;
 }
 .conn-chart {
-  height: 300px;
+  height: 220px;
 }
 .empty-state {
-  height: 300px;
+  height: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -359,5 +376,22 @@ onUnmounted(() => {
 .empty-state-text {
   font-size: 14px;
   color: var(--el-text-color-secondary);
+}
+.fullscreen-card-el {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-card-el :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-chart-el {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 </style>

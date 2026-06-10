@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard">
+  <div class="dashboard" :class="{ 'has-fullscreen': fullscreenChart }">
     <!-- 顶部标题栏 -->
     <div class="dash-toolbar">
       <div class="dash-toolbar-left">
@@ -16,10 +16,11 @@
     </div>
 
     <!-- 数字卡片 -->
-    <StatCards :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" />
+    <StatCards v-show="!fullscreenChart" :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" style="margin-top: 20px" />
 
     <!-- 模块实时状态（4 个饼图） -->
     <ModulePies
+      v-show="!fullscreenChart"
       :loading="remoteLoading"
       :error="remoteError"
       :lvs-stats="lvsStats"
@@ -33,35 +34,43 @@
     />
 
     <!-- 登录统计 + 服务器分布 + 用户分布 -->
-    <div class="dash-row" :class="userStore.isAdmin ? 'misc-row-admin' : 'misc-row'">
-      <el-card class="chart-card" shadow="hover">
+    <div v-show="!fullscreenChart || fullscreenChart === 'loginStats'" class="dash-row" :class="[userStore.isAdmin ? 'misc-row-admin' : 'misc-row', { 'fullscreen-active-row': fullscreenChart === 'loginStats' }]">
+      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'loginStats' }" shadow="hover" :style="getFullscreenCardStyle('loginStats')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">登录统计趋势</span>
-            <el-radio-group
-              :model-value="loginGranularity"
-              size="small"
-              @update:model-value="
-                (v) => {
-                  loginGranularity = v
-                  loadLoginStats()
-                }
-              "
-            >
-              <el-radio-button value="day">按天</el-radio-button>
-              <el-radio-button value="week">按周</el-radio-button>
-              <el-radio-button value="month">按月</el-radio-button>
-              <el-radio-button value="year">按年</el-radio-button>
-            </el-radio-group>
+            <div class="card-header-controls">
+              <el-radio-group
+                :model-value="loginGranularity"
+                size="small"
+                @update:model-value="
+                  (v) => {
+                    loginGranularity = v
+                    loadLoginStats()
+                  }
+                "
+              >
+                <el-radio-button value="day">按天</el-radio-button>
+                <el-radio-button value="week">按周</el-radio-button>
+                <el-radio-button value="month">按月</el-radio-button>
+                <el-radio-button value="year">按年</el-radio-button>
+              </el-radio-group>
+              <el-button text type="primary" size="small" @click="loadLoginStats">
+                <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
+              </el-button>
+              <el-button text type="primary" size="small" @click="toggleFullscreen('loginStats')">
+                <el-icon><component :is="fullscreenChart === 'loginStats' ? ScaleToOriginal : FullScreen" /></el-icon>
+              </el-button>
+            </div>
           </div>
         </template>
-        <v-chart v-if="loginChartData.length > 0" class="trend-chart" :option="loginBarOption" autoresize />
+        <v-chart v-if="loginChartData.length > 0" class="trend-chart" :class="{ 'fullscreen-chart': fullscreenChart === 'loginStats' }" :option="loginBarOption" autoresize />
         <div v-else class="empty-state">
           <el-icon class="empty-state-icon"><DataLine /></el-icon>
           <span class="empty-state-text">暂无登录数据</span>
         </div>
       </el-card>
-      <template v-if="userStore.isAdmin">
+      <template v-if="userStore.isAdmin && !fullscreenChart">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <div class="card-header">
@@ -88,63 +97,97 @@
     </div>
 
     <!-- LVS 连接统计 -->
-    <div class="dash-row">
-      <LvsConnChart />
+    <div v-show="!fullscreenChart || fullscreenChart === 'lvsConn'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'lvsConn' }">
+      <LvsConnChart :is-fullscreen="fullscreenChart === 'lvsConn'" :fullscreen="fullscreenChart === 'lvsConn'" @toggle-fullscreen="toggleFullscreen('lvsConn')" />
     </div>
 
     <!-- 发布趋势 + 操作动作明细 -->
-    <div class="dash-row trend-action-row">
-      <el-card class="chart-card" shadow="hover">
+    <div v-show="!fullscreenChart || fullscreenChart === 'deployTrend' || fullscreenChart === 'actionDetail'" class="dash-row trend-action-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'deployTrend' || fullscreenChart === 'actionDetail' }">
+      <el-card
+        v-show="!fullscreenChart || fullscreenChart === 'deployTrend'"
+        class="chart-card"
+        :class="{ 'fullscreen-card': fullscreenChart === 'deployTrend' }"
+        shadow="hover"
+        :style="getFullscreenCardStyle('deployTrend')"
+      >
         <template #header>
           <div class="card-header">
             <span class="chart-title">各模块发布次数趋势</span>
-            <el-radio-group
-              :model-value="deployGranularity"
-              size="small"
-              @update:model-value="
-                (v) => {
-                  deployGranularity = v
-                  loadActivityStats()
-                }
-              "
-            >
-              <el-radio-button value="day">按天</el-radio-button>
-              <el-radio-button value="week">按周</el-radio-button>
-              <el-radio-button value="month">按月</el-radio-button>
-              <el-radio-button value="year">按年</el-radio-button>
-            </el-radio-group>
+            <div class="card-header-controls">
+              <el-radio-group
+                :model-value="deployGranularity"
+                size="small"
+                @update:model-value="
+                  (v) => {
+                    deployGranularity = v
+                    loadActivityStats()
+                  }
+                "
+              >
+                <el-radio-button value="day">按天</el-radio-button>
+                <el-radio-button value="week">按周</el-radio-button>
+                <el-radio-button value="month">按月</el-radio-button>
+                <el-radio-button value="year">按年</el-radio-button>
+              </el-radio-group>
+              <el-button text type="primary" size="small" @click="loadActivityStats">
+                <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
+              </el-button>
+              <el-button text type="primary" size="small" @click="toggleFullscreen('deployTrend')">
+                <el-icon><component :is="fullscreenChart === 'deployTrend' ? ScaleToOriginal : FullScreen" /></el-icon>
+              </el-button>
+            </div>
           </div>
         </template>
-        <v-chart v-if="deployChartData.length > 0" class="trend-chart" :option="deployLineOption" autoresize />
+        <v-chart
+          v-if="deployChartData.length > 0"
+          class="trend-chart"
+          :class="{ 'fullscreen-chart': fullscreenChart === 'deployTrend' }"
+          :option="deployLineOption"
+          autoresize
+        />
         <div v-else class="empty-state">
           <el-icon class="empty-state-icon"><DataLine /></el-icon>
           <span class="empty-state-text">暂无发布数据</span>
         </div>
       </el-card>
-      <el-card class="chart-card" shadow="hover">
+      <el-card
+        v-show="!fullscreenChart || fullscreenChart === 'actionDetail'"
+        class="chart-card"
+        :class="{ 'fullscreen-card': fullscreenChart === 'actionDetail' }"
+        shadow="hover"
+        :style="getFullscreenCardStyle('actionDetail')"
+      >
         <template #header>
           <div class="card-header">
             <span class="chart-title">各模块操作动作明细</span>
-            <el-radio-group
-              :model-value="actionGranularity"
-              size="small"
-              @update:model-value="
-                (v) => {
-                  actionGranularity = v
-                  loadActionStats()
-                }
-              "
-            >
-              <el-radio-button value="day">按天</el-radio-button>
-              <el-radio-button value="week">按周</el-radio-button>
-              <el-radio-button value="month">按月</el-radio-button>
-              <el-radio-button value="year">按年</el-radio-button>
-            </el-radio-group>
+            <div class="card-header-controls">
+              <el-radio-group
+                :model-value="actionGranularity"
+                size="small"
+                @update:model-value="
+                  (v) => {
+                    actionGranularity = v
+                    loadActionStats()
+                  }
+                "
+              >
+                <el-radio-button value="day">按天</el-radio-button>
+                <el-radio-button value="week">按周</el-radio-button>
+                <el-radio-button value="month">按月</el-radio-button>
+                <el-radio-button value="year">按年</el-radio-button>
+              </el-radio-group>
+              <el-button text type="primary" size="small" @click="loadActionStats">
+                <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
+              </el-button>
+              <el-button text type="primary" size="small" @click="toggleFullscreen('actionDetail')">
+                <el-icon><component :is="fullscreenChart === 'actionDetail' ? ScaleToOriginal : FullScreen" /></el-icon>
+              </el-button>
+            </div>
           </div>
         </template>
         <el-tabs v-model="activeActionTab" type="border-card" class="action-tabs">
           <el-tab-pane v-for="mod in actionModules" :key="mod.key" :label="mod.label" :name="mod.key">
-            <v-chart v-if="Object.keys(mod.option).length > 0" class="action-chart" :option="mod.option" autoresize />
+            <v-chart v-if="Object.keys(mod.option).length > 0" class="action-chart" :class="{ 'fullscreen-chart': fullscreenChart === 'actionDetail' }" :option="mod.option" autoresize />
             <div v-else class="action-empty">暂无{{ mod.label }}操作记录</div>
           </el-tab-pane>
         </el-tabs>
@@ -152,8 +195,8 @@
     </div>
 
     <!-- K8S 项目发布统计 -->
-    <div class="dash-row">
-      <el-card class="chart-card" shadow="hover">
+    <div v-show="!fullscreenChart || fullscreenChart === 'k8sProject'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'k8sProject' }">
+      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'k8sProject' }" shadow="hover" :style="getFullscreenCardStyle('k8sProject')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">K8S 项目发布统计</span>
@@ -179,6 +222,9 @@
               </el-radio-group>
               <el-button text type="primary" size="small" @click="loadK8sProjectStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
+              </el-button>
+              <el-button text type="primary" size="small" @click="toggleFullscreen('k8sProject')">
+                <el-icon><component :is="fullscreenChart === 'k8sProject' ? ScaleToOriginal : FullScreen" /></el-icon>
               </el-button>
             </div>
           </div>
@@ -217,6 +263,7 @@
               :option="k8sTrendOption"
               autoresize
               style="height: 220px"
+              :class="{ 'fullscreen-chart': fullscreenChart === 'k8sProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
@@ -227,6 +274,7 @@
               :option="k8sActionPieOption"
               autoresize
               style="height: 220px"
+              :class="{ 'fullscreen-chart': fullscreenChart === 'k8sProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
@@ -245,8 +293,8 @@
     </div>
 
     <!-- 预生产扩缩容统计 -->
-    <div class="dash-row">
-      <el-card class="chart-card" shadow="hover">
+    <div v-show="!fullscreenChart || fullscreenChart === 'preprodProject'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'preprodProject' }">
+      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'preprodProject' }" shadow="hover" :style="getFullscreenCardStyle('preprodProject')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">预生产扩缩容统计</span>
@@ -278,6 +326,9 @@
               </el-radio-group>
               <el-button text type="primary" size="small" @click="loadPreprodProjectStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
+              </el-button>
+              <el-button text type="primary" size="small" @click="toggleFullscreen('preprodProject')">
+                <el-icon><component :is="fullscreenChart === 'preprodProject' ? ScaleToOriginal : FullScreen" /></el-icon>
               </el-button>
             </div>
           </div>
@@ -316,6 +367,7 @@
               :option="preprodTrendOption"
               autoresize
               style="height: 220px"
+              :class="{ 'fullscreen-chart': fullscreenChart === 'preprodProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
@@ -326,6 +378,7 @@
               :option="preprodActionPieOption"
               autoresize
               style="height: 220px"
+              :class="{ 'fullscreen-chart': fullscreenChart === 'preprodProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
@@ -358,7 +411,7 @@ import {
 import { useUserStore } from '../../stores/user'
 import { useAppStore } from '../../stores/app'
 import { ElMessage } from 'element-plus'
-import { DataLine, Refresh } from '@element-plus/icons-vue'
+import { DataLine, Refresh, FullScreen, ScaleToOriginal } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { PieChart, LineChart, BarChart } from 'echarts/charts'
@@ -428,6 +481,24 @@ const C = computed(() => {
 
 const cardBg = computed(() => ensureCssVarCache().cardBg)
 
+// ---- 全屏状态管理 ----
+const fullscreenChart = ref(null) // 记录当前全屏的图表名称
+
+function toggleFullscreen(chartName) {
+  if (fullscreenChart.value === chartName) {
+    fullscreenChart.value = null
+  } else {
+    fullscreenChart.value = chartName
+  }
+}
+
+function getFullscreenCardStyle(chartName) {
+  if (fullscreenChart.value === chartName) {
+    return { flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' }
+  }
+  return {}
+}
+
 const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
 
 // ---- 数据 ----
@@ -458,6 +529,7 @@ function tooltipConf(extra = {}) {
     backgroundColor: themeColors.value.tooltipBg,
     borderColor: themeColors.value.tooltipBorder,
     textStyle: { color: themeColors.value.text, fontSize: 13 },
+    confine: true,
     ...extra,
   }
 }
@@ -1073,12 +1145,24 @@ onActivated(() => {
 <style scoped>
 .dashboard {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 .dash-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: sticky;
+  top: -20px;
+  z-index: 50;
+  background: var(--content-bg);
+  padding: 12px 0;
   margin-bottom: 20px;
+  margin-left: -20px;
+  margin-right: -20px;
+  padding-left: 20px;
+  padding-right: 20px;
 }
 .dash-toolbar-right {
   display: flex;
@@ -1117,7 +1201,12 @@ onActivated(() => {
   grid-template-columns: 2fr 1fr 1fr;
 }
 .trend-action-row {
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  gap: 16px;
+}
+.trend-action-row > .chart-card {
+  flex: 1;
+  min-width: 0;
 }
 
 .chart-card {
@@ -1170,7 +1259,7 @@ onActivated(() => {
   border-radius: 8px;
 }
 .action-chart {
-  height: 280px;
+  height: 220px;
 }
 .action-empty {
   height: 180px;
@@ -1181,11 +1270,11 @@ onActivated(() => {
   font-size: 14px;
 }
 .trend-chart {
-  height: 320px;
+  height: 220px;
 }
 
 .empty-state {
-  height: 260px;
+  height: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1261,6 +1350,59 @@ onActivated(() => {
 .ranking-bar.preprod {
   background: linear-gradient(90deg, #ef4444, #f87171);
 }
+
+/* 全屏模式 */
+.fullscreen-active-row {
+  flex: 1 !important;
+  min-height: 0;
+}
+/* 登录统计行：全屏卡片跨所有 grid 列 */
+.misc-row-admin .fullscreen-card,
+.misc-row .fullscreen-card {
+  grid-column: 1 / -1;
+  height: 100%;
+}
+.fullscreen-card :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-chart {
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+/* K8S/预生产：图表行撑满（不含 metric-row） */
+.fullscreen-card :deep(.el-row:has(.sub-label)) {
+  flex: 1;
+  min-height: 0;
+}
+.fullscreen-card :deep(.el-row:has(.sub-label) .el-col) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* 操作明细 tabs 全屏撑满 */
+.fullscreen-card :deep(.action-tabs) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-card :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+.fullscreen-card :deep(.el-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
 .ranking-count {
   width: 36px;
   font-size: 12px;
@@ -1283,10 +1425,10 @@ onActivated(() => {
     grid-template-columns: 1fr;
   }
   .trend-chart {
-    height: 260px;
+    height: 220px;
   }
   .action-chart {
-    height: 240px;
+    height: 220px;
   }
   .ranking-name {
     width: 80px;

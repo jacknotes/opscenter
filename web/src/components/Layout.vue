@@ -377,6 +377,9 @@ async function submitChangePwd() {
   justify-content: space-between;
   border-bottom: 1px solid var(--border-default);
   background: var(--card-bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .header-title {
@@ -685,6 +688,9 @@ async function submitChangePwd() {
   flex-shrink: 0;
   opacity: 0.7;
   will-change: background-position;
+  position: sticky;
+  top: 60px;
+  z-index: 99;
 }
 
 @keyframes accent-shift {

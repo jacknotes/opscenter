@@ -302,25 +302,43 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 	granularity := c.DefaultQuery("granularity", "day")
 	serverName := c.Query("server_name")
 
-	// 根据粒度确定时间范围和日期格式
+	now := time.Now()
+
+	// 根据粒度确定日期格式、趋势时间范围、当前周期时间范围
 	var dateFormat string
-	var defaultDuration time.Duration
+	var trendStartTime time.Time  // 趋势图：历史数据
+	var summaryStartTime time.Time // 汇总/排行/操作类型：当前周期
+
 	switch granularity {
 	case "week":
 		dateFormat = "%x-W%v"
-		defaultDuration = 12 * 7 * 24 * time.Hour
+		// 趋势：最近31周
+		trendStartTime = now.Add(-31 * 7 * 24 * time.Hour)
+		// 汇总：本周一 00:00:00
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		summaryStartTime = time.Date(now.Year(), now.Month(), now.Day()-weekday+1, 0, 0, 0, 0, now.Location())
 	case "month":
 		dateFormat = "%Y-%m"
-		defaultDuration = 365 * 24 * time.Hour
+		// 趋势：最近12个月
+		trendStartTime = now.AddDate(0, -12, 0)
+		// 汇总：本月1日 00:00:00
+		summaryStartTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	case "year":
 		dateFormat = "%Y"
-		defaultDuration = 5 * 365 * 24 * time.Hour
+		// 趋势：最近10年
+		trendStartTime = now.AddDate(-10, 0, 0)
+		// 汇总：本年1月1日 00:00:00
+		summaryStartTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
 	default: // day
 		dateFormat = "%Y-%m-%d"
-		defaultDuration = 30 * 24 * time.Hour
+		// 趋势：最近31天
+		trendStartTime = now.AddDate(0, 0, -31)
+		// 汇总：今天 00:00:00
+		summaryStartTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	}
-
-	startTime := time.Now().Add(-defaultDuration)
 
 	// 查询 K8s 操作日志（只取需要的字段）
 	type logRow struct {
@@ -328,11 +346,12 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		ProjectNames string
 		Status       string
 		Action       string
+		CreatedAt    time.Time
 	}
 	var rows []logRow
 	query := h.db.WithContext(ctx).Model(&model.OperationLog{}).
-		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action", dateFormat).
-		Where("module = ? AND created_at > ?", "k8s", startTime)
+		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action, created_at", dateFormat).
+		Where("module = ? AND created_at > ?", "k8s", trendStartTime)
 	if serverName != "" {
 		query = query.Where("server_name = ?", serverName)
 	}
@@ -342,7 +361,7 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
-	log.Printf("K8s 项目统计: 查询到 %d 条记录, 粒度=%s, 时间范围=%v 至今", len(rows), granularity, startTime)
+	log.Printf("K8s 项目统计: 查询到 %d 条记录, 粒度=%s, 趋势范围=%v, 汇总范围=%v 至今", len(rows), granularity, trendStartTime, summaryStartTime)
 
 	// 在 Go 中拆分 project_names 并聚合
 	type projectTrend struct {
@@ -361,74 +380,78 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		Count  int64  `json:"count"`
 	}
 
-	trendMap := make(map[string]*projectTrend)  // "period|project" -> trend
-	summaryMap := make(map[string]*projectSummary) // "project" -> summary
-	actionMap := make(map[string]int64)          // "action" -> count
+	trendMap := make(map[string]*projectTrend)     // "period|project" -> trend（历史数据）
+	summaryMap := make(map[string]*projectSummary) // "project" -> summary（当前周期）
+	actionMap := make(map[string]int64)            // "action" -> count（当前周期）
 	var totalCount, successCount, failedCount, fullOpsCount int64
 
 	for _, row := range rows {
 		// 拆分 project_names
 		isFullOp := row.ProjectNames == "*" || row.ProjectNames == ""
-		if isFullOp {
-			fullOpsCount++
-		}
 
-		var projects []string
-		if isFullOp {
-			// 全量操作不参与趋势和排行，仅计入汇总
-			totalCount++
-			if row.Status == "success" {
-				successCount++
-			} else {
-				failedCount++
-			}
-			actionMap[row.Action]++
-			continue
-		}
-		projects = strings.Split(row.ProjectNames, ",")
-
-		for _, proj := range projects {
-			proj = strings.TrimSpace(proj)
-			if proj == "" {
-				continue
-			}
-
-			// 趋势数据
-			key := row.Period + "|" + proj
-			if t, ok := trendMap[key]; ok {
-				t.Count++
-			} else {
-				trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
-			}
-
-			// 项目汇总
-			if s, ok := summaryMap[proj]; ok {
-				s.Count++
-				if row.Status == "success" {
-					s.Success++
-				} else {
-					s.Failed++
+		// 趋势数据：所有历史数据都参与
+		if !isFullOp {
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
 				}
-			} else {
-				s := &projectSummary{Project: proj, Count: 1}
-				if row.Status == "success" {
-					s.Success = 1
+				key := row.Period + "|" + proj
+				if t, ok := trendMap[key]; ok {
+					t.Count++
 				} else {
-					s.Failed = 1
+					trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
 				}
-				summaryMap[proj] = s
 			}
 		}
 
-		// 操作类型统计
-		actionMap[row.Action]++
+		// 汇总/排行/操作类型：只统计当前周期的数据
+		if row.CreatedAt.After(summaryStartTime) || row.CreatedAt.Equal(summaryStartTime) {
+			if isFullOp {
+				fullOpsCount++
+			}
 
-		// 总计
-		totalCount++
-		if row.Status == "success" {
-			successCount++
-		} else {
-			failedCount++
+			if isFullOp {
+				totalCount++
+				if row.Status == "success" {
+					successCount++
+				} else {
+					failedCount++
+				}
+				actionMap[row.Action]++
+			} else {
+				projects := strings.Split(row.ProjectNames, ",")
+				for _, proj := range projects {
+					proj = strings.TrimSpace(proj)
+					if proj == "" {
+						continue
+					}
+					if s, ok := summaryMap[proj]; ok {
+						s.Count++
+						if row.Status == "success" {
+							s.Success++
+						} else {
+							s.Failed++
+						}
+					} else {
+						s := &projectSummary{Project: proj, Count: 1}
+						if row.Status == "success" {
+							s.Success = 1
+						} else {
+							s.Failed = 1
+						}
+						summaryMap[proj] = s
+					}
+				}
+				actionMap[row.Action]++
+				totalCount++
+				if row.Status == "success" {
+					successCount++
+				} else {
+					failedCount++
+				}
+			}
 		}
 	}
 
@@ -489,35 +512,55 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 	granularity := c.DefaultQuery("granularity", "day")
 	serverName := c.Query("server_name")
 
+	now := time.Now()
+
+	// 根据粒度确定日期格式、趋势时间范围、当前周期时间范围
 	var dateFormat string
-	var defaultDuration time.Duration
+	var trendStartTime time.Time  // 趋势图：历史数据
+	var summaryStartTime time.Time // 汇总/排行/操作类型：当前周期
+
 	switch granularity {
 	case "week":
 		dateFormat = "%x-W%v"
-		defaultDuration = 12 * 7 * 24 * time.Hour
+		// 趋势：最近31周
+		trendStartTime = now.Add(-31 * 7 * 24 * time.Hour)
+		// 汇总：本周一 00:00:00
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		summaryStartTime = time.Date(now.Year(), now.Month(), now.Day()-weekday+1, 0, 0, 0, 0, now.Location())
 	case "month":
 		dateFormat = "%Y-%m"
-		defaultDuration = 365 * 24 * time.Hour
+		// 趋势：最近12个月
+		trendStartTime = now.AddDate(0, -12, 0)
+		// 汇总：本月1日 00:00:00
+		summaryStartTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	case "year":
 		dateFormat = "%Y"
-		defaultDuration = 5 * 365 * 24 * time.Hour
-	default:
+		// 趋势：最近10年
+		trendStartTime = now.AddDate(-10, 0, 0)
+		// 汇总：本年1月1日 00:00:00
+		summaryStartTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+	default: // day
 		dateFormat = "%Y-%m-%d"
-		defaultDuration = 30 * 24 * time.Hour
+		// 趋势：最近31天
+		trendStartTime = now.AddDate(0, 0, -31)
+		// 汇总：今天 00:00:00
+		summaryStartTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	}
-
-	startTime := time.Now().Add(-defaultDuration)
 
 	type logRow struct {
 		Period       string
 		ProjectNames string
 		Status       string
 		Action       string
+		CreatedAt    time.Time
 	}
 	var rows []logRow
 	query := h.db.WithContext(ctx).Model(&model.OperationLog{}).
-		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action", dateFormat).
-		Where("module = ? AND created_at > ?", "preprod", startTime)
+		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action, created_at", dateFormat).
+		Where("module = ? AND created_at > ?", "preprod", trendStartTime)
 	if serverName != "" {
 		query = query.Where("server_name = ?", serverName)
 	}
@@ -527,7 +570,7 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
-	log.Printf("预生产项目统计: 查询到 %d 条记录, 粒度=%s, 时间范围=%v 至今", len(rows), granularity, startTime)
+	log.Printf("预生产项目统计: 查询到 %d 条记录, 粒度=%s, 趋势范围=%v, 汇总范围=%v 至今", len(rows), granularity, trendStartTime, summaryStartTime)
 
 	type projectTrend struct {
 		Period  string `json:"period"`
@@ -545,67 +588,77 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 		Count  int64  `json:"count"`
 	}
 
-	trendMap := make(map[string]*projectTrend)
-	summaryMap := make(map[string]*projectSummary)
-	actionMap := make(map[string]int64)
+	trendMap := make(map[string]*projectTrend)     // "period|project" -> trend（历史数据）
+	summaryMap := make(map[string]*projectSummary) // "project" -> summary（当前周期）
+	actionMap := make(map[string]int64)            // "action" -> count（当前周期）
 	var totalCount, successCount, failedCount, fullOpsCount int64
 
 	for _, row := range rows {
 		isFullOp := row.ProjectNames == "*" || row.ProjectNames == ""
-		if isFullOp {
-			fullOpsCount++
-		}
 
-		var projects []string
-		if isFullOp {
-			totalCount++
-			if row.Status == "success" {
-				successCount++
-			} else {
-				failedCount++
-			}
-			actionMap[row.Action]++
-			continue
-		}
-		projects = strings.Split(row.ProjectNames, ",")
-
-		for _, proj := range projects {
-			proj = strings.TrimSpace(proj)
-			if proj == "" {
-				continue
-			}
-
-			key := row.Period + "|" + proj
-			if t, ok := trendMap[key]; ok {
-				t.Count++
-			} else {
-				trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
-			}
-
-			if s, ok := summaryMap[proj]; ok {
-				s.Count++
-				if row.Status == "success" {
-					s.Success++
-				} else {
-					s.Failed++
+		// 趋势数据：所有历史数据都参与
+		if !isFullOp {
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
 				}
-			} else {
-				s := &projectSummary{Project: proj, Count: 1}
-				if row.Status == "success" {
-					s.Success = 1
+				key := row.Period + "|" + proj
+				if t, ok := trendMap[key]; ok {
+					t.Count++
 				} else {
-					s.Failed = 1
+					trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
 				}
-				summaryMap[proj] = s
 			}
 		}
 
-		actionMap[row.Action]++
-		totalCount++
-		if row.Status == "success" {
-			successCount++
-		} else {
-			failedCount++
+		// 汇总/排行/操作类型：只统计当前周期的数据
+		if row.CreatedAt.After(summaryStartTime) || row.CreatedAt.Equal(summaryStartTime) {
+			if isFullOp {
+				fullOpsCount++
+			}
+
+			if isFullOp {
+				totalCount++
+				if row.Status == "success" {
+					successCount++
+				} else {
+					failedCount++
+				}
+				actionMap[row.Action]++
+			} else {
+				projects := strings.Split(row.ProjectNames, ",")
+				for _, proj := range projects {
+					proj = strings.TrimSpace(proj)
+					if proj == "" {
+						continue
+					}
+					if s, ok := summaryMap[proj]; ok {
+						s.Count++
+						if row.Status == "success" {
+							s.Success++
+						} else {
+							s.Failed++
+						}
+					} else {
+						s := &projectSummary{Project: proj, Count: 1}
+						if row.Status == "success" {
+							s.Success = 1
+						} else {
+							s.Failed = 1
+						}
+						summaryMap[proj] = s
+					}
+				}
+				actionMap[row.Action]++
+				totalCount++
+				if row.Status == "success" {
+					successCount++
+				} else {
+					failedCount++
+				}
+			}
 		}
 	}
 

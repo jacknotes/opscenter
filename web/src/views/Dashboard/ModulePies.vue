@@ -43,6 +43,8 @@ function tooltipConf(extra = {}) {
     backgroundColor: props.themeColors.tooltipBg,
     borderColor: props.themeColors.tooltipBorder,
     textStyle: { color: props.themeColors.text, fontSize: 13 },
+    confine: true,
+    appendToBody: true,
     ...extra,
   }
 }
@@ -56,7 +58,7 @@ function makeRingOption(data, legendNames, colors, total, unit) {
       {
         type: 'group',
         left: 'center',
-        top: '36%',
+        top: '40%',
         children: [
           {
             type: 'text',
@@ -81,7 +83,7 @@ function makeRingOption(data, legendNames, colors, total, unit) {
       {
         type: 'pie',
         radius: ['50%', '70%'],
-        center: ['50%', '42%'],
+        center: ['50%', '46%'],
         avoidLabelOverlap: false,
         label: { show: false },
         emphasis: {
