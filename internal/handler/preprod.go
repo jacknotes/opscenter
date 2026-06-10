@@ -133,11 +133,23 @@ func (h *PreprodHandler) ScaleDownPreview(c *gin.Context) {
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
+
+	// 如果未指定具体资源，从 list 输出中解析所有资源名称
+	resourceNames := req.ResourceNames
+	if len(resourceNames) == 0 && currentOutput != "" {
+		resources := h.preprodService.ParseListOutput(currentOutput)
+		for _, r := range resources {
+			if r.Name != "" {
+				resourceNames = append(resourceNames, r.Name)
+			}
+		}
+	}
+
 	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaledown", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaledown", req.ServerID, map[string]interface{}{
 		"command":        command,
-		"resource_names": req.ResourceNames,
+		"resource_names": resourceNames,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -206,11 +218,23 @@ func (h *PreprodHandler) ScaleUpPreview(c *gin.Context) {
 	if err != nil {
 		log.Printf("获取当前状态失败: %v", err)
 	}
+
+	// 如果未指定具体资源，从 list 输出中解析所有资源名称
+	resourceNames := req.ResourceNames
+	if len(resourceNames) == 0 && currentOutput != "" {
+		resources := h.preprodService.ParseListOutput(currentOutput)
+		for _, r := range resources {
+			if r.Name != "" {
+				resourceNames = append(resourceNames, r.Name)
+			}
+		}
+	}
+
 	command, description := h.preprodService.GeneratePreview(server.ScriptPath, "scaleup", req.ResourceNames)
 
 	previewID := h.previewMgr.Create("preprod", "scaleup", req.ServerID, map[string]interface{}{
 		"command":        command,
-		"resource_names": req.ResourceNames,
+		"resource_names": resourceNames,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
