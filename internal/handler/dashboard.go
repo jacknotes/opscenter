@@ -342,6 +342,7 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
+	log.Printf("K8s 项目统计: 查询到 %d 条记录, 粒度=%s, 时间范围=%v 至今", len(rows), granularity, startTime)
 
 	// 在 Go 中拆分 project_names 并聚合
 	type projectTrend struct {
@@ -526,6 +527,7 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
+	log.Printf("预生产项目统计: 查询到 %d 条记录, 粒度=%s, 时间范围=%v 至今", len(rows), granularity, startTime)
 
 	type projectTrend struct {
 		Period  string `json:"period"`

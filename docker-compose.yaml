@@ -17,6 +17,7 @@ services:
       - DB_PASSWORD=你的数据库密码
       - JWT_SECRET=dev-jwt-secret-change-in-production
       - CRYPTO_KEY=dev-crypto-key-32bytes-long!!
+      - TZ=Asia/Shanghai
       # 生产环境取消注释，关闭 GIN 调试日志
       # - GIN_MODE=release
     volumes:

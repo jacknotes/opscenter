@@ -994,7 +994,9 @@ async function loadK8sProjectStats() {
     k8sProjectTrend.value = res.trend || []
     k8sProjectByProject.value = res.by_project || []
     k8sProjectByAction.value = res.by_action || []
-  } catch {}
+  } catch (err) {
+    console.error('加载 K8S 项目统计失败:', err)
+  }
 }
 
 async function loadPreprodProjectStats() {
@@ -1006,7 +1008,9 @@ async function loadPreprodProjectStats() {
     preprodProjectTrend.value = res.trend || []
     preprodProjectByProject.value = res.by_project || []
     preprodProjectByAction.value = res.by_action || []
-  } catch {}
+  } catch (err) {
+    console.error('加载预生产项目统计失败:', err)
+  }
 }
 
 async function loadK8sServers() {
