@@ -438,7 +438,7 @@ const userStore = useUserStore()
 const appStore = useAppStore()
 
 // ---- 主题感知（缓存 CSS 变量，仅主题切换时刷新） ----
-let _cssVarCache = null
+const _cssVarCache = ref(null)
 function getCSSVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
@@ -458,10 +458,10 @@ function readThemeVars() {
   }
 }
 function ensureCssVarCache() {
-  if (!_cssVarCache) _cssVarCache = readThemeVars()
-  return _cssVarCache
+  if (!_cssVarCache.value) _cssVarCache.value = readThemeVars()
+  return _cssVarCache.value
 }
-watch(() => appStore.theme, () => { _cssVarCache = null })
+watch(() => appStore.theme, () => { _cssVarCache.value = null })
 
 const themeColors = computed(() => {
   const v = ensureCssVarCache()

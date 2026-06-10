@@ -42,6 +42,7 @@ import { getLvsList } from '../../api/lvs'
 import { getLvsConnStats } from '../../api/dashboard'
 import { useServerSelector } from '../../composables/useServerSelector'
 import { STORAGE_KEYS } from '../../utils/constants'
+import { useAppStore } from '../../stores/app'
 import { DataLine, Refresh, FullScreen, ScaleToOriginal } from '@element-plus/icons-vue'
 
 defineProps({
@@ -76,18 +77,23 @@ function saveKey(key, val) {
 }
 
 // ---- 主题感知 ----
+const appStore = useAppStore()
 function getCSSVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-const themeColors = computed(() => ({
+const themeColors = computed(() => {
+  // 读取 theme 使其成为响应式依赖，主题切换时自动重新计算
+  void appStore.theme
+  return ({
   text: getCSSVar('--text-primary') || '#E2E8F0',
   subText: getCSSVar('--text-regular') || '#94A3B8',
   muted: getCSSVar('--text-secondary') || '#64748B',
   border: getCSSVar('--border-default') || 'rgba(255,255,255,0.06)',
   tooltipBg: getCSSVar('--bg-elevated') || '#1A1D2E',
   tooltipBorder: getCSSVar('--border-default') || 'rgba(255,255,255,0.1)',
-}))
+  })
+})
 
 // ---- 筛选状态 ----
 const { servers: lvsServers, serverId, initServers, refreshServers } = useServerSelector('lvs', STORAGE_KEYS.LVS_CONN_SERVER)
