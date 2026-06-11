@@ -59,7 +59,7 @@ func (h *ServerHandler) List(c *gin.Context) {
 	showAll := c.Query("all") == "true"
 
 	var servers []model.Server
-	query := h.db.Order("id ASC")
+	query := h.db.Order("name ASC")
 	if serverType != "" {
 		query = query.Where("server_type = ?", serverType)
 	}
