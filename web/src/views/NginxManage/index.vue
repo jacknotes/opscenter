@@ -887,6 +887,7 @@ function openBatchDialog() {
 const filteredBatchItems = computed(() => {
   const q = batchSearch.value.trim().toLowerCase()
   if (!q) return batchItems.value
+  if (isSyntaxMode.value) return batchItems.value
   return batchItems.value.filter((item) => {
     if (item.upstreamName.toLowerCase().includes(q)) return true
     return item.servers.some((s) => s.ip.includes(q) || s.port.includes(q))
