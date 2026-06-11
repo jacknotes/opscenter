@@ -262,7 +262,7 @@
               v-if="Object.keys(k8sTrendOption).length > 0"
               :option="k8sTrendOption"
               autoresize
-              style="height: 220px"
+              class="project-trend-chart"
               :class="{ 'fullscreen-chart': fullscreenChart === 'k8sProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
@@ -366,7 +366,7 @@
               v-if="Object.keys(preprodTrendOption).length > 0"
               :option="preprodTrendOption"
               autoresize
-              style="height: 220px"
+              class="project-trend-chart"
               :class="{ 'fullscreen-chart': fullscreenChart === 'preprodProject' }"
             />
             <el-empty v-else description="暂无数据" :image-size="48" />
@@ -864,9 +864,10 @@ const k8sTrendOption = computed(() => {
     legend: {
       type: 'scroll',
       bottom: showZoom ? 24 : 0,
+      height: 56,
       textStyle: { color: themeColors.value.subText, fontSize: 11 },
     },
-    grid: { top: 10, right: 16, bottom: showZoom ? 56 : 40, left: 50 },
+    grid: { top: 10, right: 16, bottom: showZoom ? 72 : 64, left: 50 },
     xAxis: {
       type: 'category',
       data: periods,
@@ -950,9 +951,10 @@ const preprodTrendOption = computed(() => {
     legend: {
       type: 'scroll',
       bottom: showZoom ? 24 : 0,
+      height: 56,
       textStyle: { color: themeColors.value.subText, fontSize: 11 },
     },
-    grid: { top: 10, right: 16, bottom: showZoom ? 56 : 40, left: 50 },
+    grid: { top: 10, right: 16, bottom: showZoom ? 72 : 64, left: 50 },
     xAxis: {
       type: 'category',
       data: periods,
@@ -1270,6 +1272,10 @@ onActivated(() => {
 }
 .trend-chart {
   height: 220px;
+}
+.project-trend-chart {
+  height: 220px;
+  overflow: hidden;
 }
 
 .empty-state {
