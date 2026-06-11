@@ -393,9 +393,33 @@ const swapAffectedUpstreams = ref([])
 const batchDialogVisible = ref(false)
 const batchItems = ref([])
 const batchSearch = ref('')
+const syntaxHint = ref('')
+const isSyntaxMode = ref(false)
 const batchTableRef = ref(null)
 const batchAllExpanded = ref(false)
 const selectedMap = ref({})
+
+watch(batchSearch, (val) => {
+  const trimmed = val.trim()
+  if (!trimmed) {
+    syntaxHint.value = ''
+    isSyntaxMode.value = false
+    return
+  }
+  const parsed = parseBatchSearchSyntax(trimmed)
+  if (parsed) {
+    isSyntaxMode.value = true
+    applyBatchSearchSyntax(parsed)
+    syntaxHint.value = getSyntaxHint(trimmed)
+  } else if (trimmed.startsWith('{')) {
+    // 以 { 开头但格式不对 → 语法错误状态
+    isSyntaxMode.value = false
+    syntaxHint.value = '语法格式错误'
+  } else {
+    isSyntaxMode.value = false
+    syntaxHint.value = ''
+  }
+})
 
 // ===== Backup list =====
 function parseBackupTime(filename) {
