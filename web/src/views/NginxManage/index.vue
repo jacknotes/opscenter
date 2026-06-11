@@ -754,6 +754,32 @@ async function handleToggleAll(upstream) {
   }
 }
 
+function parseBatchSearchSyntax(input) {
+  const trimmed = input.trim()
+  const match = trimmed.match(/^\{([^}]+)\}\{([^}]+)\}$/)
+  if (!match) return null
+
+  const ports = match[1].split(/\s*\|\s*/).map((p) => p.trim()).filter(Boolean)
+  if (ports.length === 0) return null
+
+  const parts = match[2].split(/\s*\|\s*/)
+  const actionMap = { 上线: 'online', 下线: 'offline', 切换: 'toggle' }
+  const action = actionMap[parts[0]?.trim()]
+  if (!action) return null
+
+  let index = 1
+  if (action !== 'toggle') {
+    const rawIndex = parts[1]?.trim()
+    if (rawIndex !== undefined && rawIndex !== '') {
+      const parsed = parseInt(rawIndex, 10)
+      if (isNaN(parsed) || parsed === 0) return null
+      index = parsed
+    }
+  }
+
+  return { ports, action, index }
+}
+
 function openBatchDialog() {
   batchItems.value = upstreams.value.map((u) => {
     const upServers = u.servers.filter((s) => s.status === 'up')
