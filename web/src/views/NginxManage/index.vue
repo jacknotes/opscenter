@@ -180,13 +180,18 @@
         <div class="batch-hint">
           <el-button size="small" @click="toggleBatchSelectAll">{{ isBatchAllSelected ? '取消' : '全选' }}</el-button>
           <el-button size="small" @click="toggleBatchExpandAll">{{ batchAllExpanded ? '折叠' : '展开' }}</el-button>
-          <el-input
-            v-model="batchSearch"
-            placeholder="搜索 IP / 端口"
-            size="small"
-            clearable
-            style="width: 160px; margin-left: 12px"
-          />
+          <div style="display: flex; align-items: center; gap: 8px; margin-left: 12px">
+            <el-input
+              v-model="batchSearch"
+              placeholder="搜索 IP / 端口 或 {端口}{操作|索引}"
+              size="small"
+              clearable
+              style="width: 240px"
+            />
+            <span v-if="syntaxHint" class="batch-syntax-hint" :class="{ 'hint-error': syntaxHint === '语法格式错误' }">
+              {{ syntaxHint }}
+            </span>
+          </div>
         </div>
         <el-table
           ref="batchTableRef"
@@ -1388,6 +1393,14 @@ async function executePreview() {
   color: #f59e0b;
   margin-top: 2px;
   line-height: 1.2;
+}
+.batch-syntax-hint {
+  font-size: 12px;
+  color: var(--el-color-success);
+  white-space: nowrap;
+}
+.batch-syntax-hint.hint-error {
+  color: var(--el-color-danger);
 }
 .batch-upstream-name {
   color: #06b6d4;
