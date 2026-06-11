@@ -151,7 +151,7 @@ const rollouts = ref([])
 const search = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
-const statusFilterLabels = { all: '全部暂停', pending: '待发布', online: '已上线' }
+const statusFilterLabels = { all: '全部', pending: '待发布', online: '已上线' }
 const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
