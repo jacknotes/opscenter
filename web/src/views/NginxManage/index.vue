@@ -821,6 +821,7 @@ function applyBatchSearchSyntax(parsed) {
     if (parsed.action === 'toggle') {
       if (!item.hasBoth) {
         item.enabled = false
+        item.action = ''
         continue
       }
       item.enabled = true
@@ -829,17 +830,20 @@ function applyBatchSearchSyntax(parsed) {
       const selectable = getSelectableServers(item)
       if (selectable.length === 0) {
         item.enabled = false
+        item.action = ''
         continue
       }
       let idx = parsed.index
       if (idx === -1) idx = selectable.length
       else if (idx > selectable.length) {
         item.enabled = false
+        item.action = ''
         continue
       }
       const target = selectable[idx - 1]
       if (!target) {
         item.enabled = false
+        item.action = ''
         continue
       }
       item.enabled = true
