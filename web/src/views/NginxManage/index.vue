@@ -788,27 +788,32 @@ function applyBatchSearchSyntax(parsed) {
       item.enabled = false
       continue
     }
-    const selectable = getSelectableServers(item)
-    if (selectable.length === 0) {
-      item.enabled = false
-      continue
-    }
-    let idx = parsed.index
-    if (idx === -1) idx = selectable.length
-    else if (idx > selectable.length) {
-      item.enabled = false
-      continue
-    }
-    const target = selectable[idx - 1]
-    if (!target) {
-      item.enabled = false
-      continue
-    }
-    item.enabled = true
     item.action = parsed.action
     if (parsed.action === 'toggle') {
+      if (!item.hasBoth) {
+        item.enabled = false
+        continue
+      }
+      item.enabled = true
       item.backendIPs = []
     } else {
+      const selectable = getSelectableServers(item)
+      if (selectable.length === 0) {
+        item.enabled = false
+        continue
+      }
+      let idx = parsed.index
+      if (idx === -1) idx = selectable.length
+      else if (idx > selectable.length) {
+        item.enabled = false
+        continue
+      }
+      const target = selectable[idx - 1]
+      if (!target) {
+        item.enabled = false
+        continue
+      }
+      item.enabled = true
       item.backendIPs = [normalizeIPKey(target)]
     }
     matchedCount++
