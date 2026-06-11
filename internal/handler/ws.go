@@ -294,6 +294,9 @@ func (h *WSHandler) Handle(c *gin.Context) {
 		auditAction = "full_" + preview.Action
 	}
 
+	// 防止项目名列表过长导致数据库写入失败
+	projectNames, projectCount = truncateProjectNames(projectNames, projectCount)
+
 	logEntry := model.OperationLog{
 		UserID:       claims.UserID,
 		Username:     usernameStr,

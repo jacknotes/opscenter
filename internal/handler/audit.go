@@ -183,6 +183,43 @@ func getClientIP(c *gin.Context) string {
 	return c.ClientIP()
 }
 
+// truncateProjectNames 截断过长的项目名列表，防止数据库写入失败。
+// 超出限制时保留尽可能多的完整项目名，并在末尾标记截断数量。
+const maxProjectNamesLen = 2000
+
+func truncateProjectNames(names string, count int) (string, int) {
+	if len(names) <= maxProjectNamesLen {
+		return names, count
+	}
+	// 按逗号截断，保留完整的项目名
+	truncated := names[:maxProjectNamesLen]
+	if idx := strings.LastIndex(truncated, ","); idx > 0 {
+		truncated = truncated[:idx]
+	}
+	// 计算被截断的项目数
+	kept := strings.Count(truncated, ",") + 1
+	dropped := count - kept
+	if dropped <= 0 {
+		dropped = 1
+	}
+	return truncated + "...(等" + itoa(dropped) + "个项目已省略)", kept
+}
+
+// itoa 简单整数转字符串，避免引入 strconv。
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
+}
+
 // createAuditLog 将操作审计日志写入数据库。写入失败时仅打印警告，不影响主流程。
 func createAuditLog(db *gorm.DB, c *gin.Context, module, action, target, detail, status, output string, serverID uint, serverName string) {
 	createAuditLogWithProjects(db, c, module, action, target, detail, status, output, serverID, serverName, "", 0)
@@ -196,6 +233,9 @@ func createAuditLogWithProjects(db *gorm.DB, c *gin.Context, module, action, tar
 			userID = id
 		}
 	}
+
+	// 防止项目名列表过长导致数据库写入失败
+	projectNames, projectCount = truncateProjectNames(projectNames, projectCount)
 
 	logEntry := model.OperationLog{
 		UserID:       userID,
