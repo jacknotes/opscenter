@@ -780,6 +780,60 @@ function parseBatchSearchSyntax(input) {
   return { ports, action, index }
 }
 
+function applyBatchSearchSyntax(parsed) {
+  let matchedCount = 0
+  for (const item of batchItems.value) {
+    const portMatch = item.servers.some((s) => parsed.ports.includes(s.port))
+    if (!portMatch) {
+      item.enabled = false
+      continue
+    }
+    const selectable = getSelectableServers(item)
+    if (selectable.length === 0) {
+      item.enabled = false
+      continue
+    }
+    let idx = parsed.index
+    if (idx === -1) idx = selectable.length
+    else if (idx > selectable.length) {
+      item.enabled = false
+      continue
+    }
+    const target = selectable[idx - 1]
+    if (!target) {
+      item.enabled = false
+      continue
+    }
+    item.enabled = true
+    item.action = parsed.action
+    if (parsed.action === 'toggle') {
+      item.backendIPs = []
+    } else {
+      item.backendIPs = [normalizeIPKey(target)]
+    }
+    matchedCount++
+  }
+  return matchedCount
+}
+
+function getSyntaxHint(input) {
+  const parsed = parseBatchSearchSyntax(input)
+  if (!parsed) return ''
+  if (parsed.action === 'toggle') {
+    const count = batchItems.value.filter(
+      (item) => item.servers.some((s) => parsed.ports.includes(s.port)) && item.hasBoth
+    ).length
+    return count > 0 ? `已选中 ${count} 个upstream组，切换全部` : ''
+  }
+  const actionLabel = parsed.action === 'online' ? '上线' : '下线'
+  const indexLabel = parsed.index === -1 ? '最后 1' : `第 ${parsed.index}`
+  const count = batchItems.value.filter((item) => {
+    if (!item.servers.some((s) => parsed.ports.includes(s.port))) return false
+    return getSelectableServers(item).length > 0
+  }).length
+  return count > 0 ? `已选中 ${count} 个upstream组，${actionLabel} ${indexLabel} 个服务器` : ''
+}
+
 function openBatchDialog() {
   batchItems.value = upstreams.value.map((u) => {
     const upServers = u.servers.filter((s) => s.status === 'up')
