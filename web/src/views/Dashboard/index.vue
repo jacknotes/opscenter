@@ -279,6 +279,26 @@
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
         </el-row>
+        <div v-if="k8sSortedProjects.length > 0" class="project-list-section">
+          <div class="sub-label">项目明细</div>
+          <div class="project-list-header">
+            <span class="project-list-col-name">项目名称</span>
+            <span class="project-list-col-count">发布次数</span>
+          </div>
+          <div v-for="item in k8sPagedProjects" :key="item.project" class="project-list-item">
+            <span class="project-list-col-name" :title="item.project">{{ item.project }}</span>
+            <span class="project-list-col-count">{{ item.count }}</span>
+          </div>
+          <div v-if="k8sProjectTotalPages > 1" class="project-list-pagination">
+            <el-pagination
+              v-model:current-page="k8sProjectPage"
+              :page-size="k8sProjectPageSize"
+              :total="k8sSortedProjects.length"
+              layout="prev, pager, next"
+              small
+            />
+          </div>
+        </div>
         <div v-if="k8sProjectRanking.length > 0" class="ranking-section">
           <div class="sub-label">发布排行 Top 5</div>
           <div v-for="item in k8sProjectRanking.slice(0, 5)" :key="item.project" class="ranking-item">
@@ -827,6 +847,22 @@ const k8sProjectTrend = shallowRef([])
 const k8sProjectByProject = shallowRef([])
 const k8sProjectByAction = shallowRef([])
 
+const k8sProjectPage = ref(1)
+const k8sProjectPageSize = 15
+
+const k8sSortedProjects = computed(() =>
+  [...k8sProjectByProject.value].sort((a, b) => b.count - a.count)
+)
+
+const k8sPagedProjects = computed(() => {
+  const start = (k8sProjectPage.value - 1) * k8sProjectPageSize
+  return k8sSortedProjects.value.slice(start, start + k8sProjectPageSize)
+})
+
+const k8sProjectTotalPages = computed(() =>
+  Math.ceil(k8sSortedProjects.value.length / k8sProjectPageSize)
+)
+
 const K8S_ACTION_NAMES = {
   online: '上线',
   sync: '同步',
@@ -861,13 +897,7 @@ const k8sTrendOption = computed(() => {
   const showZoom = periods.length > 15
   return {
     tooltip: tooltipConf({ trigger: 'axis' }),
-    legend: {
-      type: 'scroll',
-      bottom: showZoom ? 24 : 0,
-      height: 56,
-      textStyle: { color: themeColors.value.subText, fontSize: 11 },
-    },
-    grid: { top: 10, right: 16, bottom: showZoom ? 72 : 64, left: 50 },
+    grid: { top: 10, right: 16, bottom: showZoom ? 40 : 20, left: 50 },
     xAxis: {
       type: 'category',
       data: periods,
@@ -1415,6 +1445,48 @@ onActivated(() => {
   color: var(--el-text-color-regular);
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.project-list-section {
+  margin-top: 14px;
+}
+.project-list-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+.project-list-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+.project-list-item:last-child {
+  border-bottom: none;
+}
+.project-list-col-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.project-list-col-count {
+  width: 60px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.project-list-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 @media (max-width: 1200px) {
