@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,6 +337,8 @@ func TestLoginLockout(t *testing.T) {
 
 	// 设置配置
 	config.Global.Auth.MaxUserAttempts = 3
+	config.Global.Auth.MaxLoginAttempts = 10
+	config.Global.Auth.LoginLockDuration = 1 * time.Minute
 	config.Global.JWT.Secret = "test-secret-key-for-login-lock"
 	config.Global.JWT.Expire = time.Hour
 
@@ -490,6 +493,78 @@ func TestLoginLockout(t *testing.T) {
 		}
 		if user.FailedAttempts != 0 {
 			t.Errorf("admin failed_attempts 应为 0，实际 %d", user.FailedAttempts)
+		}
+	})
+
+	t.Run("密码错误提示包含剩余次数", func(t *testing.T) {
+		// 重置状态
+		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+		loginRateLimiter.Reset("192.168.1.100")
+
+		body := `{"username":"` + userName + `","password":"WrongPassword"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Request.Header.Set("X-Forwarded-For", "192.168.1.100")
+
+		h.Login(c)
+
+		var resp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		errMsg := resp["error"].(string)
+		if !strings.Contains(errMsg, "还剩") || !strings.Contains(errMsg, "次机会") {
+			t.Errorf("错误提示应包含剩余次数，实际: %s", errMsg)
+		}
+	})
+
+	t.Run("IP阶梯退避_累计失败增加锁定时长", func(t *testing.T) {
+		loginRateLimiter.Reset("192.168.1.200")
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		// 模拟 10 次失败（触发第一级锁定：1 分钟）
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.200")
+		}
+
+		allowed, retryAfter := loginRateLimiter.Allow("192.168.1.200")
+		if allowed {
+			t.Error("10 次失败后应被锁定")
+		}
+		if retryAfter < 30*time.Second {
+			t.Errorf("锁定时长应接近 1 分钟，实际: %v", retryAfter)
+		}
+
+		// 验证阶梯升级：累计 20 次失败后锁定时长应更长
+		loginRateLimiter.Reset("192.168.1.200")
+		for i := 0; i < 20; i++ {
+			loginRateLimiter.Record("192.168.1.200")
+		}
+		allowed2, retryAfter2 := loginRateLimiter.Allow("192.168.1.200")
+		if allowed2 {
+			t.Error("20 次失败后应被锁定")
+		}
+		// tier=2, 锁定时长应为 2 分钟
+		if retryAfter2 < 1*time.Minute {
+			t.Errorf("20 次失败后锁定时长应至少 1 分钟，实际: %v", retryAfter2)
+		}
+	})
+
+	t.Run("RemainingAttempts返回正确剩余次数", func(t *testing.T) {
+		loginRateLimiter.Reset("192.168.1.300")
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		// 无记录时返回 maxAttempts
+		if remaining := loginRateLimiter.RemainingAttempts("192.168.1.300"); remaining != 10 {
+			t.Errorf("无记录时应返回 10，实际: %d", remaining)
+		}
+
+		// 记录 3 次后应剩余 7 次
+		for i := 0; i < 3; i++ {
+			loginRateLimiter.Record("192.168.1.300")
+		}
+		if remaining := loginRateLimiter.RemainingAttempts("192.168.1.300"); remaining != 7 {
+			t.Errorf("3 次失败后应剩余 7 次，实际: %d", remaining)
 		}
 	})
 }
