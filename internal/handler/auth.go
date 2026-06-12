@@ -467,7 +467,27 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, users)
+
+	// 构造带在线状态的响应
+	result := make([]gin.H, len(users))
+	for i, user := range users {
+		online := middleware.GetActiveUserInfo(user.Username) != nil
+		result[i] = gin.H{
+			"id":              user.ID,
+			"username":        user.Username,
+			"name":            user.Name,
+			"email":           user.Email,
+			"role":            user.Role,
+			"enabled":         user.Enabled,
+			"auth_source":     user.AuthSource,
+			"failed_attempts": user.FailedAttempts,
+			"locked":          user.Locked,
+			"online":          online,
+			"created_at":      user.CreatedAt,
+			"updated_at":      user.UpdatedAt,
+		}
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // CreateUser godoc
