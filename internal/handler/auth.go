@@ -217,6 +217,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				return
 			}
 
+			// 检查用户是否被锁定
+			if user.Locked {
+				loginRateLimiter.Record(clientIP)
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+				return
+			}
+
 			// 更新 LDAP 信息（如果变化）
 			if user.LDAPDN != ldapInfo.DN {
 				h.db.Model(&user).Update("ldap_dn", ldapInfo.DN)
@@ -228,12 +236,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				return
 			}
 
+			// 重置失败计数
+			if user.FailedAttempts > 0 {
+				h.db.Model(&user).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+			}
+
 			loginRateLimiter.Reset(clientIP)
 			middleware.TrackActiveUser(req.Username, middleware.ActiveUserInfo{
 				Role:        user.Role,
 				LoginTime:   time.Now().Format(time.RFC3339),
 				LoginMethod: "ldap",
 				LastActive:  time.Now().Format(time.RFC3339),
+				JTI:         middleware.ExtractJTI(token),
 			})
 			createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "LDAP 登录成功", 0, "")
 			c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
@@ -272,8 +286,23 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		loginRateLimiter.Record(clientIP)
+		// 用户级失败计数（admin 不参与锁定）
+		if user.Username != "admin" {
+			h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
+			h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
+			// 重新加载用户以获取最新的 failed_attempts
+			h.db.First(&user, user.ID)
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		return
+	}
+
+	// 检查用户是否被锁定
+	if user.Locked {
+		loginRateLimiter.Record(clientIP)
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+		c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
 		return
 	}
 
@@ -283,12 +312,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// 重置失败计数
+	if user.FailedAttempts > 0 {
+		h.db.Model(&user).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+	}
+
 	loginRateLimiter.Reset(clientIP)
 	middleware.TrackActiveUser(req.Username, middleware.ActiveUserInfo{
 		Role:        user.Role,
 		LoginTime:   time.Now().Format(time.RFC3339),
 		LoginMethod: "local",
 		LastActive:  time.Now().Format(time.RFC3339),
+		JTI:         middleware.ExtractJTI(token),
 	})
 	createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "登录成功", 0, "")
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})

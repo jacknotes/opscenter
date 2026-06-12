@@ -302,3 +302,16 @@ func GenerateToken(userID uint, username, role string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(config.Global.JWT.Secret))
 }
+
+// ExtractJTI 从已签名的 JWT token 字符串中提取 jti。
+// 仅用于将 jti 存入 ActiveUserInfo，解析失败时返回空字符串。
+func ExtractJTI(tokenString string) string {
+	claims := &Claims{}
+	parser := jwt.NewParser(jwt.WithoutClaimsValidation())
+	if _, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.Global.JWT.Secret), nil
+	}); err != nil {
+		return ""
+	}
+	return claims.ID
+}
