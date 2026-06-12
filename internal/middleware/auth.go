@@ -12,6 +12,7 @@ import (
 	"opscenter/internal/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redismock/v9"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -34,6 +35,11 @@ var rdb *redis.Client
 // InitBlacklist 初始化 token 黑名单的 Redis 客户端。
 func InitBlacklist(client *redis.Client) {
 	rdb = client
+}
+
+// NewRedisMock 创建用于测试的 Redis mock 客户端。
+func NewRedisMock() (*redis.Client, redismock.ClientMock) {
+	return redismock.NewClientMock()
 }
 
 // BlacklistToken 将 token 的 jti 加入黑名单。
