@@ -72,10 +72,11 @@ type loginAttempt struct {
 	Count        int       // 当前窗口内失败次数
 	FirstTime    time.Time // 当前窗口起始时间
 	TotalFailures int      // 累计失败次数（窗口过期不清零）
+	CurrentTier   int       // 当前阶梯级别，锁定过期时递增
 }
 
-// maxLockMultiplier 最大锁定倍数，超过此倍数不再增加锁定时长
-const maxLockMultiplier = 3
+// maxLockMultiplier 最大阶梯级别（1→2→4→8→16→30分钟）
+const maxLockMultiplier = 6
 
 // maxIdleDuration IP 记录最大空闲时长，超过此时间未活跃的条目将被清理
 const maxIdleDuration = 1 * time.Hour
@@ -87,18 +88,22 @@ type LoginRateLimiter struct {
 
 var loginRateLimiter = &LoginRateLimiter{}
 
-// effectiveLockDuration 根据累计失败次数计算当前有效锁定/窗口时长
-func (rl *LoginRateLimiter) effectiveLockDuration(totalFailures int) time.Duration {
+// maxLockDuration 最大锁定时长（封顶30分钟）
+const maxLockDuration = 30 * time.Minute
+
+// effectiveLockDuration 根据阶梯级别计算有效锁定/窗口时长
+// 退避策略：1分钟 → 2分钟 → 4分钟 → 8分钟 → 16分钟 → 30分钟（封顶）
+func (rl *LoginRateLimiter) effectiveLockDuration(tier int) time.Duration {
 	baseLockDuration := config.Global.Auth.LoginLockDuration
-	maxAttempts := config.Global.Auth.MaxLoginAttempts
-	tier := totalFailures / maxAttempts
-	if tier > maxLockMultiplier {
-		tier = maxLockMultiplier
-	}
-	if tier == 0 {
+	if tier <= 0 {
 		return baseLockDuration
 	}
-	return baseLockDuration * time.Duration(tier)
+	// 指数退避：baseDuration * 2^(tier-1)
+	duration := baseLockDuration * time.Duration(1<<uint(tier-1))
+	if duration > maxLockDuration {
+		duration = maxLockDuration
+	}
+	return duration
 }
 
 // Allow 检查指定 IP 是否允许登录，返回是否允许及剩余锁定时长
@@ -121,29 +126,47 @@ func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 		return true, 0
 	}
 
-	lockDuration := rl.effectiveLockDuration(entry.TotalFailures)
+	lockDuration := rl.effectiveLockDuration(entry.CurrentTier)
 	baseLockDuration := config.Global.Auth.LoginLockDuration
 
-	// tier == 0 表示累计失败未达阶梯阈值，使用基础窗口判断
-	if lockDuration == baseLockDuration && entry.TotalFailures < maxAttempts {
+	// 当前窗口内未达阈值，检查窗口是否过期
+	if entry.Count < maxAttempts && entry.CurrentTier == 0 {
 		if now.Sub(entry.FirstTime) > baseLockDuration {
-			// 窗口已过期，重置窗口计数，保留累计失败数
+			// 窗口已过期，重置窗口计数
 			entry.Count = 0
 			entry.FirstTime = now
-			return true, 0
-		}
-		if entry.Count >= maxAttempts {
-			return false, baseLockDuration - now.Sub(entry.FirstTime)
 		}
 		return true, 0
 	}
 
-	// tier > 0：阶梯锁定期内
+	// 达到阈值（Count >= maxAttempts），触发锁定
+	if entry.Count >= maxAttempts {
+		// 首次触发锁定：升级到 tier=1
+		if entry.CurrentTier == 0 {
+			entry.CurrentTier = 1
+			lockDuration = rl.effectiveLockDuration(1)
+		}
+		if now.Sub(entry.FirstTime) < lockDuration {
+			return false, lockDuration - now.Sub(entry.FirstTime)
+		}
+		// 锁定期已过，升级 tier，重置窗口
+		if entry.CurrentTier < maxLockMultiplier {
+			entry.CurrentTier++
+		}
+		entry.Count = 0
+		entry.FirstTime = now
+		return true, 0
+	}
+
+	// tier > 0 但 Count < maxAttempts（锁定后新窗口期内）
 	if now.Sub(entry.FirstTime) < lockDuration {
 		return false, lockDuration - now.Sub(entry.FirstTime)
 	}
 
-	// 锁定期已过，重置窗口计数，保留累计失败数
+	// 锁定期已过，升级 tier，重置窗口
+	if entry.CurrentTier < maxLockMultiplier {
+		entry.CurrentTier++
+	}
 	entry.Count = 0
 	entry.FirstTime = now
 	return true, 0
@@ -162,9 +185,9 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	lockDuration := rl.effectiveLockDuration(entry.TotalFailures)
+	lockDuration := rl.effectiveLockDuration(entry.CurrentTier)
 	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置窗口但保留累计失败数
+		// 窗口已过期，重置窗口但保留累计失败数和 tier
 		entry.Count = 1
 		entry.FirstTime = now
 		entry.TotalFailures++
@@ -272,15 +295,21 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			if ldapErr != nil {
 				// LDAP 认证失败
 				loginRateLimiter.Record(clientIP)
-				// 用户级失败计数（admin 不参与锁定）
-				if user.Role != "admin" {
+				// 用户级失败计数（内置 admin 账号不参与锁定）
+				if user.Username != "admin" {
 					h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
 					h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
 					// 重新加载用户以获取最新的 failed_attempts
 					h.db.First(&user, user.ID)
+					// 检查是否刚被锁定
+					if user.Locked {
+						createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+						c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+						return
+					}
 				}
 				remaining := loginRateLimiter.RemainingAttempts(clientIP)
-				if user.Role != "admin" {
+				if user.Username != "admin" {
 					userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
 					if userRemaining < remaining {
 						remaining = userRemaining
@@ -323,11 +352,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			return
 		}
 
-		// 用户未导入，提示联系管理员
-		loginRateLimiter.Record(clientIP)
-		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户未授权", 0, "")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权，请联系管理员导入 LDAP 账户"})
-		return
+		// LDAP 中未找到用户，检查是否存在本地用户
+		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "local").First(&user).Error; err != nil {
+			// 本地也没有该用户，提示联系管理员
+			loginRateLimiter.Record(clientIP)
+			createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户未授权", 0, "")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权，请联系管理员导入 LDAP 账户"})
+			return
+		}
+		// 本地用户存在，继续走本地认证流程（fall through 到下方的本地密码认证）
 	}
 
 	// 本地密码认证
@@ -355,16 +388,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		loginRateLimiter.Record(clientIP)
-		// 用户级失败计数（admin 不参与锁定）
-		if user.Role != "admin" {
+		// 用户级失败计数（内置 admin 账号不参与锁定）
+		if user.Username != "admin" {
 			h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
 			h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
 			// 重新加载用户以获取最新的 failed_attempts
 			h.db.First(&user, user.ID)
+			// 检查是否刚被锁定
+			if user.Locked {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+				return
+			}
 		}
 		// 计算剩余次数：取 IP 级和用户级中较小值
 		remaining := loginRateLimiter.RemainingAttempts(clientIP)
-		if user.Role != "admin" {
+		if user.Username != "admin" {
 			userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
 			if userRemaining < remaining {
 				remaining = userRemaining

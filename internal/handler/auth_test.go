@@ -348,7 +348,7 @@ func TestLoginLockout(t *testing.T) {
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	userName := "test_login_lock_" + suffix
-	adminName := "test_login_admin_" + suffix
+	adminName := "admin" // 使用内置 admin 账号测试豁免逻辑
 
 	// 创建测试用户（真实 bcrypt 密码 "Test@1234"）
 	hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
@@ -374,9 +374,17 @@ func TestLoginLockout(t *testing.T) {
 		FailedAttempts: 0,
 		Locked:         false,
 	}
-	db.Create(&adminUser)
+	// admin 用户可能已存在（来自应用初始化），使用 FirstOrCreate
+	db.Where("username = ?", adminName).FirstOrCreate(&adminUser)
+	// 确保密码和状态正确
+	db.Model(&adminUser).Updates(map[string]interface{}{
+		"password":        string(hashedPwd),
+		"enabled":         true,
+		"failed_attempts": 0,
+		"locked":          false,
+	})
 
-	defer cleanupTestUser(db, userName, adminName)
+	defer cleanupTestUser(db, userName) // admin 是内置账号，不删除
 
 	t.Run("登录失败递增failed_attempts", func(t *testing.T) {
 		// 重置状态
@@ -406,13 +414,14 @@ func TestLoginLockout(t *testing.T) {
 		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
 
 		// 连续失败 3 次（阈值）
+		var lastW *httptest.ResponseRecorder
 		for i := 0; i < 3; i++ {
 			body := `{"username":"` + userName + `","password":"WrongPwd` + fmt.Sprintf("%d", i) + `"}`
 			c, w := setupGinContext(0, "")
 			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
 			c.Request.Header.Set("Content-Type", "application/json")
 			h.Login(c)
-			_ = w
+			lastW = w
 		}
 
 		// 验证账号被锁定
@@ -423,6 +432,16 @@ func TestLoginLockout(t *testing.T) {
 		}
 		if user.FailedAttempts < 3 {
 			t.Errorf("期望 failed_attempts>=3，实际 %d", user.FailedAttempts)
+		}
+
+		// 验证第3次（触发锁定的那次）返回 403 "账号已锁定"
+		if lastW.Code != http.StatusForbidden {
+			t.Errorf("触发锁定时应返回 403，实际 %d", lastW.Code)
+		}
+		var resp map[string]interface{}
+		json.Unmarshal(lastW.Body.Bytes(), &resp)
+		if !strings.Contains(resp["error"].(string), "账号已锁定") {
+			t.Errorf("触发锁定时应返回'账号已锁定'，实际: %s", resp["error"])
 		}
 	})
 
@@ -496,6 +515,43 @@ func TestLoginLockout(t *testing.T) {
 		}
 	})
 
+	t.Run("admin角色非内置用户应被锁定", func(t *testing.T) {
+		// 创建一个 admin 角色但非内置 admin 的用户
+		suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+		adminRoleName := "test_admin_role_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		adminRoleUser := model.User{
+			Username: adminRoleName,
+			Password: string(hashedPwd),
+			Name:     "管理员角色用户",
+			Email:    adminRoleName + "@test.com",
+			Role:     "admin",
+			Enabled:  true,
+		}
+		db.Create(&adminRoleUser)
+		defer cleanupTestUser(db, adminRoleName)
+
+		// 连续失败 3 次（阈值）
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + adminRoleName + `","password":"WrongPwd` + fmt.Sprintf("%d", i) + `"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Login(c)
+			_ = w
+		}
+
+		// admin 角色的非内置用户应该被锁定
+		var user model.User
+		db.First(&user, adminRoleUser.ID)
+		if !user.Locked {
+			t.Error("admin 角色的非内置用户应该被锁定")
+		}
+		if user.FailedAttempts < 3 {
+			t.Errorf("期望 failed_attempts>=3，实际 %d", user.FailedAttempts)
+		}
+	})
+
 	t.Run("密码错误提示包含剩余次数", func(t *testing.T) {
 		// 重置状态
 		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
@@ -519,35 +575,68 @@ func TestLoginLockout(t *testing.T) {
 
 	t.Run("IP阶梯退避_累计失败增加锁定时长", func(t *testing.T) {
 		loginRateLimiter.Reset("192.168.1.200")
-		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+		config.Global.Auth.LoginLockDuration = 50 * time.Millisecond
 		config.Global.Auth.MaxLoginAttempts = 10
 
-		// 模拟 10 次失败（触发第一级锁定：1 分钟）
+		// 第1轮：10次失败 → tier=1 → 锁定 50ms
 		for i := 0; i < 10; i++ {
 			loginRateLimiter.Record("192.168.1.200")
 		}
-
+		loginRateLimiter.Allow("192.168.1.200") // 触发 tier=1 锁定
 		allowed, retryAfter := loginRateLimiter.Allow("192.168.1.200")
 		if allowed {
-			t.Error("10 次失败后应被锁定")
+			t.Error("第1轮10次失败后应被锁定")
 		}
-		if retryAfter < 30*time.Second {
-			t.Errorf("锁定时长应接近 1 分钟，实际: %v", retryAfter)
+		t.Logf("第1轮锁定时长: %v", retryAfter)
+
+		// 等待第1轮锁定过期（tier 升级到 2）
+		time.Sleep(100 * time.Millisecond)
+
+		// 锁定过期后应允许登录
+		allowed, _ = loginRateLimiter.Allow("192.168.1.200")
+		if !allowed {
+			t.Error("第1轮锁定过期后应允许登录")
 		}
 
-		// 验证阶梯升级：累计 20 次失败后锁定时长应更长
-		loginRateLimiter.Reset("192.168.1.200")
-		for i := 0; i < 20; i++ {
+		// 第2轮：再10次失败 → tier=2 → 锁定 100ms (50ms * 2)
+		for i := 0; i < 10; i++ {
 			loginRateLimiter.Record("192.168.1.200")
 		}
+		loginRateLimiter.Allow("192.168.1.200") // 触发 tier=2 锁定
 		allowed2, retryAfter2 := loginRateLimiter.Allow("192.168.1.200")
 		if allowed2 {
-			t.Error("20 次失败后应被锁定")
+			t.Error("第2轮10次失败后应被锁定")
 		}
-		// tier=2, 锁定时长应为 2 分钟
-		if retryAfter2 < 1*time.Minute {
-			t.Errorf("20 次失败后锁定时长应至少 1 分钟，实际: %v", retryAfter2)
+		if retryAfter2 < 80*time.Millisecond {
+			t.Errorf("第2轮锁定时长应接近 100ms（2倍），实际: %v", retryAfter2)
 		}
+		t.Logf("第2轮锁定时长: %v", retryAfter2)
+
+		// 等待第2轮锁定过期（tier 升级到 3）
+		time.Sleep(200 * time.Millisecond)
+
+		// 锁定过期后应允许登录
+		allowed, _ = loginRateLimiter.Allow("192.168.1.200")
+		if !allowed {
+			t.Error("第2轮锁定过期后应允许登录")
+		}
+
+		// 第3轮：再10次失败 → tier=3 → 锁定 200ms (50ms * 4)
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.200")
+		}
+		loginRateLimiter.Allow("192.168.1.200") // 触发 tier=3 锁定
+		allowed3, retryAfter3 := loginRateLimiter.Allow("192.168.1.200")
+		if allowed3 {
+			t.Error("第3轮10次失败后应被锁定")
+		}
+		if retryAfter3 < 150*time.Millisecond {
+			t.Errorf("第3轮锁定时长应接近 200ms（4倍），实际: %v", retryAfter3)
+		}
+		t.Logf("第3轮锁定时长: %v", retryAfter3)
+
+		// 恢复默认配置
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
 	})
 
 	t.Run("RemainingAttempts返回正确剩余次数", func(t *testing.T) {
@@ -567,4 +656,166 @@ func TestLoginLockout(t *testing.T) {
 			t.Errorf("3 次失败后应剩余 7 次，实际: %d", remaining)
 		}
 	})
+
+	t.Run("IP锁定过期后应能重新登录", func(t *testing.T) {
+		loginRateLimiter.Reset("192.168.1.400")
+		// 使用短锁定时长便于测试
+		config.Global.Auth.LoginLockDuration = 50 * time.Millisecond
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		// 模拟 10 次失败（触发锁定）
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.400")
+		}
+
+		// 确认被锁定
+		allowed, _ := loginRateLimiter.Allow("192.168.1.400")
+		if allowed {
+			t.Error("10 次失败后应被锁定")
+		}
+
+		// 等待锁定过期
+		time.Sleep(100 * time.Millisecond)
+
+		// 锁定过期后应允许登录
+		allowed, retryAfter := loginRateLimiter.Allow("192.168.1.400")
+		if !allowed {
+			t.Errorf("锁定过期后应允许登录，但仍被锁定: %v", retryAfter)
+		}
+
+		// 恢复默认配置
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+
+	t.Run("IP锁定过期后tier升级", func(t *testing.T) {
+		loginRateLimiter.Reset("192.168.1.500")
+		config.Global.Auth.LoginLockDuration = 50 * time.Millisecond
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		// 第1轮：10次失败，触发 tier=1 锁定（50ms）
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.500")
+		}
+		loginRateLimiter.Allow("192.168.1.500")
+		allowed, retryAfter1 := loginRateLimiter.Allow("192.168.1.500")
+		if allowed {
+			t.Error("第1轮10次失败后应被锁定")
+		}
+		t.Logf("第1轮锁定时长: %v", retryAfter1)
+
+		// 等待锁定过期（tier 升级到 2）
+		time.Sleep(100 * time.Millisecond)
+
+		// 锁定过期后应允许登录（获得新的10次机会）
+		allowed, _ = loginRateLimiter.Allow("192.168.1.500")
+		if !allowed {
+			t.Error("锁定过期后应允许登录")
+		}
+
+		// 第2轮：再失败10次，tier=2 → 锁定 100ms
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.500")
+		}
+		loginRateLimiter.Allow("192.168.1.500")
+		allowed, retryAfter2 := loginRateLimiter.Allow("192.168.1.500")
+		if allowed {
+			t.Error("第2轮10次失败后应被锁定")
+		}
+		// tier=2，锁定时长应为 2 倍基础时长
+		if retryAfter2 < 80*time.Millisecond {
+			t.Errorf("第2轮锁定时长应接近 100ms（2倍），实际: %v", retryAfter2)
+		}
+		t.Logf("第2轮锁定时长: %v", retryAfter2)
+
+		// 恢复默认配置
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+}
+
+func TestLDAPFallbackToLocal(t *testing.T) {
+	db := getTestDB(t)
+	h := NewAuthHandler(db)
+
+	// 设置配置：启用 LDAP
+	config.Global.LDAP.Enabled = true
+	config.Global.Auth.MaxUserAttempts = 5
+	config.Global.Auth.MaxLoginAttempts = 10
+	config.Global.JWT.Secret = "test-secret-key-for-ldap-fallback"
+	config.Global.JWT.Expire = time.Hour
+
+	// 初始化 Redis mock
+	redisMock, _ := middleware.NewRedisMock()
+	middleware.InitBlacklist(redisMock)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	localUserName := "test_local_" + suffix
+
+	// 创建本地用户
+	hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+	localUser := model.User{
+		Username:    localUserName,
+		Password:    string(hashedPwd),
+		Name:        "本地测试用户",
+		Email:       localUserName + "@test.com",
+		Role:        "user",
+		Enabled:     true,
+		AuthSource:  "local",
+	}
+	db.Create(&localUser)
+	defer cleanupTestUser(db, localUserName)
+
+	t.Run("LDAP启用时本地用户应能登录", func(t *testing.T) {
+		body := `{"username":"` + localUserName + `","password":"Test@1234"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("本地用户登录应返回 200，实际 %d: %s", w.Code, w.Body.String())
+		}
+
+		// 验证返回了 token
+		var resp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		if _, ok := resp["token"]; !ok {
+			t.Error("响应应包含 token")
+		}
+	})
+
+	t.Run("LDAP启用时本地用户密码错误应返回401", func(t *testing.T) {
+		body := `{"username":"` + localUserName + `","password":"WrongPassword"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("密码错误应返回 401，实际 %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("LDAP启用时不存在的用户应返回未授权", func(t *testing.T) {
+		body := `{"username":"nonexistent_user_` + suffix + `","password":"Test@1234"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("不存在的用户应返回 401，实际 %d: %s", w.Code, w.Body.String())
+		}
+
+		var resp map[string]interface{}
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		if !strings.Contains(resp["error"].(string), "未授权") {
+			t.Errorf("错误提示应包含'未授权'，实际: %s", resp["error"])
+		}
+	})
+
+	// 恢复配置
+	config.Global.LDAP.Enabled = false
 }
