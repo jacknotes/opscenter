@@ -156,6 +156,24 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// OnlineUsers godoc
+//
+//	@Summary		获取在线用户列表
+//	@Description	获取当前在线用户的详细信息列表（仅管理员）
+//	@Tags			仪表盘
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	object
+//	@Failure		403	{object}	object
+//	@Router			/dashboard/online-users [get]
+func (h *DashboardHandler) OnlineUsers(c *gin.Context) {
+	users := middleware.GetOnlineUsers()
+	c.JSON(http.StatusOK, gin.H{
+		"users": users,
+		"total": len(users),
+	})
+}
+
 // ActivityStats godoc
 //
 //	@Summary		获取仪表盘活动统计数据

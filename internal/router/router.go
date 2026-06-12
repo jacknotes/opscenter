@@ -97,6 +97,13 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 		protected.GET("/dashboard/preprod-project-stats", dashboardHandler.PreprodProjectStats)
 		protected.GET("/dashboard/lvs-conn-stats", dashboardHandler.LvsConnStats)
 
+		// Dashboard admin routes
+		dashboardAdmin := protected.Group("/dashboard")
+		dashboardAdmin.Use(middleware.AdminRequired(db))
+		{
+			dashboardAdmin.GET("/online-users", dashboardHandler.OnlineUsers)
+		}
+
 		// LVS
 		lvs := protected.Group("/lvs")
 		{
