@@ -16,7 +16,7 @@
     </div>
 
     <!-- 数字卡片 -->
-    <StatCards v-show="!fullscreenChart" :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" style="margin-top: 20px" />
+    <StatCards v-show="!fullscreenChart" :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" style="margin-top: 20px" @show-online-users="showOnlineUsersDialog" />
 
     <!-- 模块实时状态（4 个饼图） -->
     <ModulePies
@@ -435,6 +435,54 @@
         </div>
       </el-card>
     </div>
+
+    <!-- 在线用户列表对话框 -->
+    <el-dialog
+      v-model="onlineUsersDialogVisible"
+      title="在线用户列表"
+      width="600px"
+      :close-on-click-modal="true"
+    >
+      <el-table
+        :data="onlineUsersList"
+        v-loading="onlineUsersLoading"
+        stripe
+        style="width: 100%"
+      >
+        <el-table-column prop="username" label="用户名" min-width="100" />
+        <el-table-column prop="role" label="角色" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.role === 'admin' ? 'danger' : 'info'" size="small">
+              {{ row.role === 'admin' ? '管理员' : '普通用户' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="login_method" label="登录方式" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.login_method === 'ldap' ? 'warning' : 'success'" size="small" effect="plain">
+              {{ row.login_method === 'ldap' ? 'LDAP' : '本地' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="login_time" label="登录时间" min-width="160">
+          <template #default="{ row }">
+            {{ row.login_time ? formatTime(new Date(row.login_time)) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="last_active" label="最后活动" min-width="160">
+          <template #default="{ row }">
+            {{ row.last_active ? formatTime(new Date(row.last_active)) : '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="loadOnlineUsers" :loading="onlineUsersLoading">
+          <el-icon style="margin-right: 4px"><Refresh /></el-icon>
+          刷新
+        </el-button>
+        <el-button @click="onlineUsersDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -447,6 +495,7 @@ import {
   getK8sProjectStats,
   getPreprodProjectStats,
   getServers,
+  getOnlineUsers,
 } from '../../api'
 import { useUserStore } from '../../stores/user'
 import { useAppStore } from '../../stores/app'
@@ -457,7 +506,7 @@ import { use } from 'echarts/core'
 import { PieChart, LineChart, BarChart } from 'echarts/charts'
 import { TitleComponent, TooltipComponent, LegendComponent, GridComponent, DataZoomComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { formatTimeShort } from '../../utils/format'
+import { formatTimeShort, formatTime } from '../../utils/format'
 import StatCards from './StatCards.vue'
 import ModulePies from './ModulePies.vue'
 import LvsConnChart from './LvsConnChart.vue'
@@ -542,6 +591,11 @@ function getFullscreenCardStyle(chartName) {
 const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
 
 // ---- 数据 ----
+// 在线用户列表
+const onlineUsersDialogVisible = ref(false)
+const onlineUsersLoading = ref(false)
+const onlineUsersList = ref([])
+
 const onlineUsers = ref(0)
 const todayLoginSuccess = ref(0)
 const todayLoginFailed = ref(0)
@@ -1070,6 +1124,23 @@ async function loadStats() {
   } finally {
     statsLoading.value = false
   }
+}
+
+async function loadOnlineUsers() {
+  onlineUsersLoading.value = true
+  try {
+    const res = await getOnlineUsers()
+    onlineUsersList.value = res.users || []
+  } catch {
+    ElMessage.error('加载在线用户列表失败')
+  } finally {
+    onlineUsersLoading.value = false
+  }
+}
+
+function showOnlineUsersDialog() {
+  onlineUsersDialogVisible.value = true
+  loadOnlineUsers()
 }
 
 async function loadRemoteStats() {
