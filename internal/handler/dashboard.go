@@ -168,6 +168,9 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 //	@Router			/dashboard/online-users [get]
 func (h *DashboardHandler) OnlineUsers(c *gin.Context) {
 	users := middleware.GetOnlineUsers()
+	if users == nil {
+		users = []gin.H{}
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"users": users,
 		"total": len(users),
