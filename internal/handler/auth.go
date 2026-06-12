@@ -68,10 +68,14 @@ func validateEmail(email string) bool {
 
 // loginAttempt 用于记录登录尝试信息
 type loginAttempt struct {
-	mu        sync.Mutex
-	Count     int
-	FirstTime time.Time
+	mu           sync.Mutex
+	Count        int       // 当前窗口内失败次数
+	FirstTime    time.Time // 当前窗口起始时间
+	TotalFailures int      // 累计失败次数（窗口过期不清零）
 }
+
+// maxLockMultiplier 最大锁定倍数，超过此倍数不再增加锁定时长
+const maxLockMultiplier = 3
 
 // LoginRateLimiter 基于 IP 的登录速率限制器
 type LoginRateLimiter struct {
@@ -80,40 +84,51 @@ type LoginRateLimiter struct {
 
 var loginRateLimiter = &LoginRateLimiter{}
 
-// Allow 检查指定 IP 是否允许登录，同时清理过期条目
-func (rl *LoginRateLimiter) Allow(ip string) bool {
+// Allow 检查指定 IP 是否允许登录，返回是否允许及剩余锁定时长
+func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 	now := time.Now()
-	lockDuration := config.Global.Auth.LoginLockDuration
-
-	// 清理过期条目
-	rl.attempts.Range(func(key, value interface{}) bool {
-		if entry, ok := value.(*loginAttempt); ok {
-			entry.mu.Lock()
-			expired := now.Sub(entry.FirstTime) > lockDuration
-			entry.mu.Unlock()
-			if expired {
-				rl.attempts.Delete(key)
-			}
-		}
-		return true
-	})
+	baseLockDuration := config.Global.Auth.LoginLockDuration
+	maxAttempts := config.Global.Auth.MaxLoginAttempts
 
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
-		return true
+		return true, 0
 	}
 
 	entry := val.(*loginAttempt)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置（defer 会解锁，之后由 Record 创建新条目）
-		rl.attempts.Delete(ip)
-		return true
+	// 计算阶梯锁定时长
+	tier := entry.TotalFailures / maxAttempts
+	if tier > maxLockMultiplier {
+		tier = maxLockMultiplier
+	}
+	lockDuration := baseLockDuration * time.Duration(tier)
+
+	// tier == 0 表示累计失败未达阶梯阈值，使用基础窗口判断
+	if tier == 0 {
+		if now.Sub(entry.FirstTime) > baseLockDuration {
+			// 窗口已过期，重置窗口计数，保留累计失败数
+			entry.Count = 0
+			entry.FirstTime = now
+			return true, 0
+		}
+		if entry.Count >= maxAttempts {
+			return false, baseLockDuration - now.Sub(entry.FirstTime)
+		}
+		return true, 0
 	}
 
-	return entry.Count < config.Global.Auth.MaxLoginAttempts
+	// tier > 0：阶梯锁定期内
+	if now.Sub(entry.FirstTime) < lockDuration {
+		return false, lockDuration - now.Sub(entry.FirstTime)
+	}
+
+	// 锁定期已过，重置窗口计数，保留累计失败数
+	entry.Count = 0
+	entry.FirstTime = now
+	return true, 0
 }
 
 // Record 记录一次登录尝试
@@ -122,7 +137,7 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	lockDuration := config.Global.Auth.LoginLockDuration
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
-		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now, TotalFailures: 1})
 		return
 	}
 
@@ -131,17 +146,39 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	defer entry.mu.Unlock()
 
 	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置
-		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		// 窗口已过期，重置窗口但保留累计失败数
+		entry.Count = 1
+		entry.FirstTime = now
+		entry.TotalFailures++
 		return
 	}
 
 	entry.Count++
+	entry.TotalFailures++
 }
 
-// Reset 重置指定 IP 的登录计数
+// Reset 重置指定 IP 的所有登录状态（成功登录时调用）
 func (rl *LoginRateLimiter) Reset(ip string) {
 	rl.attempts.Delete(ip)
+}
+
+// RemainingAttempts 返回该 IP 当前窗口内剩余尝试次数
+func (rl *LoginRateLimiter) RemainingAttempts(ip string) int {
+	maxAttempts := config.Global.Auth.MaxLoginAttempts
+	val, loaded := rl.attempts.Load(ip)
+	if !loaded {
+		return maxAttempts
+	}
+
+	entry := val.(*loginAttempt)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	remaining := maxAttempts - entry.Count
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 type AuthHandler struct {
@@ -182,8 +219,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	clientIP := c.ClientIP()
 
 	// 检查登录速率限制
-	if !loginRateLimiter.Allow(clientIP) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "登录尝试过于频繁，请稍后再试"})
+	if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+		minutes := int(retryAfter.Minutes()) + 1
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
 		return
 	}
 
