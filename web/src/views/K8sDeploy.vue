@@ -272,7 +272,12 @@ onMounted(async () => {
 onActivated(async () => {
   window.addEventListener('page-refresh', handleRefresh)
   await refreshServers()
-  if (serverId.value) loadData()
+  if (serverId.value) {
+    loadData()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    rollouts.value = []
+  }
 })
 onDeactivated(() => {
   window.removeEventListener('page-refresh', handleRefresh)

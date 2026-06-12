@@ -608,6 +608,12 @@ onActivated(async () => {
   if (serverId.value) {
     loadData()
     startAutoRefresh()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    lvsData.value = []
+    groupedData.value = []
+    vsFilter.value = ''
+    stopAutoRefresh()
   }
 })
 onDeactivated(() => {

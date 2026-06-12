@@ -570,7 +570,15 @@ onMounted(initServers)
 
 onActivated(async () => {
   await refreshServers()
-  if (serverId.value) loadConfigs()
+  if (serverId.value) {
+    loadConfigs()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    configFiles.value = []
+    configFile.value = ''
+    upstreams.value = []
+    rawConfig.value = ''
+  }
 })
 
 async function loadConfigs() {

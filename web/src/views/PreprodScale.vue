@@ -581,7 +581,15 @@ onActivated(async () => {
     wsStore.reset()
   }
   await refreshServers()
-  if (serverId.value) loadData()
+  if (serverId.value) {
+    loadData()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    resources.value = []
+    bindings.value = []
+    vsTagOptions.value = []
+    rsTagOptions.value = []
+  }
 })
 
 async function loadData() {
