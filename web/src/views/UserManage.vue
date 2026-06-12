@@ -37,19 +37,20 @@
         :row-class-name="({ row }) => (row.enabled === false ? 'disabled-row' : '')"
         max-height="calc(100vh - 250px)"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" width="80" align="center" sortable="custom" column-key="enabled">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
               row.enabled ? '已启用' : '已禁用'
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="name" label="姓名" min-width="100" />
-        <el-table-column prop="email" label="邮箱" min-width="180" />
-        <el-table-column label="角色" width="100">
+        <el-table-column prop="username" label="用户名" min-width="100" sortable="custom" />
+        <el-table-column prop="name" label="姓名" min-width="100" sortable="custom" />
+        <el-table-column prop="email" label="邮箱" min-width="180" sortable="custom" />
+        <el-table-column label="角色" width="100" sortable="custom" column-key="role">
           <template #default="{ row }">
             <el-tag :type="row.role === 'admin' ? 'danger' : 'info'">{{
               row.role === 'admin' ? '管理员' : '普通用户'
@@ -63,7 +64,7 @@
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" min-width="160">
+        <el-table-column prop="created_at" label="创建时间" min-width="160" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
       </el-table>
@@ -227,31 +228,59 @@ const users = ref([])
 const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
+const sortProp = ref('')
+const sortOrder = ref('')
 
 const filteredUsers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return users.value
-  return users.value.filter((u) => {
-    // 状态映射
-    const statusText = u.enabled ? '已启用' : '已禁用'
-    // 角色映射
-    const roleText = u.role === 'admin' ? '管理员' : '普通用户'
-    // 认证来源映射
-    const authText = u.auth_source === 'ldap' ? 'ldap' : '本地'
+  let list = users.value
+  if (q) {
+    list = list.filter((u) => {
+      // 状态映射
+      const statusText = u.enabled ? '已启用' : '已禁用'
+      // 角色映射
+      const roleText = u.role === 'admin' ? '管理员' : '普通用户'
+      // 认证来源映射
+      const authText = u.auth_source === 'ldap' ? 'ldap' : '本地'
 
-    return (
-      u.username.toLowerCase().includes(q) ||
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q) ||
-      u.role.toLowerCase().includes(q) ||
-      roleText.includes(q) ||
-      statusText.includes(q) ||
-      authText.toLowerCase().includes(q) ||
-      (q === '启用' && u.enabled) ||
-      (q === '禁用' && !u.enabled) ||
-      (q === '本地' && u.auth_source !== 'ldap')
-    )
-  })
+      return (
+        u.username.toLowerCase().includes(q) ||
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        u.role.toLowerCase().includes(q) ||
+        roleText.includes(q) ||
+        statusText.includes(q) ||
+        authText.toLowerCase().includes(q) ||
+        (q === '启用' && u.enabled) ||
+        (q === '禁用' && !u.enabled) ||
+        (q === '本地' && u.auth_source !== 'ldap')
+      )
+    })
+  }
+  if (sortProp.value && sortOrder.value) {
+    const prop = sortProp.value
+    const order = sortOrder.value === 'ascending' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      let va, vb
+      if (prop === 'enabled') {
+        va = a.enabled ? 1 : 0
+        vb = b.enabled ? 1 : 0
+      } else if (prop === 'created_at') {
+        va = a.created_at || ''
+        vb = b.created_at || ''
+      } else if (prop === 'role') {
+        va = a.role || ''
+        vb = b.role || ''
+      } else {
+        va = (a[prop] || '').toLowerCase()
+        vb = (b[prop] || '').toLowerCase()
+      }
+      if (va < vb) return -1 * order
+      if (va > vb) return 1 * order
+      return 0
+    })
+  }
+  return list
 })
 
 const paginatedUsers = computed(() => {
@@ -381,6 +410,11 @@ function handleCurrentChange() {
   // 页码变化时清除选择
   selectedRows.value = []
   selectedRow.value = null
+}
+
+function handleSortChange({ prop, order, column }) {
+  sortProp.value = prop || column?.columnKey || ''
+  sortOrder.value = order || ''
 }
 
 // 搜索时重置到第一页
