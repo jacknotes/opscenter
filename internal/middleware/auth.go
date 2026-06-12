@@ -64,6 +64,7 @@ type ActiveUserInfo struct {
 	LoginTime   string `json:"login_time"`
 	LoginMethod string `json:"login_method"`
 	LastActive  string `json:"last_active"`
+	JTI         string `json:"jti"`
 }
 
 // TrackActiveUser 标记用户为在线（登录时调用），key 在 JWT 过期后自动清除。
@@ -86,6 +87,36 @@ func UntrackActiveUser(username string) {
 		return
 	}
 	rdb.Del(context.Background(), activeUserKeyPrefix+username)
+}
+
+// GetActiveUserInfo 获取指定在线用户的详细信息，用户不在线时返回 nil。
+func GetActiveUserInfo(username string) *ActiveUserInfo {
+	if rdb == nil {
+		return nil
+	}
+	val, err := rdb.Get(context.Background(), activeUserKeyPrefix+username).Result()
+	if err != nil {
+		return nil
+	}
+	var info ActiveUserInfo
+	if err := json.Unmarshal([]byte(val), &info); err != nil {
+		return nil
+	}
+	return &info
+}
+
+// ForceKickUser 强制下线指定用户：将 token 加入黑名单并清除在线状态。
+// 返回 true 表示用户当时在线并已被踢下线，false 表示用户不在线。
+func ForceKickUser(username string) bool {
+	info := GetActiveUserInfo(username)
+	if info == nil {
+		return false
+	}
+	if info.JTI != "" {
+		BlacklistToken(info.JTI)
+	}
+	UntrackActiveUser(username)
+	return true
 }
 
 // GetActiveUserCount 获取当前在线用户数。
@@ -145,6 +176,7 @@ func GetOnlineUsers() []gin.H {
 				"login_time":   info.LoginTime,
 				"login_method": info.LoginMethod,
 				"last_active":  info.LastActive,
+				"jti":          info.JTI,
 			})
 		}
 		cursor = nextCursor
