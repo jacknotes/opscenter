@@ -260,8 +260,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			if ldapErr != nil {
 				// LDAP 认证失败
 				loginRateLimiter.Record(clientIP)
+				remaining := loginRateLimiter.RemainingAttempts(clientIP)
+				userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
+				if userRemaining < remaining {
+					remaining = userRemaining
+				}
+				if remaining < 0 {
+					remaining = 0
+				}
 				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+				c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("用户名或密码错误，还剩 %d 次机会", remaining)})
 				return
 			}
 
@@ -275,7 +283,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 			// 检查用户是否被锁定
 			if user.Locked {
-				loginRateLimiter.Record(clientIP)
 				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
 				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
 				return
@@ -349,14 +356,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			// 重新加载用户以获取最新的 failed_attempts
 			h.db.First(&user, user.ID)
 		}
+		// 计算剩余次数：取 IP 级和用户级中较小值
+		remaining := loginRateLimiter.RemainingAttempts(clientIP)
+		if user.Role != "admin" {
+			userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
+			if userRemaining < remaining {
+				remaining = userRemaining
+			}
+		}
+		if remaining < 0 {
+			remaining = 0
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("用户名或密码错误，还剩 %d 次机会", remaining)})
 		return
 	}
 
 	// 检查用户是否被锁定
 	if user.Locked {
-		loginRateLimiter.Record(clientIP)
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
 		c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
 		return
