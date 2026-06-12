@@ -325,11 +325,11 @@ function handleCommand(cmd) {
   if (cmd === 'profile') {
     profileVisible.value = true
   } else if (cmd === 'logout') {
-    // 先清理本地状态并跳转，API 调用异步执行不阻塞
+    // 先调用后端登出 API（需要 token），再清理本地状态并跳转
     clearServerCache()
+    logout().catch(() => {})
     userStore.logout()
     router.push('/login').catch(() => {})
-    logout().catch(() => {})
   } else if (cmd === 'changePwd') {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true
