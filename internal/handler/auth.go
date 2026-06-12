@@ -851,6 +851,11 @@ func (h *AuthHandler) BatchToggleUsers(c *gin.Context) {
 			continue
 		}
 
+		// 禁用用户时自动强制下线
+		if !req.Enabled {
+			middleware.ForceKickUser(user.Username)
+		}
+
 		updated++
 		updatedNames = append(updatedNames, user.Username)
 	}
@@ -1378,6 +1383,11 @@ func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	if err := h.db.Model(&user).Update("enabled", newStatus).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
 		return
+	}
+
+	// 禁用用户时自动强制下线
+	if !newStatus {
+		middleware.ForceKickUser(user.Username)
 	}
 
 	action := "enable_user"
