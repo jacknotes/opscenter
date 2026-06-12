@@ -623,6 +623,17 @@ function tooltipConf(extra = {}) {
   }
 }
 
+// 过滤 tooltip 中值为 0 的项，保留折线但不显示多余的 0 值信息
+function filterZeroAxisTooltip(params) {
+  const list = Array.isArray(params) ? params.filter((p) => p.value !== 0) : []
+  if (list.length === 0) return ''
+  let html = list[0].axisValue + '<br/>'
+  list.forEach((p) => {
+    html += p.marker + ' ' + p.seriesName + ': ' + p.value + '<br/>'
+  })
+  return html
+}
+
 // ---- 饼图：服务器类型分布 ----
 const serverTypePie = computed(() => {
   if (!serverStats.value?.by_type) return {}
@@ -793,6 +804,7 @@ const deployLineOption = computed(() => {
     tooltip: tooltipConf({
       trigger: 'axis',
       axisPointer: { type: 'cross', lineStyle: { color: themeColors.value.muted } },
+      formatter: filterZeroAxisTooltip,
     }),
     legend: {
       data: modules.map((m) => MODULE_NAMES[m]),
@@ -837,7 +849,7 @@ const loginBarOption = computed(() => {
   })
   const showZoom = periods.length > 15
   return {
-    tooltip: tooltipConf({ trigger: 'axis', axisPointer: { type: 'shadow' } }),
+    tooltip: tooltipConf({ trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: filterZeroAxisTooltip }),
     legend: {
       data: ['成功', '失败'],
       right: 0,
@@ -965,7 +977,7 @@ const k8sTrendOption = computed(() => {
   })
   const showZoom = periods.length > 15
   return {
-    tooltip: tooltipConf({ trigger: 'axis' }),
+    tooltip: tooltipConf({ trigger: 'axis', formatter: filterZeroAxisTooltip }),
     grid: { top: 10, right: 16, bottom: showZoom ? 40 : 20, left: 50 },
     xAxis: {
       type: 'category',
@@ -1062,7 +1074,7 @@ const preprodTrendOption = computed(() => {
   })
   const showZoom = periods.length > 15
   return {
-    tooltip: tooltipConf({ trigger: 'axis' }),
+    tooltip: tooltipConf({ trigger: 'axis', formatter: filterZeroAxisTooltip }),
     grid: { top: 10, right: 16, bottom: showZoom ? 40 : 20, left: 50 },
     xAxis: {
       type: 'category',
