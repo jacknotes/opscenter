@@ -3,8 +3,12 @@ package middleware
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/go-redis/redismock/v9"
+	"github.com/golang-jwt/jwt/v5"
+
+	"opscenter/internal/config"
 )
 
 func TestTokenBlacklist(t *testing.T) {
@@ -106,5 +110,43 @@ func TestForceKickUser(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("未满足的期望: %v", err)
+	}
+}
+
+func TestExtractJTI(t *testing.T) {
+	config.Global.JWT.Secret = "test-secret-key-for-jwt-extract"
+
+	// 生成一个带已知 jti 的 token
+	claims := Claims{
+		UserID:   1,
+		Username: "testuser",
+		Role:     "user",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        "extract-jti-abc",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(config.Global.JWT.Secret))
+	if err != nil {
+		t.Fatalf("生成 token 失败: %v", err)
+	}
+
+	// 应正确提取 jti
+	jti := ExtractJTI(tokenString)
+	if jti != "extract-jti-abc" {
+		t.Errorf("期望 jti=extract-jti-abc，实际 %s", jti)
+	}
+
+	// 无效 token 应返回空字符串
+	jti = ExtractJTI("invalid-token-string")
+	if jti != "" {
+		t.Errorf("无效 token 应返回空字符串，实际 %s", jti)
+	}
+
+	// 空字符串应返回空字符串
+	jti = ExtractJTI("")
+	if jti != "" {
+		t.Errorf("空字符串应返回空字符串，实际 %s", jti)
 	}
 }
