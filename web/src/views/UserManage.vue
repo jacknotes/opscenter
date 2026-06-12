@@ -227,8 +227,6 @@ import {
   toggleUserEnabled,
   getLdapUsers,
   importLdapUsers,
-  unlockUser,
-  kickUser,
   batchUnlockUsers,
   batchKickUsers,
 } from '../api'
