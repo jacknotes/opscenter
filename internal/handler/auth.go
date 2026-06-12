@@ -255,7 +255,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if config.Global.LDAP.Enabled && req.Username != "admin" {
 		// 先检查用户是否已导入到系统
 		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "ldap").First(&user).Error; err == nil {
-			// 用户已导入，进行 LDAP 认证
+			// 先检查锁定和禁用状态，避免对锁定/禁用用户发起 LDAP 请求
+			if user.Locked {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+				return
+			}
+			if !user.Enabled {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+				return
+			}
+
+			// 进行 LDAP 认证
 			ldapInfo, ldapErr := h.ldapSvc.Authenticate(req.Username, req.Password)
 			if ldapErr != nil {
 				// LDAP 认证失败
@@ -279,21 +291,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				}
 				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 				c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("用户名或密码错误，还剩 %d 次机会", remaining)})
-				return
-			}
-
-			// 检查用户是否被禁用
-			if !user.Enabled {
-				loginRateLimiter.Record(clientIP)
-				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
-				return
-			}
-
-			// 检查用户是否被锁定
-			if user.Locked {
-				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
-				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
 				return
 			}
 
