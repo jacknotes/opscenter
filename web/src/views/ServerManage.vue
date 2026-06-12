@@ -36,20 +36,21 @@
         :row-class-name="tableRowClassName"
         max-height="calc(100vh - 250px)"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" width="80" align="center" sortable="custom" column-key="enabled">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
               row.enabled ? '已启用' : '已禁用'
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="host" label="IP地址" min-width="120" />
-        <el-table-column prop="port" label="SSH端口" width="80" />
+        <el-table-column prop="name" label="名称" min-width="120" sortable="custom" />
+        <el-table-column prop="host" label="IP地址" min-width="120" sortable="custom" />
+        <el-table-column prop="port" label="SSH端口" width="80" sortable="custom" />
         <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="server_type" label="类型" min-width="140">
+        <el-table-column prop="server_type" label="类型" min-width="140" sortable="custom">
           <template #default="{ row }">
             <el-tag
               :type="
@@ -71,7 +72,7 @@
             >
           </template>
         </el-table-column>
-        <el-table-column prop="env" label="环境" width="80" />
+        <el-table-column prop="env" label="环境" width="80" sortable="custom" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       </el-table>
 
@@ -207,28 +208,53 @@ const servers = shallowRef([])
 const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
+const sortProp = ref('')
+const sortOrder = ref('')
 
 const filteredServers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return servers.value
-  return servers.value.filter((s) => {
-    const statusText = s.enabled ? '已启用' : '已禁用'
-    const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
+  let list = servers.value
+  if (q) {
+    list = list.filter((s) => {
+      const statusText = s.enabled ? '已启用' : '已禁用'
+      const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
 
-    return (
-      s.name.toLowerCase().includes(q) ||
-      s.host.toLowerCase().includes(q) ||
-      s.server_type.toLowerCase().includes(q) ||
-      typeText.toLowerCase().includes(q) ||
-      s.env.toLowerCase().includes(q) ||
-      String(s.port).includes(q) ||
-      s.username.toLowerCase().includes(q) ||
-      (s.description && s.description.toLowerCase().includes(q)) ||
-      statusText.includes(q) ||
-      (q === '启用' && s.enabled) ||
-      (q === '禁用' && !s.enabled)
-    )
-  })
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.host.toLowerCase().includes(q) ||
+        s.server_type.toLowerCase().includes(q) ||
+        typeText.toLowerCase().includes(q) ||
+        s.env.toLowerCase().includes(q) ||
+        String(s.port).includes(q) ||
+        s.username.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        statusText.includes(q) ||
+        (q === '启用' && s.enabled) ||
+        (q === '禁用' && !s.enabled)
+      )
+    })
+  }
+  if (sortProp.value && sortOrder.value) {
+    const prop = sortProp.value
+    const order = sortOrder.value === 'ascending' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      let va, vb
+      if (prop === 'enabled') {
+        va = a.enabled ? 1 : 0
+        vb = b.enabled ? 1 : 0
+      } else if (prop === 'port') {
+        va = Number(a.port) || 0
+        vb = Number(b.port) || 0
+      } else {
+        va = (a[prop] || '').toLowerCase()
+        vb = (b[prop] || '').toLowerCase()
+      }
+      if (va < vb) return -1 * order
+      if (va > vb) return 1 * order
+      return 0
+    })
+  }
+  return list
 })
 
 const paginatedServers = computed(() => {
@@ -294,6 +320,11 @@ function handleSelectionChange(rows) {
   } else {
     selectedRow.value = null
   }
+}
+
+function handleSortChange({ prop, order, column }) {
+  sortProp.value = prop || column?.columnKey || ''
+  sortOrder.value = order || ''
 }
 
 function handleSizeChange() {
