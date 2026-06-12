@@ -403,6 +403,26 @@
             <el-empty v-else description="暂无数据" :image-size="48" />
           </el-col>
         </el-row>
+        <div v-if="preprodSortedProjects.length > 0" class="project-list-section">
+          <div class="sub-label">项目明细</div>
+          <div class="project-list-header">
+            <span class="project-list-col-name">项目名称</span>
+            <span class="project-list-col-count">操作次数</span>
+          </div>
+          <div v-for="item in preprodPagedProjects" :key="item.project" class="project-list-item">
+            <span class="project-list-col-name" :title="item.project">{{ item.project }}</span>
+            <span class="project-list-col-count">{{ item.count }}</span>
+          </div>
+          <div v-if="preprodProjectTotalPages > 1" class="project-list-pagination">
+            <el-pagination
+              v-model:current-page="preprodProjectPage"
+              :page-size="preprodProjectPageSize"
+              :total="preprodSortedProjects.length"
+              layout="prev, pager, next"
+              small
+            />
+          </div>
+        </div>
         <div v-if="preprodProjectRanking.length > 0" class="ranking-section">
           <div class="sub-label">操作排行 Top 5</div>
           <div v-for="item in preprodProjectRanking.slice(0, 5)" :key="item.project" class="ranking-item">
@@ -944,6 +964,22 @@ const preprodProjectTrend = shallowRef([])
 const preprodProjectByProject = shallowRef([])
 const preprodProjectByAction = shallowRef([])
 
+const preprodProjectPage = ref(1)
+const preprodProjectPageSize = 15
+
+const preprodSortedProjects = computed(() =>
+  [...preprodProjectByProject.value].sort((a, b) => b.count - a.count)
+)
+
+const preprodPagedProjects = computed(() => {
+  const start = (preprodProjectPage.value - 1) * preprodProjectPageSize
+  return preprodSortedProjects.value.slice(start, start + preprodProjectPageSize)
+})
+
+const preprodProjectTotalPages = computed(() =>
+  Math.ceil(preprodSortedProjects.value.length / preprodProjectPageSize)
+)
+
 const PREPROD_ACTION_NAMES = {
   scaledown: '缩容',
   scaleup: '扩容',
@@ -978,13 +1014,7 @@ const preprodTrendOption = computed(() => {
   const showZoom = periods.length > 15
   return {
     tooltip: tooltipConf({ trigger: 'axis' }),
-    legend: {
-      type: 'scroll',
-      bottom: showZoom ? 24 : 0,
-      height: 56,
-      textStyle: { color: themeColors.value.subText, fontSize: 11 },
-    },
-    grid: { top: 10, right: 16, bottom: showZoom ? 72 : 64, left: 50 },
+    grid: { top: 10, right: 16, bottom: showZoom ? 40 : 20, left: 50 },
     xAxis: {
       type: 'category',
       data: periods,
