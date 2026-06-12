@@ -1370,6 +1370,89 @@ func (h *AuthHandler) BatchUnlockUsers(c *gin.Context) {
 	})
 }
 
+// BatchKickUsers godoc
+//
+//	@Summary		批量强制下线用户
+//	@Description	管理员批量强制将在线用户踢下线（作废 token + 清除在线状态）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchUnlockUsersRequest	true	"用户 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-kick [post]
+func (h *AuthHandler) BatchKickUsers(c *gin.Context) {
+	var req BatchUnlockUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要下线的用户"})
+		return
+	}
+
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	kicked := 0
+	failed := 0
+	var kickedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if user.Username == "admin" {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if currentUserID == uint(id) {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if !middleware.ForceKickUser(user.Username) {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		kicked++
+		kickedNames = append(kickedNames, user.Username)
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_kick_users",
+		fmt.Sprintf("批量强制下线用户: 成功 %d, 失败 %d", kicked, failed),
+		"", "success", fmt.Sprintf("下线的用户: %v", kickedNames), 0, "")
+
+	message := fmt.Sprintf("批量下线完成: 成功 %d, 失败 %d", kicked, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"updated": kicked,
+		"failed":  failed,
+	})
+}
+
 func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {

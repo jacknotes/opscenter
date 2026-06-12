@@ -214,6 +214,7 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			users.PUT("/:id/unlock", authHandler.UnlockUser)
 			users.POST("/batch-unlock", authHandler.BatchUnlockUsers)
 			users.POST("/:id/kick", authHandler.KickUser)
+			users.POST("/batch-kick", authHandler.BatchKickUsers)
 			// LDAP user management
 			users.GET("/ldap", authHandler.ListLDAPUsers)
 			users.POST("/ldap/import", authHandler.ImportLDAPUsers)
