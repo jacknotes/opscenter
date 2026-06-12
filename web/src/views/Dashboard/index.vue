@@ -469,11 +469,6 @@
             {{ row.login_time ? formatTime(new Date(row.login_time)) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="last_active" label="最后活动" min-width="160">
-          <template #default="{ row }">
-            {{ row.last_active ? formatTime(new Date(row.last_active)) : '-' }}
-          </template>
-        </el-table-column>
       </el-table>
       <template #footer>
         <el-button @click="loadOnlineUsers" :loading="onlineUsersLoading">
