@@ -619,6 +619,7 @@ async function handleBatchUnlock() {
 function handleMoreCommand(command) {
   switch (command) {
     case 'resetPwd':
+      if (selectedRows.value.length !== 1 || selectedRow.value?.username === 'admin' || selectedRow.value?.auth_source === 'ldap') return
       handleResetPwdSelected()
       break
     case 'batchUnlock':
