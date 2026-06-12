@@ -77,6 +77,9 @@ type loginAttempt struct {
 // maxLockMultiplier 最大锁定倍数，超过此倍数不再增加锁定时长
 const maxLockMultiplier = 3
 
+// maxIdleDuration IP 记录最大空闲时长，超过此时间未活跃的条目将被清理
+const maxIdleDuration = 1 * time.Hour
+
 // LoginRateLimiter 基于 IP 的登录速率限制器
 type LoginRateLimiter struct {
 	attempts sync.Map // key: IP string, value: *loginAttempt
@@ -84,10 +87,23 @@ type LoginRateLimiter struct {
 
 var loginRateLimiter = &LoginRateLimiter{}
 
+// effectiveLockDuration 根据累计失败次数计算当前有效锁定/窗口时长
+func (rl *LoginRateLimiter) effectiveLockDuration(totalFailures int) time.Duration {
+	baseLockDuration := config.Global.Auth.LoginLockDuration
+	maxAttempts := config.Global.Auth.MaxLoginAttempts
+	tier := totalFailures / maxAttempts
+	if tier > maxLockMultiplier {
+		tier = maxLockMultiplier
+	}
+	if tier == 0 {
+		return baseLockDuration
+	}
+	return baseLockDuration * time.Duration(tier)
+}
+
 // Allow 检查指定 IP 是否允许登录，返回是否允许及剩余锁定时长
 func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 	now := time.Now()
-	baseLockDuration := config.Global.Auth.LoginLockDuration
 	maxAttempts := config.Global.Auth.MaxLoginAttempts
 
 	val, loaded := rl.attempts.Load(ip)
@@ -99,15 +115,17 @@ func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	// 计算阶梯锁定时长
-	tier := entry.TotalFailures / maxAttempts
-	if tier > maxLockMultiplier {
-		tier = maxLockMultiplier
+	// 清理长期未活跃的条目
+	if now.Sub(entry.FirstTime) > maxIdleDuration {
+		rl.attempts.Delete(ip)
+		return true, 0
 	}
-	lockDuration := baseLockDuration * time.Duration(tier)
+
+	lockDuration := rl.effectiveLockDuration(entry.TotalFailures)
+	baseLockDuration := config.Global.Auth.LoginLockDuration
 
 	// tier == 0 表示累计失败未达阶梯阈值，使用基础窗口判断
-	if tier == 0 {
+	if lockDuration == baseLockDuration && entry.TotalFailures < maxAttempts {
 		if now.Sub(entry.FirstTime) > baseLockDuration {
 			// 窗口已过期，重置窗口计数，保留累计失败数
 			entry.Count = 0
@@ -134,7 +152,6 @@ func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 // Record 记录一次登录尝试
 func (rl *LoginRateLimiter) Record(ip string) {
 	now := time.Now()
-	lockDuration := config.Global.Auth.LoginLockDuration
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
 		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now, TotalFailures: 1})
@@ -145,6 +162,7 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
+	lockDuration := rl.effectiveLockDuration(entry.TotalFailures)
 	if now.Sub(entry.FirstTime) > lockDuration {
 		// 窗口已过期，重置窗口但保留累计失败数
 		entry.Count = 1
