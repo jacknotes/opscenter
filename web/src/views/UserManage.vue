@@ -18,6 +18,7 @@
             >重置密码</el-button
           >
           <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
+          <el-button type="warning" :disabled="selectedRows.length === 0" @click="handleBatchUnlock">批量解锁</el-button>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
           <el-input
             v-model="searchQuery"
@@ -47,6 +48,17 @@
             }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="锁定" width="80" align="center" sortable="custom" column-key="locked">
+          <template #default="{ row }">
+            <el-tag v-if="row.locked" type="danger" size="small">已锁定</el-tag>
+            <el-tag v-else type="success" size="small">正常</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="在线" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.online" type="success" size="small" effect="dark">在线</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="100" sortable="custom" />
         <el-table-column prop="name" label="姓名" min-width="100" sortable="custom" />
         <el-table-column prop="email" label="邮箱" min-width="180" sortable="custom" />
@@ -66,6 +78,24 @@
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" min-width="160" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.locked"
+              type="warning"
+              size="small"
+              link
+              @click="handleUnlock(row)"
+            >解锁</el-button>
+            <el-button
+              v-if="row.online && row.username !== 'admin' && row.id !== currentUserId"
+              type="danger"
+              size="small"
+              link
+              @click="handleKick(row)"
+            >强制下线</el-button>
+          </template>
         </el-table-column>
       </el-table>
 
@@ -214,6 +244,9 @@ import {
   toggleUserEnabled,
   getLdapUsers,
   importLdapUsers,
+  unlockUser,
+  kickUser,
+  batchUnlockUsers,
 } from '../api'
 import { showBatchResult } from '../utils/message'
 import { formatTime } from '../utils/format'
@@ -253,7 +286,10 @@ const filteredUsers = computed(() => {
         authText.toLowerCase().includes(q) ||
         (q === '启用' && u.enabled) ||
         (q === '禁用' && !u.enabled) ||
-        (q === '本地' && u.auth_source !== 'ldap')
+        (q === '本地' && u.auth_source !== 'ldap') ||
+        (q === '锁定' && u.locked) ||
+        (q === '正常' && !u.locked) ||
+        (q === '在线' && u.online)
       )
     })
   }
@@ -265,6 +301,9 @@ const filteredUsers = computed(() => {
       if (prop === 'enabled') {
         va = a.enabled ? 1 : 0
         vb = b.enabled ? 1 : 0
+      } else if (prop === 'locked') {
+        va = a.locked ? 1 : 0
+        vb = b.locked ? 1 : 0
       } else if (prop === 'created_at') {
         va = a.created_at || ''
         vb = b.created_at || ''
@@ -567,6 +606,56 @@ async function handleBatchDelete() {
   } catch (e) {
     if (e !== 'cancel') {
       ElMessage.error(e.response?.data?.error || '批量删除失败')
+    }
+  }
+}
+
+async function handleUnlock(row) {
+  try {
+    await ElMessageBox.confirm(`确定要解锁用户 "${row.username}" 吗？`, '确认操作')
+    await unlockUser(row.id)
+    ElMessage.success('解锁成功')
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '解锁失败')
+    }
+  }
+}
+
+async function handleKick(row) {
+  try {
+    await ElMessageBox.confirm(`确定要强制下线用户 "${row.username}" 吗？`, '确认操作', { type: 'warning' })
+    await kickUser(row.id)
+    ElMessage.success('已强制下线')
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '操作失败')
+    }
+  }
+}
+
+async function handleBatchUnlock() {
+  if (selectedRows.value.length === 0) return
+
+  const lockable = selectedRows.value.filter((r) => r.locked)
+  if (lockable.length === 0) {
+    ElMessage.warning('选中的用户中没有被锁定的用户')
+    return
+  }
+
+  const names = lockable.map((r) => r.username).join('、')
+  try {
+    await ElMessageBox.confirm(`确定要解锁以下 ${lockable.length} 个用户吗？\n${names}`, '批量解锁')
+    const res = await batchUnlockUsers(lockable.map((r) => r.id))
+    showBatchResult(res)
+    selectedRow.value = null
+    selectedRows.value = []
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '批量解锁失败')
     }
   }
 }
