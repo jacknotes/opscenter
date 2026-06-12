@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"opscenter/internal/config"
 	"opscenter/internal/middleware"
 	"opscenter/internal/model"
 )
@@ -324,6 +326,170 @@ func TestKickUser(t *testing.T) {
 
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("期望 400，实际 %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
+func TestLoginLockout(t *testing.T) {
+	db := getTestDB(t)
+	h := NewAuthHandler(db)
+
+	// 设置配置
+	config.Global.Auth.MaxUserAttempts = 3
+	config.Global.JWT.Secret = "test-secret-key-for-login-lock"
+	config.Global.JWT.Expire = time.Hour
+
+	// 初始化 Redis mock
+	redisMock, _ := middleware.NewRedisMock()
+	middleware.InitBlacklist(redisMock)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	userName := "test_login_lock_" + suffix
+	adminName := "test_login_admin_" + suffix
+
+	// 创建测试用户（真实 bcrypt 密码 "Test@1234"）
+	hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+	testUser := model.User{
+		Username:       userName,
+		Password:       string(hashedPwd),
+		Name:           "锁定测试用户",
+		Email:          userName + "@test.com",
+		Role:           "user",
+		Enabled:        true,
+		FailedAttempts: 0,
+		Locked:         false,
+	}
+	db.Create(&testUser)
+
+	adminUser := model.User{
+		Username:       adminName,
+		Password:       string(hashedPwd),
+		Name:           "管理员",
+		Email:          adminName + "@test.com",
+		Role:           "admin",
+		Enabled:        true,
+		FailedAttempts: 0,
+		Locked:         false,
+	}
+	db.Create(&adminUser)
+
+	defer cleanupTestUser(db, userName, adminName)
+
+	t.Run("登录失败递增failed_attempts", func(t *testing.T) {
+		// 重置状态
+		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+
+		body := `{"username":"` + userName + `","password":"WrongPassword"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("期望 401，实际 %d", w.Code)
+		}
+
+		// 验证 failed_attempts 递增
+		var user model.User
+		db.First(&user, testUser.ID)
+		if user.FailedAttempts != 1 {
+			t.Errorf("期望 failed_attempts=1，实际 %d", user.FailedAttempts)
+		}
+	})
+
+	t.Run("连续失败达到阈值后锁定", func(t *testing.T) {
+		// 重置状态
+		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+
+		// 连续失败 3 次（阈值）
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"WrongPwd` + fmt.Sprintf("%d", i) + `"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Login(c)
+			_ = w
+		}
+
+		// 验证账号被锁定
+		var user model.User
+		db.First(&user, testUser.ID)
+		if !user.Locked {
+			t.Error("账号应该被锁定")
+		}
+		if user.FailedAttempts < 3 {
+			t.Errorf("期望 failed_attempts>=3，实际 %d", user.FailedAttempts)
+		}
+	})
+
+	t.Run("被锁定账号返回403", func(t *testing.T) {
+		// 确保账号锁定
+		db.Model(&testUser).Updates(map[string]interface{}{"locked": true, "failed_attempts": 5})
+
+		body := `{"username":"` + userName + `","password":"Test@1234"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusForbidden {
+			t.Errorf("期望 403，实际 %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("成功登录重置failed_attempts", func(t *testing.T) {
+		// 设置有失败次数但未锁定
+		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 2, "locked": false})
+
+		body := `{"username":"` + userName + `","password":"Test@1234"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		h.Login(c)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("期望 200，实际 %d: %s", w.Code, w.Body.String())
+		}
+
+		// 验证重置
+		var user model.User
+		db.First(&user, testUser.ID)
+		if user.FailedAttempts != 0 {
+			t.Errorf("期望 failed_attempts=0，实际 %d", user.FailedAttempts)
+		}
+		if user.Locked {
+			t.Error("账号不应被锁定")
+		}
+	})
+
+	t.Run("admin账号不参与锁定", func(t *testing.T) {
+		// 重置 admin
+		db.Model(&model.User{}).Where("id = ?", adminUser.ID).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+
+		// 连续失败 5 次（超过阈值）
+		for i := 0; i < 5; i++ {
+			body := `{"username":"` + adminName + `","password":"WrongPwd"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h.Login(c)
+			if i == 0 {
+				t.Logf("第1次失败后响应: %d %s", w.Code, w.Body.String())
+			}
+		}
+
+		// admin 不应被锁定
+		var user model.User
+		db.First(&user, adminUser.ID)
+		t.Logf("admin 状态: username=%s, failed_attempts=%d, locked=%v", user.Username, user.FailedAttempts, user.Locked)
+		if user.Locked {
+			t.Error("admin 不应被锁定")
+		}
+		if user.FailedAttempts != 0 {
+			t.Errorf("admin failed_attempts 应为 0，实际 %d", user.FailedAttempts)
 		}
 	})
 }

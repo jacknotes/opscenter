@@ -287,7 +287,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		loginRateLimiter.Record(clientIP)
 		// 用户级失败计数（admin 不参与锁定）
-		if user.Username != "admin" {
+		if user.Role != "admin" {
 			h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
 			h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
 			// 重新加载用户以获取最新的 failed_attempts
