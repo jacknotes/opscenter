@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -57,12 +58,26 @@ func IsBlacklisted(jti string) bool {
 
 const activeUserKeyPrefix = "opscenter:active_user:"
 
+// ActiveUserInfo 存储在线用户的详细信息
+type ActiveUserInfo struct {
+	Role        string `json:"role"`
+	LoginTime   string `json:"login_time"`
+	LoginMethod string `json:"login_method"`
+	LastActive  string `json:"last_active"`
+}
+
 // TrackActiveUser 标记用户为在线（登录时调用），key 在 JWT 过期后自动清除。
-func TrackActiveUser(username string) {
+func TrackActiveUser(username string, info ActiveUserInfo) {
 	if rdb == nil {
 		return
 	}
-	rdb.Set(context.Background(), activeUserKeyPrefix+username, "1", config.Global.JWT.Expire)
+	data, err := json.Marshal(info)
+	if err != nil {
+		// 如果序列化失败，回退到简单存储
+		rdb.Set(context.Background(), activeUserKeyPrefix+username, "1", config.Global.JWT.Expire)
+		return
+	}
+	rdb.Set(context.Background(), activeUserKeyPrefix+username, string(data), config.Global.JWT.Expire)
 }
 
 // UntrackActiveUser 标记用户为离线（登出时调用）。
@@ -92,6 +107,52 @@ func GetActiveUserCount() int64 {
 		}
 	}
 	return count
+}
+
+// GetOnlineUsers 获取当前在线用户的详细信息列表。
+func GetOnlineUsers() []gin.H {
+	if rdb == nil {
+		return nil
+	}
+	var users []gin.H
+	var cursor uint64
+	for {
+		keys, nextCursor, err := rdb.Scan(context.Background(), cursor, activeUserKeyPrefix+"*", 100).Result()
+		if err != nil {
+			break
+		}
+		for _, key := range keys {
+			username := strings.TrimPrefix(key, activeUserKeyPrefix)
+			val, err := rdb.Get(context.Background(), key).Result()
+			if err != nil {
+				continue
+			}
+			var info ActiveUserInfo
+			if err := json.Unmarshal([]byte(val), &info); err != nil {
+				// 兼容旧格式（值为 "1"）
+				users = append(users, gin.H{
+					"username":     username,
+					"role":         "",
+					"login_time":   "",
+					"login_method": "",
+					"last_active":  "",
+				})
+				continue
+			}
+			users = append(users, gin.H{
+				"username":     username,
+				"role":         info.Role,
+				"login_time":   info.LoginTime,
+				"login_method": info.LoginMethod,
+				"last_active":  info.LastActive,
+			})
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+	return users
 }
 
 // Auth 返回 JWT 认证中间件。支持从 Authorization Header 或 URL query 参数 token 中提取令牌。
