@@ -5,20 +5,26 @@
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
           <el-button v-if="ldapEnabled" type="success" @click="showLdapImport">导入 LDAP 用户</el-button>
-          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
-            batchToggleLabel
-          }}</el-button>
-          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
-          <el-button
-            type="warning"
-            :disabled="
-              selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'
-            "
-            @click="handleResetPwdSelected"
-            >重置密码</el-button
-          >
-          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
-          <el-button type="warning" :disabled="selectedRows.length === 0" @click="handleBatchUnlock">批量解锁</el-button>
+          <template v-if="selectedRows.length > 0">
+            <el-button :type="batchToggleType" @click="handleBatchToggle">{{ batchToggleLabel }}</el-button>
+            <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
+            <el-dropdown @command="handleMoreCommand">
+              <el-button type="info">
+                更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    command="resetPwd"
+                    :disabled="selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'"
+                  >重置密码</el-dropdown-item>
+                  <el-dropdown-item command="batchUnlock">批量解锁</el-dropdown-item>
+                  <el-dropdown-item command="batchKick">批量下线</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
           <el-input
             v-model="searchQuery"
@@ -48,18 +54,13 @@
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="锁定" width="80" align="center" sortable="custom" column-key="locked">
+        <el-table-column prop="username" label="用户名" min-width="130" sortable="custom">
           <template #default="{ row }">
-            <el-tag v-if="row.locked" type="danger" size="small">已锁定</el-tag>
-            <el-tag v-else type="success" size="small">正常</el-tag>
+            <span>{{ row.username }}</span>
+            <span class="online-dot" :class="row.online ? 'online' : 'offline'" :title="row.online ? '在线' : '离线'" />
+            <el-tag v-if="row.locked" type="danger" size="small" class="lock-tag">锁</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="在线" width="70" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="row.online" type="success" size="small" effect="dark">在线</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="username" label="用户名" min-width="100" sortable="custom" />
         <el-table-column prop="name" label="姓名" min-width="100" sortable="custom" />
         <el-table-column prop="email" label="邮箱" min-width="180" sortable="custom" />
         <el-table-column label="角色" width="100" sortable="custom" column-key="role">
@@ -78,24 +79,6 @@
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" min-width="160" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.locked"
-              type="warning"
-              size="small"
-              link
-              @click="handleUnlock(row)"
-            >解锁</el-button>
-            <el-button
-              v-if="row.online && row.username !== 'admin' && row.id !== currentUserId"
-              type="danger"
-              size="small"
-              link
-              @click="handleKick(row)"
-            >强制下线</el-button>
-          </template>
         </el-table-column>
       </el-table>
 
@@ -247,12 +230,13 @@ import {
   unlockUser,
   kickUser,
   batchUnlockUsers,
+  batchKickUsers,
 } from '../api'
 import { showBatchResult } from '../utils/message'
 import { formatTime } from '../utils/format'
 import { useUserStore } from '../stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, UserFilled } from '@element-plus/icons-vue'
+import { Loading, UserFilled, ArrowDown } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const currentUserId = computed(() => userStore.userInfo?.id)
@@ -610,32 +594,6 @@ async function handleBatchDelete() {
   }
 }
 
-async function handleUnlock(row) {
-  try {
-    await ElMessageBox.confirm(`确定要解锁用户 "${row.username}" 吗？`, '确认操作')
-    await unlockUser(row.id)
-    ElMessage.success('解锁成功')
-    await loadData()
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '解锁失败')
-    }
-  }
-}
-
-async function handleKick(row) {
-  try {
-    await ElMessageBox.confirm(`确定要强制下线用户 "${row.username}" 吗？`, '确认操作', { type: 'warning' })
-    await kickUser(row.id)
-    ElMessage.success('已强制下线')
-    await loadData()
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '操作失败')
-    }
-  }
-}
-
 async function handleBatchUnlock() {
   if (selectedRows.value.length === 0) return
 
@@ -656,6 +614,54 @@ async function handleBatchUnlock() {
   } catch (e) {
     if (e !== 'cancel') {
       ElMessage.error(e.response?.data?.error || '批量解锁失败')
+    }
+  }
+}
+
+function handleMoreCommand(command) {
+  switch (command) {
+    case 'resetPwd':
+      handleResetPwdSelected()
+      break
+    case 'batchUnlock':
+      handleBatchUnlock()
+      break
+    case 'batchKick':
+      handleBatchKick()
+      break
+    case 'delete':
+      handleBatchDelete()
+      break
+  }
+}
+
+async function handleBatchKick() {
+  if (selectedRows.value.length === 0) return
+
+  const kickable = selectedRows.value.filter(
+    (r) => r.online && r.username !== 'admin' && r.id !== currentUserId.value
+  )
+  if (kickable.length === 0) {
+    ElMessage.warning('选中的用户中没有可下线的在线用户')
+    return
+  }
+  if (kickable.length < selectedRows.value.length) {
+    ElMessage.info(`已自动跳过 admin、当前用户和离线用户，将对剩余 ${kickable.length} 个用户执行下线`)
+  }
+
+  const names = kickable.map((r) => r.username).join('、')
+  try {
+    await ElMessageBox.confirm(`确定要强制下线以下 ${kickable.length} 个用户吗？\n${names}`, '批量下线', {
+      type: 'warning',
+    })
+    const res = await batchKickUsers(kickable.map((r) => r.id))
+    showBatchResult(res)
+    selectedRow.value = null
+    selectedRows.value = []
+    await loadData()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e.response?.data?.error || '批量下线失败')
     }
   }
 }
@@ -803,5 +809,23 @@ async function handleImportLdapUsers() {
   align-items: center;
   margin-top: 12px;
   padding: 8px 0;
+}
+.online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.online-dot.online {
+  background: #67c23a;
+  box-shadow: 0 0 4px #67c23a80;
+}
+.online-dot.offline {
+  background: #c0c4cc;
+}
+.lock-tag {
+  margin-left: 4px;
 }
 </style>
