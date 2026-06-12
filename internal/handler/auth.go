@@ -1154,6 +1154,197 @@ type ImportLDAPUser struct {
 	Email    string `json:"email"`
 	DN       string `json:"dn" binding:"required"`
 }
+
+// UnlockUser godoc
+//
+//	@Summary		解锁用户
+//	@Description	管理员解锁被锁定的用户（重置 failed_attempts 和 locked）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id}/unlock [put]
+func (h *AuthHandler) UnlockUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if user.Username == "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "admin 用户无需解锁"})
+		return
+	}
+
+	if !user.Locked && user.FailedAttempts == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户未被锁定"})
+		return
+	}
+
+	if err := h.db.Model(&user).Updates(map[string]interface{}{
+		"locked":          false,
+		"failed_attempts": 0,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解锁失败"})
+		return
+	}
+
+	createAuditLog(h.db, c, "auth", "unlock_user",
+		fmt.Sprintf("解锁用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
+	c.JSON(http.StatusOK, gin.H{"message": "解锁成功"})
+}
+
+// KickUser godoc
+//
+//	@Summary		强制下线用户
+//	@Description	管理员强制将在线用户踢下线（作废 token + 清除在线状态）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id}/kick [post]
+func (h *AuthHandler) KickUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if user.Username == "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能强制下线 admin 用户"})
+		return
+	}
+
+	// 不能踢自己下线
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+	if currentUserID == uint(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能强制下线自己"})
+		return
+	}
+
+	kicked := middleware.ForceKickUser(user.Username)
+	if !kicked {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户当前不在线"})
+		return
+	}
+
+	createAuditLog(h.db, c, "auth", "kick_user",
+		fmt.Sprintf("强制下线用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
+	c.JSON(http.StatusOK, gin.H{"message": "已强制下线"})
+}
+
+type BatchUnlockUsersRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// BatchUnlockUsers godoc
+//
+//	@Summary		批量解锁用户
+//	@Description	批量解锁被锁定的用户（管理员）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchUnlockUsersRequest	true	"用户 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-unlock [post]
+func (h *AuthHandler) BatchUnlockUsers(c *gin.Context) {
+	var req BatchUnlockUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要解锁的用户"})
+		return
+	}
+
+	unlocked := 0
+	failed := 0
+	var unlockedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if user.Username == "admin" {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if !user.Locked && user.FailedAttempts == 0 {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if err := h.db.Model(&user).Updates(map[string]interface{}{
+			"locked":          false,
+			"failed_attempts": 0,
+		}).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		unlocked++
+		unlockedNames = append(unlockedNames, user.Username)
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_unlock_users",
+		fmt.Sprintf("批量解锁用户: 成功 %d, 失败 %d", unlocked, failed),
+		"", "success", fmt.Sprintf("解锁的用户: %v", unlockedNames), 0, "")
+
+	message := fmt.Sprintf("批量解锁完成: 成功 %d, 失败 %d", unlocked, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  message,
+		"unlocked": unlocked,
+		"failed":   failed,
+	})
+}
+
 func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
