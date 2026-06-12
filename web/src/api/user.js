@@ -12,3 +12,6 @@ export const toggleUserEnabled = (id) => api.put(`/users/${id}/toggle`)
 // LDAP Users
 export const getLdapUsers = () => api.get('/users/ldap')
 export const importLdapUsers = (users) => api.post('/users/ldap/import', { users })
+export const unlockUser = (id) => api.put(`/users/${id}/unlock`)
+export const kickUser = (id) => api.post(`/users/${id}/kick`)
+export const batchUnlockUsers = (ids) => api.post('/users/batch-unlock', { ids })
