@@ -57,16 +57,16 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="namespace" label="命名空间" width="150" />
-        <el-table-column prop="name" label="名称" min-width="250" />
-        <el-table-column prop="strategy" label="策略" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="namespace" label="命名空间" width="150" sortable />
+        <el-table-column prop="name" label="名称" min-width="250" sortable />
+        <el-table-column prop="strategy" label="策略" width="100" sortable />
+        <el-table-column prop="status" label="状态" width="100" sortable>
           <template #default="{ row }">
             <el-tag :type="row.status === 'Paused' ? 'warning' : 'success'">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="step" label="步骤" width="80" />
-        <el-table-column prop="ready" label="就绪" width="80" />
+        <el-table-column prop="step" label="步骤" width="80" sortable :sort-method="sortStep" />
+        <el-table-column prop="ready" label="就绪" width="80" sortable :sort-method="sortReady" />
       </el-table>
 
       <div v-if="!loading && paginatedRollouts.length === 0" class="empty-state">
@@ -181,6 +181,20 @@ const paginatedRollouts = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredRollouts.value.slice(start, start + pageSize.value)
 })
+
+function parseStep(s) {
+  if (!s) return -1
+  const match = s.match(/^(\d+)\//)
+  return match ? parseInt(match[1], 10) : -1
+}
+
+function sortStep(a, b) {
+  return parseStep(a.step) - parseStep(b.step)
+}
+
+function sortReady(a, b) {
+  return (parseInt(a.ready, 10) || 0) - (parseInt(b.ready, 10) || 0)
+}
 
 // --- 组合式函数 ---
 const keyFn = (row) => row.namespace + '/' + row.name

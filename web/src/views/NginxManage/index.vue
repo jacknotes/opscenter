@@ -219,14 +219,14 @@
               <el-checkbox v-model="row.enabled" :disabled="!row.hasBoth && !row.hasMultipleUp" />
             </template>
           </el-table-column>
-          <el-table-column label="Upstream 组" min-width="150">
+          <el-table-column label="Upstream 组" min-width="150" sortable :sort-method="(a, b) => a.upstreamName.localeCompare(b.upstreamName)">
             <template #default="{ row }">
               <span class="batch-upstream-name" @mousedown.prevent @click="toggleBatchExpand(row)">{{
                 row.upstreamName
               }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="130">
+          <el-table-column label="状态" width="130" sortable :sort-method="(a, b) => a.upCount - b.upCount">
             <template #default="{ row }">
               <span class="badge badge-success">{{ row.upCount }} up</span>
               <span class="badge badge-danger">{{ row.downCount }} down</span>

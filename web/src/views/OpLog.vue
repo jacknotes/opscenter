@@ -59,6 +59,11 @@
             </div>
           </template>
         </el-table-column>
+        <el-table-column prop="status" label="状态" width="100" sortable="custom">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" label="时间" width="180" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
@@ -72,11 +77,6 @@
         <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
         <el-table-column prop="action" label="动作" width="120" />
         <el-table-column prop="target" label="目标" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100" sortable="custom">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="pagination-wrapper">
@@ -184,6 +184,11 @@ function moduleLabel(m) {
 
 function moduleTagType(m) {
   return moduleTagTypes[m] || ''
+}
+
+const statusLabels = { success: '成功', failed: '失败' }
+function statusLabel(s) {
+  return statusLabels[s] || s
 }
 
 function onDateChange() {

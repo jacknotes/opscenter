@@ -69,7 +69,7 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="category" label="类型" width="100">
+        <el-table-column prop="category" label="类型" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.category === 'rollout' ? 'primary' : row.category === 'deployment' ? 'success' : 'warning'"
@@ -77,8 +77,8 @@
             >
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="300" />
-        <el-table-column prop="current" label="当前副本" width="100" align="center">
+        <el-table-column prop="name" label="名称" min-width="300" sortable />
+        <el-table-column prop="current" label="当前副本" width="100" align="center" sortable>
           <template #default="{ row }">
             <span>{{ row.current }}</span>
             <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
@@ -91,15 +91,15 @@
             >
           </template>
         </el-table-column>
-        <el-table-column prop="target_replicas" label="目标副本" width="90" align="center">
+        <el-table-column prop="target_replicas" label="目标副本" width="90" align="center" sortable>
           <template #default="{ row }">
             <span :class="{ 'text-warning': row.current > 0 && row.current !== row.target_replicas }">
               {{ row.target_replicas || '-' }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="available" label="可用副本" width="90" align="center" />
-        <el-table-column prop="age" label="年龄" width="100" />
+        <el-table-column prop="available" label="可用副本" width="90" align="center" sortable />
+        <el-table-column prop="age" label="年龄" width="100" sortable :sort-method="sortAge" />
       </el-table>
 
       <div v-if="!loading && paginatedResources.length === 0" class="empty-state">
@@ -428,6 +428,19 @@ const paginatedResources = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredResources.value.slice(start, start + pageSize.value)
 })
+
+function parseAge(age) {
+  if (!age) return 0
+  const match = age.match(/^(\d+)([smhd])$/)
+  if (!match) return 0
+  const n = parseInt(match[1], 10)
+  const units = { s: 1, m: 60, h: 3600, d: 86400 }
+  return n * (units[match[2]] || 0)
+}
+
+function sortAge(a, b) {
+  return parseAge(a.age) - parseAge(b.age)
+}
 
 // --- 组合式函数 ---
 const {
