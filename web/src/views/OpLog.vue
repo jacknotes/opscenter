@@ -48,7 +48,7 @@
         </div>
       </template>
 
-      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 200px)">
+      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 200px)" @sort-change="handleSortChange">
         <el-table-column type="expand" width="50">
           <template #default="{ row }">
             <div style="padding: 10px">
@@ -59,11 +59,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="180">
+        <el-table-column prop="created_at" label="时间" width="180" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="username" label="操作人" width="100" />
-        <el-table-column prop="module" label="模块" width="100">
+        <el-table-column prop="username" label="操作人" width="100" sortable="custom" />
+        <el-table-column prop="module" label="模块" width="100" sortable="custom">
           <template #default="{ row }">
             <el-tag :type="moduleTagType(row.module)">{{ moduleLabel(row.module) }}</el-tag>
           </template>
@@ -72,7 +72,7 @@
         <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
         <el-table-column prop="action" label="动作" width="120" />
         <el-table-column prop="target" label="目标" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" label="状态" width="100" sortable="custom">
           <template #default="{ row }">
             <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ row.status }}</el-tag>
           </template>
@@ -114,6 +114,8 @@ const module = ref('all')
 const keyword = ref('')
 const status = ref('all')
 const dateRange = ref(null)
+const sortBy = ref('created_at')
+const sortOrder = ref('desc')
 const dateShortcuts = [
   {
     text: '近一周',
@@ -189,6 +191,13 @@ function onDateChange() {
   loadData()
 }
 
+function handleSortChange({ prop, order }) {
+  sortBy.value = prop || 'created_at'
+  sortOrder.value = order === 'ascending' ? 'asc' : 'desc'
+  page.value = 1
+  loadData()
+}
+
 async function handleRefresh() {
   try {
     await loadData()
@@ -209,6 +218,8 @@ async function loadData() {
       params.start_time = dateRange.value[0]
       params.end_time = dateRange.value[1]
     }
+    params.sort_by = sortBy.value
+    params.sort_order = sortOrder.value
     const res = await getLogs(params)
     logs.value = res.data || []
     total.value = res.total || 0
