@@ -321,13 +321,17 @@ function handleKeydown(e) {
   }
 }
 
-function handleCommand(cmd) {
+async function handleCommand(cmd) {
   if (cmd === 'profile') {
     profileVisible.value = true
   } else if (cmd === 'logout') {
-    // 先调用后端登出 API（需要 token），再清理本地状态并跳转
+    // 先调用后端登出 API（需要 token），确保完成后再清理本地状态并跳转
     clearServerCache()
-    logout().catch(() => {})
+    try {
+      await logout()
+    } catch {
+      // 即使 API 失败也继续清理
+    }
     userStore.logout()
     router.push('/login').catch(() => {})
   } else if (cmd === 'changePwd') {
