@@ -1,6 +1,6 @@
 <template>
   <div class="dash-row stat-row">
-    <div class="number-card number-card--cyan">
+    <div class="number-card number-card--cyan" style="cursor: pointer" @click="emit('show-online-users')">
       <div class="number-info">
         <div class="number-label">在线用户数</div>
         <div class="number-value">{{ animatedOnlineUsers }}</div>
@@ -33,6 +33,8 @@ const props = defineProps({
   loginSuccess: { type: Number, default: 0 },
   loginFailed: { type: Number, default: 0 },
 })
+
+const emit = defineEmits(['show-online-users'])
 
 // countUp 动画：使用 ref + watch 实现，确保 Vue 能追踪中间帧的变化
 function useCountUp(getter, duration = 800) {
