@@ -502,20 +502,6 @@ function getFullscreenCardStyle(chartName) {
 
 const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
 
-// ---- 日期工具 ----
-function formatDate(date) {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-const dateShortcuts = [
-  { text: '最近 7 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return [s, e] } },
-  { text: '最近 30 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 30); return [s, e] } },
-  { text: '最近 90 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 90); return [s, e] } },
-]
-
 // ---- 数据 ----
 // 在线用户列表
 const onlineUsersDialogVisible = ref(false)
