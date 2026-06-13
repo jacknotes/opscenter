@@ -266,32 +266,7 @@
                 <el-option label="全部服务器" value="" />
                 <el-option v-for="s in preprodServers" :key="s.id" :label="s.name" :value="s.name" />
               </el-select>
-              <el-date-picker
-                v-model="preprodDateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                size="small"
-                value-format="YYYY-MM-DD"
-                :shortcuts="dateShortcuts"
-                style="width: 260px"
-              />
-              <el-radio-group
-                :model-value="preprodProjectGranularity"
-                size="small"
-                @update:model-value="
-                  (v) => {
-                    preprodProjectGranularity = v
-                    loadPreprodProjectStats()
-                  }
-                "
-              >
-                <el-radio-button value="day">按天</el-radio-button>
-                <el-radio-button value="week">按周</el-radio-button>
-                <el-radio-button value="month">按月</el-radio-button>
-                <el-radio-button value="year">按年</el-radio-button>
-              </el-radio-group>
+              <DateRangeSelector v-model="preprodDateRange" />
               <el-button text type="primary" size="small" @click="loadPreprodProjectStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
               </el-button>
@@ -975,7 +950,6 @@ const k8sActionPieOption = computed(() => {
 })
 
 // ---- 预生产扩缩容统计 ----
-const preprodProjectGranularity = ref('day')
 const preprodServerFilter = ref('')
 const preprodDateRange = ref(null)
 const preprodServers = shallowRef([])
@@ -1167,13 +1141,13 @@ async function loadK8sProjectStats() {
 }
 
 async function loadPreprodProjectStats() {
+  if (!preprodDateRange.value || preprodDateRange.value.length !== 2) return
   try {
-    const params = { granularity: preprodProjectGranularity.value }
-    if (preprodServerFilter.value) params.server_name = preprodServerFilter.value
-    if (preprodDateRange.value && preprodDateRange.value.length === 2) {
-      params.start_date = preprodDateRange.value[0]
-      params.end_date = preprodDateRange.value[1]
+    const params = {
+      start_date: preprodDateRange.value[0],
+      end_date: preprodDateRange.value[1],
     }
+    if (preprodServerFilter.value) params.server_name = preprodServerFilter.value
     const res = await getPreprodProjectStats(params)
     preprodProjectSummary.value = res.summary || { total: 0, success: 0, failed: 0, full_ops: 0 }
     preprodProjectTrend.value = res.trend || []
