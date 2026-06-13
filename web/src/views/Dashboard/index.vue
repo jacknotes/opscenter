@@ -35,7 +35,7 @@
 
     <!-- 登录统计 + 服务器分布 + 用户分布 -->
     <div v-show="!fullscreenChart || fullscreenChart === 'loginStats'" class="dash-row" :class="[userStore.isAdmin ? 'misc-row-admin' : 'misc-row', { 'fullscreen-active-row': fullscreenChart === 'loginStats' }]">
-      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'loginStats' }" shadow="hover" :style="getFullscreenCardStyle('loginStats')">
+      <el-card data-chart="loginStats" class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'loginStats' }" shadow="hover" :style="getFullscreenCardStyle('loginStats')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">登录统计趋势</span>
@@ -83,7 +83,7 @@
     </div>
 
     <!-- LVS 连接统计 -->
-    <div v-show="!fullscreenChart || fullscreenChart === 'lvsConn'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'lvsConn' }">
+    <div v-show="!fullscreenChart || fullscreenChart === 'lvsConn'" data-chart="lvsConn" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'lvsConn' }">
       <LvsConnChart :is-fullscreen="fullscreenChart === 'lvsConn'" :fullscreen="fullscreenChart === 'lvsConn'" @toggle-fullscreen="toggleFullscreen('lvsConn')" />
     </div>
 
@@ -91,6 +91,7 @@
     <div v-show="!fullscreenChart || fullscreenChart === 'deployTrend' || fullscreenChart === 'actionDetail'" class="dash-row trend-action-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'deployTrend' || fullscreenChart === 'actionDetail' }">
       <el-card
         v-show="!fullscreenChart || fullscreenChart === 'deployTrend'"
+        data-chart="deployTrend"
         class="chart-card"
         :class="{ 'fullscreen-card': fullscreenChart === 'deployTrend' }"
         shadow="hover"
@@ -124,6 +125,7 @@
       </el-card>
       <el-card
         v-show="!fullscreenChart || fullscreenChart === 'actionDetail'"
+        data-chart="actionDetail"
         class="chart-card"
         :class="{ 'fullscreen-card': fullscreenChart === 'actionDetail' }"
         shadow="hover"
@@ -154,7 +156,7 @@
 
     <!-- K8S 项目发布统计 -->
     <div v-show="!fullscreenChart || fullscreenChart === 'k8sProject'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'k8sProject' }">
-      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'k8sProject' }" shadow="hover" :style="getFullscreenCardStyle('k8sProject')">
+      <el-card data-chart="k8sProject" class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'k8sProject' }" shadow="hover" :style="getFullscreenCardStyle('k8sProject')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">K8S 项目发布统计</span>
@@ -251,7 +253,7 @@
 
     <!-- 预生产扩缩容统计 -->
     <div v-show="!fullscreenChart || fullscreenChart === 'preprodProject'" class="dash-row" :class="{ 'fullscreen-active-row': fullscreenChart === 'preprodProject' }">
-      <el-card class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'preprodProject' }" shadow="hover" :style="getFullscreenCardStyle('preprodProject')">
+      <el-card data-chart="preprodProject" class="chart-card" :class="{ 'fullscreen-card': fullscreenChart === 'preprodProject' }" shadow="hover" :style="getFullscreenCardStyle('preprodProject')">
         <template #header>
           <div class="card-header">
             <span class="chart-title">预生产扩缩容统计</span>
@@ -422,6 +424,7 @@ import StatCards from './StatCards.vue'
 import ModulePies from './ModulePies.vue'
 import LvsConnChart from './LvsConnChart.vue'
 import DateRangeSelector from '../../components/DateRangeSelector.vue'
+import { useDashboardFullscreen } from '../../composables/useDashboardFullscreen'
 
 use([
   PieChart,
@@ -483,22 +486,7 @@ const C = computed(() => {
 const cardBg = computed(() => ensureCssVarCache().cardBg)
 
 // ---- 全屏状态管理 ----
-const fullscreenChart = ref(null) // 记录当前全屏的图表名称
-
-function toggleFullscreen(chartName) {
-  if (fullscreenChart.value === chartName) {
-    fullscreenChart.value = null
-  } else {
-    fullscreenChart.value = chartName
-  }
-}
-
-function getFullscreenCardStyle(chartName) {
-  if (fullscreenChart.value === chartName) {
-    return { flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' }
-  }
-  return {}
-}
+const { fullscreenChart, toggleFullscreen, getFullscreenCardStyle } = useDashboardFullscreen()
 
 const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
 
