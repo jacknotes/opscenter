@@ -163,32 +163,7 @@
                 <el-option label="全部服务器" value="" />
                 <el-option v-for="s in k8sServers" :key="s.id" :label="s.name" :value="s.name" />
               </el-select>
-              <el-date-picker
-                v-model="k8sDateRange"
-                type="daterange"
-                range-separator="至"
-                start-placeholder="开始日期"
-                end-placeholder="结束日期"
-                size="small"
-                value-format="YYYY-MM-DD"
-                :shortcuts="dateShortcuts"
-                style="width: 260px"
-              />
-              <el-radio-group
-                :model-value="k8sProjectGranularity"
-                size="small"
-                @update:model-value="
-                  (v) => {
-                    k8sProjectGranularity = v
-                    loadK8sProjectStats()
-                  }
-                "
-              >
-                <el-radio-button value="day">按天</el-radio-button>
-                <el-radio-button value="week">按周</el-radio-button>
-                <el-radio-button value="month">按月</el-radio-button>
-                <el-radio-button value="year">按年</el-radio-button>
-              </el-radio-group>
+              <DateRangeSelector v-model="k8sDateRange" />
               <el-button text type="primary" size="small" @click="loadK8sProjectStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
               </el-button>
@@ -899,7 +874,6 @@ const loginBarOption = computed(() => {
 })
 
 // ---- K8S 项目发布统计 ----
-const k8sProjectGranularity = ref('day')
 const k8sServerFilter = ref('')
 const k8sDateRange = ref(null)
 const k8sServers = shallowRef([])
@@ -1175,13 +1149,13 @@ async function loadAllActivityStats() {
 }
 
 async function loadK8sProjectStats() {
+  if (!k8sDateRange.value || k8sDateRange.value.length !== 2) return
   try {
-    const params = { granularity: k8sProjectGranularity.value }
-    if (k8sServerFilter.value) params.server_name = k8sServerFilter.value
-    if (k8sDateRange.value && k8sDateRange.value.length === 2) {
-      params.start_date = k8sDateRange.value[0]
-      params.end_date = k8sDateRange.value[1]
+    const params = {
+      start_date: k8sDateRange.value[0],
+      end_date: k8sDateRange.value[1],
     }
+    if (k8sServerFilter.value) params.server_name = k8sServerFilter.value
     const res = await getK8sProjectStats(params)
     k8sProjectSummary.value = res.summary || { total: 0, success: 0, failed: 0, full_ops: 0 }
     k8sProjectTrend.value = res.trend || []
