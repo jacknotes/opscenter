@@ -16,7 +16,7 @@
     </div>
 
     <!-- 数字卡片 -->
-    <StatCards v-show="!fullscreenChart" :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" style="margin-top: 20px" @show-online-users="showOnlineUsersDialog" />
+    <StatCards v-show="!fullscreenChart" :online-users="onlineUsers" :login-success="todayLoginSuccess" :login-failed="todayLoginFailed" :is-admin="userStore.isAdmin" style="margin-top: 20px" @show-online-users="showOnlineUsersDialog" />
 
     <!-- 模块实时状态（4 个饼图） -->
     <ModulePies
@@ -40,22 +40,8 @@
           <div class="card-header">
             <span class="chart-title">登录统计趋势</span>
             <div class="card-header-controls">
-              <el-radio-group
-                :model-value="loginGranularity"
-                size="small"
-                @update:model-value="
-                  (v) => {
-                    loginGranularity = v
-                    loadLoginStats()
-                  }
-                "
-              >
-                <el-radio-button value="day">按天</el-radio-button>
-                <el-radio-button value="week">按周</el-radio-button>
-                <el-radio-button value="month">按月</el-radio-button>
-                <el-radio-button value="year">按年</el-radio-button>
-              </el-radio-group>
-              <el-button text type="primary" size="small" @click="loadLoginStats">
+              <DateRangeSelector v-model="activityDateRange" />
+              <el-button text type="primary" size="small" @click="loadAllActivityStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
               </el-button>
               <el-button text type="primary" size="small" @click="toggleFullscreen('loginStats')">
@@ -114,22 +100,8 @@
           <div class="card-header">
             <span class="chart-title">各模块发布次数趋势</span>
             <div class="card-header-controls">
-              <el-radio-group
-                :model-value="deployGranularity"
-                size="small"
-                @update:model-value="
-                  (v) => {
-                    deployGranularity = v
-                    loadActivityStats()
-                  }
-                "
-              >
-                <el-radio-button value="day">按天</el-radio-button>
-                <el-radio-button value="week">按周</el-radio-button>
-                <el-radio-button value="month">按月</el-radio-button>
-                <el-radio-button value="year">按年</el-radio-button>
-              </el-radio-group>
-              <el-button text type="primary" size="small" @click="loadActivityStats">
+              <DateRangeSelector v-model="activityDateRange" />
+              <el-button text type="primary" size="small" @click="loadAllActivityStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
               </el-button>
               <el-button text type="primary" size="small" @click="toggleFullscreen('deployTrend')">
@@ -161,22 +133,8 @@
           <div class="card-header">
             <span class="chart-title">各模块操作动作明细</span>
             <div class="card-header-controls">
-              <el-radio-group
-                :model-value="actionGranularity"
-                size="small"
-                @update:model-value="
-                  (v) => {
-                    actionGranularity = v
-                    loadActionStats()
-                  }
-                "
-              >
-                <el-radio-button value="day">按天</el-radio-button>
-                <el-radio-button value="week">按周</el-radio-button>
-                <el-radio-button value="month">按月</el-radio-button>
-                <el-radio-button value="year">按年</el-radio-button>
-              </el-radio-group>
-              <el-button text type="primary" size="small" @click="loadActionStats">
+              <DateRangeSelector v-model="activityDateRange" />
+              <el-button text type="primary" size="small" @click="loadAllActivityStats">
                 <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
               </el-button>
               <el-button text type="primary" size="small" @click="toggleFullscreen('actionDetail')">
@@ -205,6 +163,17 @@
                 <el-option label="全部服务器" value="" />
                 <el-option v-for="s in k8sServers" :key="s.id" :label="s.name" :value="s.name" />
               </el-select>
+              <el-date-picker
+                v-model="k8sDateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                size="small"
+                value-format="YYYY-MM-DD"
+                :shortcuts="dateShortcuts"
+                style="width: 260px"
+              />
               <el-radio-group
                 :model-value="k8sProjectGranularity"
                 size="small"
@@ -283,7 +252,10 @@
           <div class="sub-label">项目明细</div>
           <div class="project-list-header">
             <span class="project-list-col-name">项目名称</span>
-            <span class="project-list-col-count">发布次数</span>
+            <span class="project-list-col-count sortable" @click="k8sProjectSortAsc = !k8sProjectSortAsc">
+              发布次数
+              <el-icon class="sort-icon"><component :is="k8sProjectSortAsc ? SortUp : SortDown" /></el-icon>
+            </span>
           </div>
           <div v-for="item in k8sPagedProjects" :key="item.project" class="project-list-item">
             <span class="project-list-col-name" :title="item.project">{{ item.project }}</span>
@@ -297,16 +269,6 @@
               layout="prev, pager, next"
               small
             />
-          </div>
-        </div>
-        <div v-if="k8sProjectRanking.length > 0" class="ranking-section">
-          <div class="sub-label">发布排行 Top 5</div>
-          <div v-for="item in k8sProjectRanking.slice(0, 5)" :key="item.project" class="ranking-item">
-            <span class="ranking-name" :title="item.project">{{ item.project }}</span>
-            <div class="ranking-bar-bg">
-              <div class="ranking-bar" :style="{ width: k8sRankingBarWidth(item.count) }"></div>
-            </div>
-            <span class="ranking-count">{{ item.count }}</span>
           </div>
         </div>
       </el-card>
@@ -329,6 +291,17 @@
                 <el-option label="全部服务器" value="" />
                 <el-option v-for="s in preprodServers" :key="s.id" :label="s.name" :value="s.name" />
               </el-select>
+              <el-date-picker
+                v-model="preprodDateRange"
+                type="daterange"
+                range-separator="至"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                size="small"
+                value-format="YYYY-MM-DD"
+                :shortcuts="dateShortcuts"
+                style="width: 260px"
+              />
               <el-radio-group
                 :model-value="preprodProjectGranularity"
                 size="small"
@@ -407,7 +380,10 @@
           <div class="sub-label">项目明细</div>
           <div class="project-list-header">
             <span class="project-list-col-name">项目名称</span>
-            <span class="project-list-col-count">操作次数</span>
+            <span class="project-list-col-count sortable" @click="preprodProjectSortAsc = !preprodProjectSortAsc">
+              操作次数
+              <el-icon class="sort-icon"><component :is="preprodProjectSortAsc ? SortUp : SortDown" /></el-icon>
+            </span>
           </div>
           <div v-for="item in preprodPagedProjects" :key="item.project" class="project-list-item">
             <span class="project-list-col-name" :title="item.project">{{ item.project }}</span>
@@ -421,16 +397,6 @@
               layout="prev, pager, next"
               small
             />
-          </div>
-        </div>
-        <div v-if="preprodProjectRanking.length > 0" class="ranking-section">
-          <div class="sub-label">操作排行 Top 5</div>
-          <div v-for="item in preprodProjectRanking.slice(0, 5)" :key="item.project" class="ranking-item">
-            <span class="ranking-name" :title="item.project">{{ item.project }}</span>
-            <div class="ranking-bar-bg">
-              <div class="ranking-bar preprod" :style="{ width: preprodRankingBarWidth(item.count) }"></div>
-            </div>
-            <span class="ranking-count">{{ item.count }}</span>
           </div>
         </div>
       </el-card>
@@ -495,7 +461,7 @@ import {
 import { useUserStore } from '../../stores/user'
 import { useAppStore } from '../../stores/app'
 import { ElMessage } from 'element-plus'
-import { DataLine, Refresh, FullScreen, ScaleToOriginal } from '@element-plus/icons-vue'
+import { DataLine, Refresh, FullScreen, ScaleToOriginal, SortUp, SortDown } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { PieChart, LineChart, BarChart } from 'echarts/charts'
@@ -505,6 +471,7 @@ import { formatTimeShort, formatTime } from '../../utils/format'
 import StatCards from './StatCards.vue'
 import ModulePies from './ModulePies.vue'
 import LvsConnChart from './LvsConnChart.vue'
+import DateRangeSelector from '../../components/DateRangeSelector.vue'
 
 use([
   PieChart,
@@ -585,6 +552,20 @@ function getFullscreenCardStyle(chartName) {
 
 const MODULE_NAMES = { lvs: 'LVS', nginx: 'Nginx', k8s: 'K8S', preprod: '预生产' }
 
+// ---- 日期工具 ----
+function formatDate(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+const dateShortcuts = [
+  { text: '最近 7 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 7); return [s, e] } },
+  { text: '最近 30 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 30); return [s, e] } },
+  { text: '最近 90 天', value: () => { const e = new Date(); const s = new Date(); s.setDate(s.getDate() - 90); return [s, e] } },
+]
+
 // ---- 数据 ----
 // 在线用户列表
 const onlineUsersDialogVisible = ref(false)
@@ -604,13 +585,11 @@ const lvsStats = ref(null)
 const nginxStats = ref(null)
 const k8sStats = ref(null)
 const preprodStats = ref(null)
-const deployGranularity = ref('day')
-const loginGranularity = ref('day')
+const activityDateRange = ref(null)
 const deployChartData = shallowRef([])
 const loginChartData = shallowRef([])
 const actionStatsData = shallowRef([])
 const activeActionTab = ref('lvs')
-const actionGranularity = ref('day')
 
 // ---- tooltip 配置 ----
 function tooltipConf(extra = {}) {
@@ -922,6 +901,7 @@ const loginBarOption = computed(() => {
 // ---- K8S 项目发布统计 ----
 const k8sProjectGranularity = ref('day')
 const k8sServerFilter = ref('')
+const k8sDateRange = ref(null)
 const k8sServers = shallowRef([])
 const k8sProjectSummary = ref({ total: 0, success: 0, failed: 0, full_ops: 0 })
 const k8sProjectTrend = shallowRef([])
@@ -930,9 +910,10 @@ const k8sProjectByAction = shallowRef([])
 
 const k8sProjectPage = ref(1)
 const k8sProjectPageSize = 15
+const k8sProjectSortAsc = ref(false)
 
 const k8sSortedProjects = computed(() =>
-  [...k8sProjectByProject.value].sort((a, b) => b.count - a.count)
+  [...k8sProjectByProject.value].sort((a, b) => k8sProjectSortAsc.value ? a.count - b.count : b.count - a.count)
 )
 
 const k8sPagedProjects = computed(() => {
@@ -956,7 +937,15 @@ const K8S_ACTION_NAMES = {
 const k8sTrendOption = computed(() => {
   if (!k8sProjectTrend.value.length) return {}
   const periods = [...new Set(k8sProjectTrend.value.map((t) => t.period))].sort()
-  const projects = [...new Set(k8sProjectTrend.value.map((t) => t.project))]
+  // 计算每个项目的总次数，取 top 5
+  const projectCounts = {}
+  k8sProjectTrend.value.forEach((t) => {
+    projectCounts[t.project] = (projectCounts[t.project] || 0) + t.count
+  })
+  const projects = Object.entries(projectCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name]) => name)
   const series = projects.map((proj) => {
     const map = {}
     k8sProjectTrend.value
@@ -1011,14 +1000,10 @@ const k8sActionPieOption = computed(() => {
   }
 })
 
-const k8sProjectRanking = computed(() => [...k8sProjectByProject.value].sort((a, b) => b.count - a.count).slice(0, 10))
-function k8sRankingBarWidth(count) {
-  return Math.round((count / (k8sProjectRanking.value[0]?.count || 1)) * 100) + '%'
-}
-
 // ---- 预生产扩缩容统计 ----
 const preprodProjectGranularity = ref('day')
 const preprodServerFilter = ref('')
+const preprodDateRange = ref(null)
 const preprodServers = shallowRef([])
 const preprodProjectSummary = ref({ total: 0, success: 0, failed: 0, full_ops: 0 })
 const preprodProjectTrend = shallowRef([])
@@ -1027,9 +1012,10 @@ const preprodProjectByAction = shallowRef([])
 
 const preprodProjectPage = ref(1)
 const preprodProjectPageSize = 15
+const preprodProjectSortAsc = ref(false)
 
 const preprodSortedProjects = computed(() =>
-  [...preprodProjectByProject.value].sort((a, b) => b.count - a.count)
+  [...preprodProjectByProject.value].sort((a, b) => preprodProjectSortAsc.value ? a.count - b.count : b.count - a.count)
 )
 
 const preprodPagedProjects = computed(() => {
@@ -1053,7 +1039,15 @@ const PREPROD_ACTION_NAMES = {
 const preprodTrendOption = computed(() => {
   if (!preprodProjectTrend.value.length) return {}
   const periods = [...new Set(preprodProjectTrend.value.map((t) => t.period))].sort()
-  const projects = [...new Set(preprodProjectTrend.value.map((t) => t.project))]
+  // 计算每个项目的总次数，取 top 5
+  const projectCounts = {}
+  preprodProjectTrend.value.forEach((t) => {
+    projectCounts[t.project] = (projectCounts[t.project] || 0) + t.count
+  })
+  const projects = Object.entries(projectCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name]) => name)
   const series = projects.map((proj) => {
     const map = {}
     preprodProjectTrend.value
@@ -1111,13 +1105,6 @@ const preprodActionPieOption = computed(() => {
   }
 })
 
-const preprodProjectRanking = computed(() =>
-  [...preprodProjectByProject.value].sort((a, b) => b.count - a.count).slice(0, 10)
-)
-function preprodRankingBarWidth(count) {
-  return Math.round((count / (preprodProjectRanking.value[0]?.count || 1)) * 100) + '%'
-}
-
 // ---- 数据加载 ----
 async function loadStats() {
   statsLoading.value = true
@@ -1167,33 +1154,23 @@ async function loadRemoteStats() {
   }
 }
 
-async function loadActivityStats() {
+async function loadAllActivityStats() {
+  if (!activityDateRange.value || activityDateRange.value.length !== 2) return
   try {
-    const res = await getActivityStats({ granularity: deployGranularity.value })
-    deployChartData.value = res.deploy_stats || []
-  } catch {}
-}
-
-async function loadLoginStats() {
-  try {
-    const res = await getActivityStats({ granularity: loginGranularity.value })
-    loginChartData.value = res.login_stats || []
-    if (loginGranularity.value === 'day') {
-      const today = new Date().toISOString().slice(0, 10)
-      const todayLogins = (res.login_stats || []).filter((d) => d.period === today)
-      todayLoginSuccess.value = todayLogins.find((d) => d.status === 'success')?.count || 0
-      todayLoginFailed.value = todayLogins.find((d) => d.status === 'failed')?.count || 0
+    const params = {
+      start_date: activityDateRange.value[0],
+      end_date: activityDateRange.value[1],
     }
-  } catch {}
-}
-
-async function loadActionStats() {
-  try {
-    const res = await getActivityStats({
-      granularity: deployGranularity.value,
-      action_granularity: actionGranularity.value,
-    })
+    const res = await getActivityStats(params)
+    deployChartData.value = res.deploy_stats || []
+    loginChartData.value = res.login_stats || []
     actionStatsData.value = res.action_stats || []
+
+    // 更新今日登录统计卡片
+    const today = new Date().toISOString().slice(0, 10)
+    const todayLogins = (res.login_stats || []).filter((d) => d.period === today)
+    todayLoginSuccess.value = todayLogins.find((d) => d.status === 'success')?.count || 0
+    todayLoginFailed.value = todayLogins.find((d) => d.status === 'failed')?.count || 0
   } catch {}
 }
 
@@ -1201,6 +1178,10 @@ async function loadK8sProjectStats() {
   try {
     const params = { granularity: k8sProjectGranularity.value }
     if (k8sServerFilter.value) params.server_name = k8sServerFilter.value
+    if (k8sDateRange.value && k8sDateRange.value.length === 2) {
+      params.start_date = k8sDateRange.value[0]
+      params.end_date = k8sDateRange.value[1]
+    }
     const res = await getK8sProjectStats(params)
     k8sProjectSummary.value = res.summary || { total: 0, success: 0, failed: 0, full_ops: 0 }
     k8sProjectTrend.value = res.trend || []
@@ -1215,6 +1196,10 @@ async function loadPreprodProjectStats() {
   try {
     const params = { granularity: preprodProjectGranularity.value }
     if (preprodServerFilter.value) params.server_name = preprodServerFilter.value
+    if (preprodDateRange.value && preprodDateRange.value.length === 2) {
+      params.start_date = preprodDateRange.value[0]
+      params.end_date = preprodDateRange.value[1]
+    }
     const res = await getPreprodProjectStats(params)
     preprodProjectSummary.value = res.summary || { total: 0, success: 0, failed: 0, full_ops: 0 }
     preprodProjectTrend.value = res.trend || []
@@ -1238,15 +1223,16 @@ async function loadPreprodServers() {
   } catch {}
 }
 
+watch(activityDateRange, () => { loadAllActivityStats() })
 watch(k8sServerFilter, () => loadK8sProjectStats())
 watch(preprodServerFilter, () => loadPreprodProjectStats())
+watch(k8sDateRange, () => { k8sProjectPage.value = 1; loadK8sProjectStats() })
+watch(preprodDateRange, () => { preprodProjectPage.value = 1; loadPreprodProjectStats() })
 
 function refreshAll() {
   loadStats()
   loadRemoteStats()
-  loadActivityStats()
-  loadLoginStats()
-  loadActionStats()
+  loadAllActivityStats()
   loadK8sProjectStats()
   loadPreprodProjectStats()
   lastUpdated.value = new Date()
@@ -1256,11 +1242,9 @@ onMounted(async () => {
   // 第一优先级：核心统计卡片和远程状态
   loadStats()
   loadRemoteStats()
-  loadLoginStats()
   // 第二优先级：图表数据（延迟一帧，让首屏先渲染）
   await nextTick()
-  loadActivityStats()
-  loadActionStats()
+  loadAllActivityStats()
   // 第三优先级：项目统计和服务器列表（更延迟）
   setTimeout(() => {
     loadK8sServers()
@@ -1276,7 +1260,7 @@ onActivated(() => {
   if (!lastUpdated.value || Date.now() - lastUpdated.value.getTime() > 5 * 60 * 1000) {
     loadStats()
     loadRemoteStats()
-    loadLoginStats()
+    loadAllActivityStats()
     lastUpdated.value = new Date()
   }
 })
@@ -1586,10 +1570,24 @@ onActivated(() => {
   padding-right: 12px;
 }
 .project-list-col-count {
-  width: 60px;
+  width: 80px;
   text-align: right;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+.project-list-col-count.sortable {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.project-list-col-count.sortable:hover {
+  color: var(--el-color-primary);
+}
+.sort-icon {
+  font-size: 12px;
 }
 .project-list-pagination {
   display: flex;
