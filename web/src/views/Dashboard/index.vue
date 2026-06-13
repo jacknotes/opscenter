@@ -1413,6 +1413,9 @@ onActivated(() => {
 }
 
 /* 全屏模式 */
+.dashboard.has-fullscreen {
+  min-height: calc(100vh - 40px);
+}
 .fullscreen-active-row {
   flex: 1 !important;
   min-height: 0;
