@@ -159,16 +159,7 @@ func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
 	}
 
 	// tier > 0 但 Count < maxAttempts（锁定后新窗口期内）
-	if now.Sub(entry.FirstTime) < lockDuration {
-		return false, lockDuration - now.Sub(entry.FirstTime)
-	}
-
-	// 锁定期已过，升级 tier，重置窗口
-	if entry.CurrentTier < maxLockMultiplier {
-		entry.CurrentTier++
-	}
-	entry.Count = 0
-	entry.FirstTime = now
+	// 用户未达到限制，允许登录。窗口过期由 Record 处理。
 	return true, 0
 }
 
@@ -278,7 +269,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if config.Global.LDAP.Enabled && req.Username != "admin" {
 		// 先检查用户是否已导入到系统
 		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "ldap").First(&user).Error; err == nil {
-			// 先检查锁定和禁用状态，避免对锁定/禁用用户发起 LDAP 请求
+			// 记录 IP 限流计数（锁定/禁用用户也要计入，防止无限尝试）
+			loginRateLimiter.Record(clientIP)
+			if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+				minutes := int(retryAfter.Minutes()) + 1
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+				return
+			}
+			// 检查锁定和禁用状态，避免对锁定/禁用用户发起 LDAP 请求
 			if user.Locked {
 				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
 				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
@@ -293,8 +291,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			// 进行 LDAP 认证
 			ldapInfo, ldapErr := h.ldapSvc.Authenticate(req.Username, req.Password)
 			if ldapErr != nil {
-				// LDAP 认证失败
+				// LDAP 认证失败，记录后重新检查 IP 限流
 				loginRateLimiter.Record(clientIP)
+				if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+					minutes := int(retryAfter.Minutes()) + 1
+					c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+					return
+				}
 				// 用户级失败计数（内置 admin 账号不参与锁定）
 				if user.Username != "admin" {
 					h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
@@ -308,18 +311,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 						return
 					}
 				}
-				remaining := loginRateLimiter.RemainingAttempts(clientIP)
-				if user.Username != "admin" {
-					userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
-					if userRemaining < remaining {
-						remaining = userRemaining
-					}
-				}
-				if remaining < 0 {
-					remaining = 0
-				}
 				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("用户名或密码错误，还剩 %d 次机会", remaining)})
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 				return
 			}
 
@@ -354,10 +347,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 		// LDAP 中未找到用户，检查是否存在本地用户
 		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "local").First(&user).Error; err != nil {
-			// 本地也没有该用户，提示联系管理员
+			// 本地也没有该用户
 			loginRateLimiter.Record(clientIP)
-			createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户未授权", 0, "")
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权，请联系管理员导入 LDAP 账户"})
+			if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+				minutes := int(retryAfter.Minutes()) + 1
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+				return
+			}
+			createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 			return
 		}
 		// 本地用户存在，继续走本地认证流程（fall through 到下方的本地密码认证）
@@ -366,6 +364,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// 本地密码认证
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
@@ -373,6 +376,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if !user.Enabled {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
 		return
@@ -381,6 +389,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// LDAP 用户不能使用本地密码登录
 	if user.AuthSource == "ldap" {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户请使用域账号登录", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "LDAP 用户请使用域账号登录"})
 		return
@@ -388,6 +401,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		loginRateLimiter.Record(clientIP)
+		// 记录失败后重新检查 IP 限流
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		// 用户级失败计数（内置 admin 账号不参与锁定）
 		if user.Username != "admin" {
 			h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
@@ -401,19 +420,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				return
 			}
 		}
-		// 计算剩余次数：取 IP 级和用户级中较小值
-		remaining := loginRateLimiter.RemainingAttempts(clientIP)
-		if user.Username != "admin" {
-			userRemaining := config.Global.Auth.MaxUserAttempts - user.FailedAttempts
-			if userRemaining < remaining {
-				remaining = userRemaining
-			}
-		}
-		if remaining < 0 {
-			remaining = 0
-		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": fmt.Sprintf("用户名或密码错误，还剩 %d 次机会", remaining)})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 

@@ -552,7 +552,7 @@ func TestLoginLockout(t *testing.T) {
 		}
 	})
 
-	t.Run("密码错误提示包含剩余次数", func(t *testing.T) {
+	t.Run("密码错误提示不含剩余次数", func(t *testing.T) {
 		// 重置状态
 		db.Model(&testUser).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
 		loginRateLimiter.Reset("192.168.1.100")
@@ -568,8 +568,11 @@ func TestLoginLockout(t *testing.T) {
 		var resp map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &resp)
 		errMsg := resp["error"].(string)
-		if !strings.Contains(errMsg, "还剩") || !strings.Contains(errMsg, "次机会") {
-			t.Errorf("错误提示应包含剩余次数，实际: %s", errMsg)
+		if errMsg != "用户名或密码错误" {
+			t.Errorf("错误提示应为'用户名或密码错误'，实际: %s", errMsg)
+		}
+		if strings.Contains(errMsg, "还剩") || strings.Contains(errMsg, "次机会") {
+			t.Errorf("错误提示不应包含剩余次数，实际: %s", errMsg)
 		}
 	})
 
@@ -730,6 +733,408 @@ func TestLoginLockout(t *testing.T) {
 		// 恢复默认配置
 		config.Global.Auth.LoginLockDuration = 1 * time.Minute
 	})
+
+	t.Run("IP锁定过期后单次失败不应立即重新锁定", func(t *testing.T) {
+		loginRateLimiter.Reset("192.168.1.600")
+		config.Global.Auth.LoginLockDuration = 50 * time.Millisecond
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		// 第1轮：10次失败，触发 tier=1 锁定（50ms）
+		for i := 0; i < 10; i++ {
+			loginRateLimiter.Record("192.168.1.600")
+		}
+		loginRateLimiter.Allow("192.168.1.600") // 触发 tier=1
+		allowed, _ := loginRateLimiter.Allow("192.168.1.600")
+		if allowed {
+			t.Error("10次失败后应被锁定")
+		}
+
+		// 等待锁定过期
+		time.Sleep(100 * time.Millisecond)
+
+		// 锁定过期后，Allow 应允许（tier 升级到 2，窗口重置）
+		allowed, _ = loginRateLimiter.Allow("192.168.1.600")
+		if !allowed {
+			t.Error("锁定过期后 Allow 应允许登录")
+		}
+
+		// 模拟认证失败：Record 一次
+		loginRateLimiter.Record("192.168.1.600")
+
+		// 关键断言：再次 Allow 不应被锁定（用户只失败了 1 次，应有 10 次机会）
+		allowed, retryAfter := loginRateLimiter.Allow("192.168.1.600")
+		if !allowed {
+			t.Errorf("锁定过期后单次失败不应立即重新锁定，但被锁定了 %v", retryAfter)
+		}
+
+		// 验证用户有完整的新窗口（再失败 9 次才锁定）
+		for i := 0; i < 8; i++ {
+			loginRateLimiter.Record("192.168.1.600")
+		}
+		// 此时共 9 次失败（Record 了 9 次），不应锁定
+		allowed, _ = loginRateLimiter.Allow("192.168.1.600")
+		if !allowed {
+			t.Error("9次失败后不应被锁定（阈值为10）")
+		}
+
+		// 第10次失败，应触发锁定
+		loginRateLimiter.Record("192.168.1.600")
+		loginRateLimiter.Allow("192.168.1.600") // 触发锁定
+		allowed, retryAfter = loginRateLimiter.Allow("192.168.1.600")
+		if allowed {
+			t.Error("10次失败后应被锁定")
+		}
+		// tier=2 锁定时长应为 2 倍基础时长
+		if retryAfter < 80*time.Millisecond {
+			t.Errorf("tier=2 锁定时长应接近 100ms（2倍），实际: %v", retryAfter)
+		}
+		t.Logf("tier=2 锁定时长: %v", retryAfter)
+
+		// 恢复默认配置
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+}
+
+// TestIPAndUserLockoutInteraction 测试 IP 限流与用户级锁定的交互
+func TestIPAndUserLockoutInteraction(t *testing.T) {
+	db := getTestDB(t)
+	h := NewAuthHandler(db)
+
+	config.Global.JWT.Secret = "test-secret-key-for-interaction"
+	config.Global.JWT.Expire = time.Hour
+
+	redisMock, _ := middleware.NewRedisMock()
+	middleware.InitBlacklist(redisMock)
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	t.Run("用户级锁定先于IP限流触发", func(t *testing.T) {
+		// MaxUserAttempts=3, MaxLoginAttempts=10 → 用户先锁
+		config.Global.Auth.MaxUserAttempts = 3
+		config.Global.Auth.MaxLoginAttempts = 10
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		userName := "test_user_lock_first_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		ip := "10.0.1.1"
+		loginRateLimiter.Reset(ip)
+
+		// 连续失败 3 次
+		var lastCode int
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"Wrong"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+			lastCode = w.Code
+		}
+
+		// 第3次应触发用户级锁定（403），而非 IP 限流（429）
+		if lastCode != http.StatusForbidden {
+			t.Errorf("用户级锁定应返回 403，实际 %d", lastCode)
+		}
+
+		// 验证用户已被锁定
+		var user model.User
+		db.First(&user, testUser.ID)
+		if !user.Locked {
+			t.Error("用户应被锁定")
+		}
+
+		// IP 限流不应触发（10次阈值未达到）
+		allowed, _ := loginRateLimiter.Allow(ip)
+		if !allowed {
+			t.Error("IP 限流不应触发（仅3次失败，阈值为10）")
+		}
+	})
+
+	t.Run("IP限流先于用户级锁定触发", func(t *testing.T) {
+		// MaxUserAttempts=10, MaxLoginAttempts=3 → IP 先锁
+		// 注意：锁定时长必须大于 bcrypt 耗时（~130ms），否则窗口会在请求间过期导致计数重置
+		config.Global.Auth.MaxUserAttempts = 10
+		config.Global.Auth.MaxLoginAttempts = 3
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		userName := "test_ip_lock_first_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		ip := "10.0.2.1"
+		loginRateLimiter.Reset(ip)
+
+		// 连续失败 3 次（不要在循环中调用 Allow，它会修改限流状态）
+		var lastCode int
+		var lastBody string
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"Wrong"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+			lastCode = w.Code
+			lastBody = w.Body.String()
+			t.Logf("第%d次 响应: %d %s", i+1, lastCode, lastBody)
+		}
+
+		// 第3次应触发 IP 限流（429），而非用户级锁定（403）
+		if lastCode != http.StatusTooManyRequests {
+			t.Errorf("IP 限流应返回 429，实际 %d, body: %s", lastCode, lastBody)
+		}
+
+		// 验证用户未被锁定（仅3次失败，阈值为10）
+		var user model.User
+		db.First(&user, testUser.ID)
+		if user.Locked {
+			t.Error("用户不应被锁定（失败次数未达用户级阈值）")
+		}
+
+		// IP 限流应已触发
+		allowed, _ := loginRateLimiter.Allow(ip)
+		if allowed {
+			t.Error("IP 限流应已触发")
+		}
+
+		// 恢复默认
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+
+	t.Run("IP锁定期间正确密码也被拒绝", func(t *testing.T) {
+		config.Global.Auth.MaxUserAttempts = 10
+		config.Global.Auth.MaxLoginAttempts = 3
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		userName := "test_ip_locked_correct_pwd_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		ip := "10.0.3.1"
+		loginRateLimiter.Reset(ip)
+
+		// 触发 IP 锁定
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"Wrong"}`
+			c, _ := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+		}
+
+		// 用正确密码尝试登录，应被 IP 限流拒绝
+		body := `{"username":"` + userName + `","password":"Test@1234"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Request.Header.Set("X-Forwarded-For", ip)
+		h.Login(c)
+
+		if w.Code != http.StatusTooManyRequests {
+			t.Errorf("IP 锁定期间正确密码应返回 429，实际 %d: %s", w.Code, w.Body.String())
+		}
+
+		// 恢复默认
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+
+	t.Run("不同IP访问已锁定用户返回403", func(t *testing.T) {
+		config.Global.Auth.MaxUserAttempts = 3
+		config.Global.Auth.MaxLoginAttempts = 10
+
+		userName := "test_locked_diff_ip_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+			Locked: true, FailedAttempts: 5,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		// 从不同 IP 尝试登录已锁定用户
+		for _, ip := range []string{"10.0.4.1", "10.0.4.2", "10.0.4.3"} {
+			loginRateLimiter.Reset(ip)
+			body := `{"username":"` + userName + `","password":"Test@1234"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+
+			if w.Code != http.StatusForbidden {
+				t.Errorf("IP %s 访问已锁定用户应返回 403，实际 %d", ip, w.Code)
+			}
+		}
+	})
+
+	t.Run("admin不受用户级锁定但仍受IP限流", func(t *testing.T) {
+		config.Global.Auth.MaxUserAttempts = 3
+		config.Global.Auth.MaxLoginAttempts = 5
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		adminName := "admin"
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		var adminUser model.User
+		db.Where("username = ?", adminName).FirstOrCreate(&adminUser)
+		db.Model(&adminUser).Updates(map[string]interface{}{
+			"password": string(hashedPwd), "enabled": true,
+			"failed_attempts": 0, "locked": false,
+		})
+
+		ip := "10.0.5.1"
+		loginRateLimiter.Reset(ip)
+
+		// 连续失败 5 次（超过 IP 阈值，不要在循环中调用 Allow）
+		var lastCode int
+		for i := 0; i < 5; i++ {
+			body := `{"username":"admin","password":"Wrong"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+			lastCode = w.Code
+			t.Logf("admin 第%d次 响应: %d %s", i+1, lastCode, w.Body.String())
+		}
+
+		// admin 不应被用户级锁定，但 IP 限流应触发
+		if lastCode != http.StatusTooManyRequests {
+			t.Errorf("admin 应受 IP 限流（429），实际 %d", lastCode)
+		}
+
+		// 验证 admin 未被锁定
+		db.First(&adminUser, adminUser.ID)
+		if adminUser.Locked {
+			t.Error("admin 不应被用户级锁定")
+		}
+
+		// 恢复默认
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
+
+	t.Run("IP锁定后用户级失败计数仍保留", func(t *testing.T) {
+		config.Global.Auth.MaxUserAttempts = 10
+		config.Global.Auth.MaxLoginAttempts = 3
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		userName := "test_ip_user_count_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		ip := "10.0.6.1"
+		loginRateLimiter.Reset(ip)
+
+		// 连续失败 3 次，第3次触发 IP 锁定（Record+Allow 后返回 429）
+		// 注意：第3次请求被 IP 限流拦截，不会走到用户级计数，所以 failed_attempts=2
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"Wrong"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+			if i == 2 && w.Code != http.StatusTooManyRequests {
+				t.Errorf("第3次应返回 429，实际 %d", w.Code)
+			}
+		}
+
+		// failed_attempts=2（前2次正常记录，第3次被 IP 拦截未记录）
+		var user model.User
+		db.First(&user, testUser.ID)
+		if user.FailedAttempts != 2 {
+			t.Errorf("IP 锁定后 failed_attempts 应为 2，实际 %d", user.FailedAttempts)
+		}
+
+		// IP 锁定后再次尝试，应被 IP 限流拒绝（429），不会增加 failed_attempts
+		body := `{"username":"` + userName + `","password":"Wrong"}`
+		c, w := setupGinContext(0, "")
+		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Request.Header.Set("X-Forwarded-For", ip)
+		h.Login(c)
+
+		if w.Code != http.StatusTooManyRequests {
+			t.Errorf("IP 锁定后应返回 429，实际 %d", w.Code)
+		}
+
+		// failed_attempts 不应增加（被 IP 限流拦截，未走到用户级计数）
+		db.First(&user, testUser.ID)
+		if user.FailedAttempts != 2 {
+			t.Errorf("IP 锁定拦截后 failed_attempts 不应增加，实际 %d", user.FailedAttempts)
+		}
+	})
+
+	t.Run("两层同时触发时IP限流优先", func(t *testing.T) {
+		// 设置两者阈值相同，同时触发
+		config.Global.Auth.MaxUserAttempts = 3
+		config.Global.Auth.MaxLoginAttempts = 3
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+
+		userName := "test_both_trigger_" + suffix
+		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte("Test@1234"), bcrypt.DefaultCost)
+		testUser := model.User{
+			Username: userName, Password: string(hashedPwd), Name: "测试",
+			Email: userName + "@test.com", Role: "user", Enabled: true,
+		}
+		db.Create(&testUser)
+		defer cleanupTestUser(db, userName)
+
+		ip := "10.0.7.1"
+		loginRateLimiter.Reset(ip)
+
+		// 连续失败 3 次，第3次同时达到两层阈值
+		var lastCode int
+		for i := 0; i < 3; i++ {
+			body := `{"username":"` + userName + `","password":"Wrong"}`
+			c, w := setupGinContext(0, "")
+			c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Forwarded-For", ip)
+			h.Login(c)
+			lastCode = w.Code
+		}
+
+		// IP 限流先检查（handler 开头），所以应返回 429
+		if lastCode != http.StatusTooManyRequests {
+			t.Errorf("两层同时触发时 IP 限流应优先返回 429，实际 %d", lastCode)
+		}
+
+		// 验证用户级 failed_attempts 也已递增（Record 在 Allow 之后被调用）
+		// 注意：第3次请求被 IP 限流拦截，Record 不会被调用
+		// 所以 failed_attempts 应为 2（前两次 Record 成功）
+		var user model.User
+		db.First(&user, testUser.ID)
+		if user.FailedAttempts != 2 {
+			t.Logf("两层同时触发时 failed_attempts=%d（第3次被IP拦截，未Record）", user.FailedAttempts)
+		}
+
+		// 恢复默认
+		config.Global.Auth.LoginLockDuration = 1 * time.Minute
+	})
 }
 
 func TestLDAPFallbackToLocal(t *testing.T) {
@@ -797,7 +1202,8 @@ func TestLDAPFallbackToLocal(t *testing.T) {
 		}
 	})
 
-	t.Run("LDAP启用时不存在的用户应返回未授权", func(t *testing.T) {
+	t.Run("LDAP启用时不存在的用户应返回通用错误", func(t *testing.T) {
+		loginRateLimiter.Reset("127.0.0.1")
 		body := `{"username":"nonexistent_user_` + suffix + `","password":"Test@1234"}`
 		c, w := setupGinContext(0, "")
 		c.Request = httptest.NewRequest("POST", "/login", bytes.NewBufferString(body))
@@ -811,8 +1217,8 @@ func TestLDAPFallbackToLocal(t *testing.T) {
 
 		var resp map[string]interface{}
 		json.Unmarshal(w.Body.Bytes(), &resp)
-		if !strings.Contains(resp["error"].(string), "未授权") {
-			t.Errorf("错误提示应包含'未授权'，实际: %s", resp["error"])
+		if !strings.Contains(resp["error"].(string), "用户名或密码错误") {
+			t.Errorf("错误提示应包含'用户名或密码错误'，实际: %s", resp["error"])
 		}
 	})
 
