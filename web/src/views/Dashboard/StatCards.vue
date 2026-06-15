@@ -1,6 +1,6 @@
 <template>
   <div class="dash-row stat-row">
-    <div class="number-card number-card--cyan" style="cursor: pointer" @click="emit('show-online-users')">
+    <div class="number-card number-card--cyan" :style="isAdmin ? 'cursor: pointer' : 'cursor: default'" @click="isAdmin && emit('show-online-users')">
       <div class="number-info">
         <div class="number-label">在线用户数</div>
         <div class="number-value">{{ animatedOnlineUsers }}</div>
@@ -32,6 +32,7 @@ const props = defineProps({
   onlineUsers: { type: Number, default: 0 },
   loginSuccess: { type: Number, default: 0 },
   loginFailed: { type: Number, default: 0 },
+  isAdmin: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['show-online-users'])

@@ -9,7 +9,7 @@
             <el-button :type="batchToggleType" @click="handleBatchToggle">{{ batchToggleLabel }}</el-button>
             <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
             <el-dropdown @command="handleMoreCommand">
-              <el-button type="info">
+              <el-button type="info" class="el-button--cyan">
                 更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
               </el-button>
               <template #dropdown>
