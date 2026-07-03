@@ -111,13 +111,18 @@ html {
   background-color: var(--bg-elevated) !important;
 }
 
-/* Pagination Wrapper - 统一分页器布局 */
+/* Pagination Wrapper - 统一分页器布局（固定在卡片底部） */
 .pagination-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 16px;
   padding: 8px 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--card-bg, #fff);
+  z-index: 5;
+  border-top: 1px solid var(--el-border-lighter, #e4e7ed);
 }
 .pagination-left {
   display: flex;
