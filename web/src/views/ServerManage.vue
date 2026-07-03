@@ -31,6 +31,7 @@
         ref="tableRef"
         v-force-reflow
         :data="paginatedServers"
+        :row-key="(row) => row.id"
         stripe
         border
         :row-class-name="tableRowClassName"
@@ -88,7 +89,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100, 200]"
+          :page-sizes="[10, 20, 50, 100]"
           :total="filteredServers.length"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -200,14 +201,16 @@ import {
   toggleServerEnabled,
 } from '../api'
 import { clearServerCache } from '../composables/useServerSelector'
+import { useSelection } from '../composables/useSelection'
 import { showBatchResult } from '../utils/message'
+import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 
 const servers = shallowRef([])
 const searchQuery = ref('')
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const sortProp = ref('')
 const sortOrder = ref('')
 
@@ -281,9 +284,17 @@ const editId = ref(null)
 const submitting = ref(false)
 const loading = ref(false)
 const form = ref(getDefaultForm())
-const selectedRow = ref(null)
-const selectedRows = ref([])
-const tableRef = ref(null)
+// 跨页选择管理
+const {
+  selectedIds,
+  tableRef,
+  handleSelectionChange,
+  handleSizeChange,
+  handleCurrentChange,
+} = useSelection('id', paginatedServers, { search: searchQuery, currentPage })
+
+const selectedRows = computed(() => servers.value.filter((s) => selectedIds.value.has(s.id)))
+const selectedRow = computed(() => (selectedRows.value.length > 0 ? selectedRows.value[selectedRows.value.length - 1] : null))
 
 function getDefaultForm() {
   return {
@@ -311,36 +322,10 @@ function tableRowClassName({ row }) {
   return ''
 }
 
-function handleSelectionChange(rows) {
-  selectedRows.value = rows
-  if (rows.length === 1) {
-    selectedRow.value = rows[0]
-  } else if (rows.length > 1) {
-    selectedRow.value = rows[rows.length - 1]
-  } else {
-    selectedRow.value = null
-  }
-}
-
 function handleSortChange({ prop, order, column }) {
   sortProp.value = prop || column?.columnKey || ''
   sortOrder.value = order || ''
 }
-
-function handleSizeChange() {
-  currentPage.value = 1
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-function handleCurrentChange() {
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-watch(searchQuery, () => {
-  currentPage.value = 1
-})
 
 onMounted(() => {
   loadData()
@@ -432,8 +417,7 @@ async function handleBatchToggle() {
       enabled
     )
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -452,8 +436,7 @@ async function handleBatchDelete() {
     })
     const res = await batchDeleteServers(selectedRows.value.map((r) => r.id))
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {

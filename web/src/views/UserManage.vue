@@ -39,6 +39,7 @@
         ref="tableRef"
         v-force-reflow
         :data="paginatedUsers"
+        :row-key="(row) => row.id"
         stripe
         border
         :row-class-name="({ row }) => (row.enabled === false ? 'disabled-row' : '')"
@@ -94,7 +95,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100, 200]"
+          :page-sizes="[10, 20, 50, 100]"
           :total="filteredUsers.length"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -191,7 +192,7 @@
           <el-pagination
             v-model:current-page="ldapCurrentPage"
             v-model:page-size="ldapPageSize"
-            :page-sizes="[20, 50, 100]"
+            :page-sizes="[10, 20, 50, 100]"
             :total="filteredLdapUsers.length"
             layout="total, sizes, prev, pager, next"
             small
@@ -233,6 +234,8 @@ import {
 import { showBatchResult } from '../utils/message'
 import { formatTime } from '../utils/format'
 import { useUserStore } from '../stores/user'
+import { useSelection } from '../composables/useSelection'
+import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, UserFilled, ArrowDown } from '@element-plus/icons-vue'
 
@@ -242,7 +245,7 @@ const currentUserId = computed(() => userStore.userInfo?.id)
 const users = ref([])
 const searchQuery = ref('')
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
 const sortProp = ref('')
 const sortOrder = ref('')
 
@@ -328,9 +331,17 @@ const editId = ref(null)
 const submitting = ref(false)
 const loading = ref(false)
 const form = ref({ username: '', password: '', name: '', email: '', role: 'user', enabled: true })
-const selectedRow = ref(null)
-const selectedRows = ref([])
-const tableRef = ref(null)
+// 跨页选择管理
+const {
+  selectedIds,
+  tableRef,
+  handleSelectionChange,
+  handleSizeChange,
+  handleCurrentChange,
+} = useSelection('id', paginatedUsers, { search: searchQuery, currentPage })
+
+const selectedRows = computed(() => users.value.filter((u) => selectedIds.value.has(u.id)))
+const selectedRow = computed(() => (selectedRows.value.length > 0 ? selectedRows.value[selectedRows.value.length - 1] : null))
 
 const resetPwdVisible = ref(false)
 const resetPwdForm = ref({ id: null, username: '', password: '' })
@@ -344,7 +355,7 @@ const ldapUsers = ref([])
 const ldapSearch = ref('')
 const ldapTableRef = ref(null)
 const ldapCurrentPage = ref(1)
-const ldapPageSize = ref(20)
+const ldapPageSize = ref(DEFAULT_PAGE_SIZE)
 const selectedLdapUsernames = ref(new Set())
 const ldapSortProp = ref('')
 const ldapSortOrder = ref('')
@@ -409,39 +420,10 @@ watch(
   { flush: 'post' }
 )
 
-function handleSelectionChange(rows) {
-  selectedRows.value = rows
-  // 单选逻辑：用于编辑/禁用/重置密码等操作
-  if (rows.length === 1) {
-    selectedRow.value = rows[0]
-  } else if (rows.length > 1) {
-    selectedRow.value = rows[rows.length - 1]
-  } else {
-    selectedRow.value = null
-  }
-}
-
-function handleSizeChange() {
-  currentPage.value = 1
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-function handleCurrentChange() {
-  // 页码变化时清除选择
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
 function handleSortChange({ prop, order, column }) {
   sortProp.value = prop || column?.columnKey || ''
   sortOrder.value = order || ''
 }
-
-// 搜索时重置到第一页
-watch(searchQuery, () => {
-  currentPage.value = 1
-})
 
 onMounted(() => {
   loadData()
@@ -552,8 +534,7 @@ async function handleBatchToggle() {
       enabled
     )
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -582,8 +563,7 @@ async function handleBatchDelete() {
     })
     const res = await batchDeleteUsers(deletable.map((r) => r.id))
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -606,8 +586,7 @@ async function handleBatchUnlock() {
     await ElMessageBox.confirm(`确定要解锁以下 ${lockable.length} 个用户吗？\n${names}`, '批量解锁')
     const res = await batchUnlockUsers(lockable.map((r) => r.id))
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -655,8 +634,7 @@ async function handleBatchKick() {
     })
     const res = await batchKickUsers(kickable.map((r) => r.id))
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {

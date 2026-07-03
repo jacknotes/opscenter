@@ -42,7 +42,7 @@ export const MODULE_TAG_TYPES: Record<string, string> = {
 export const PAGE_SIZES = [10, 20, 50, 100] as const
 
 /** 默认分页大小 */
-export const DEFAULT_PAGE_SIZE = 20
+export const DEFAULT_PAGE_SIZE = 10
 
 /** 自动刷新间隔（毫秒） */
 export const AUTO_REFRESH_INTERVAL_MS = 300000 // 5 分钟
