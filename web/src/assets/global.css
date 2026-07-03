@@ -76,11 +76,13 @@ html {
 
 /* Main Card - 统一卡片样式 */
 .main-card {
+  display: flex;
+  flex-direction: column;
   border: var(--card-border);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
-  overflow-y: auto;
   max-height: calc(100vh - 100px);
+  overflow: hidden;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .main-card:hover {
@@ -91,12 +93,39 @@ html {
 }
 
 .main-card :deep(.el-card__header) {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex-shrink: 0;
   background: var(--card-bg, #141722);
   border-bottom: none !important;
   padding-bottom: 0;
+}
+
+.main-card :deep(.el-card__body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.main-card :deep(.el-table) {
+  flex: 1;
+  min-height: 0;
+}
+
+.main-card :deep(.el-table__inner-wrapper) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main-card :deep(.el-table__header-wrapper) {
+  flex-shrink: 0;
+}
+
+.main-card :deep(.el-table__body-wrapper) {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
 }
 
 /* Disabled Row - 统一禁用行样式 */
@@ -113,12 +142,9 @@ html {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
   margin-top: 16px;
   padding: 8px 0;
-  position: sticky;
-  bottom: 0;
-  background: var(--card-bg, #fff);
-  z-index: 5;
   border-top: 1px solid var(--el-border-lighter, #e4e7ed);
 }
 .pagination-left {
@@ -200,6 +226,7 @@ html {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   padding: 60px 0;
   color: var(--text-secondary, #909399);
 }
