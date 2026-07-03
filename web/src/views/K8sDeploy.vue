@@ -29,7 +29,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{
+          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll()">{{
             allSelected ? '取消' : '全选'
           }}</el-button>
           <el-button type="primary" @click="handleAction('online')">{{
