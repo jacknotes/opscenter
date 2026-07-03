@@ -35,6 +35,7 @@
         stripe
         border
         :row-class-name="tableRowClassName"
+        max-height="calc(100vh - 280px)"
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
       >

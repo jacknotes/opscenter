@@ -48,7 +48,7 @@
         </div>
       </template>
 
-      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border @sort-change="handleSortChange">
+      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 280px)" @sort-change="handleSortChange">
         <el-table-column type="expand" width="50">
           <template #default="{ row }">
             <div style="padding: 10px">

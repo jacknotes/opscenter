@@ -65,6 +65,7 @@
         :row-key="(row) => row.name"
         stripe
         border
+        max-height="calc(100vh - 280px)"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="45" />
