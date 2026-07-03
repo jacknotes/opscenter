@@ -46,7 +46,6 @@
         :span-method="mainSpanMethod"
         :row-class-name="({ rowIndex }) => 'vip-group-' + (flattenedMainData[rowIndex]?.groupIdx % 2)"
         border
-        max-height="calc(100vh - 240px)"
         row-key="uid"
       >
         <el-table-column label="" width="45" align="center">

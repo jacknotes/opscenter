@@ -35,9 +35,6 @@ html {
   --dialog-lg: 700px;
   --dialog-xl: 900px;
 
-  /* Table Height Token */
-  --table-max-height: calc(100vh - 240px);
-
   /* Border Radius */
   --radius-sm: 4px;
   --radius-md: 8px;
@@ -196,8 +193,6 @@ html {
 .main-card .toolbar:has(.toolbar-search-input) {
   flex-wrap: nowrap;
 }
-
-/* 表格固定表头通过 el-table 的 max-height prop 实现 */
 
 /* Empty State - 统一空状态样式 */
 .empty-state {

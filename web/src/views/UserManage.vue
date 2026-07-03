@@ -43,7 +43,6 @@
         stripe
         border
         :row-class-name="({ row }) => (row.enabled === false ? 'disabled-row' : '')"
-        max-height="calc(100vh - 250px)"
         @selection-change="handleSelectionChange"
         @sort-change="handleSortChange"
       >
