@@ -5,26 +5,25 @@
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加用户</el-button>
           <el-button v-if="ldapEnabled" type="success" @click="showLdapImport">导入 LDAP 用户</el-button>
-          <template v-if="selectedRows.length > 0">
-            <el-button :type="batchToggleType" @click="handleBatchToggle">{{ batchToggleLabel }}</el-button>
-            <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
-            <el-dropdown @command="handleMoreCommand">
-              <el-button type="info" class="el-button--cyan">
-                更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item
-                    command="resetPwd"
-                    :disabled="selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'"
-                  >重置密码</el-dropdown-item>
-                  <el-dropdown-item command="batchUnlock">批量解锁</el-dropdown-item>
-                  <el-dropdown-item command="batchKick">批量下线</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
+          <el-dropdown @command="handleMoreCommand">
+            <el-button type="info" class="el-button--cyan">
+              更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="edit" :disabled="selectedRows.length !== 1">编辑</el-dropdown-item>
+                <el-dropdown-item command="toggle" :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-dropdown-item>
+                <el-dropdown-item
+                  command="resetPwd"
+                  divided
+                  :disabled="selectedRows.length !== 1 || selectedRow?.username === 'admin' || selectedRow?.auth_source === 'ldap'"
+                >重置密码</el-dropdown-item>
+                <el-dropdown-item command="batchUnlock" :disabled="selectedRows.length === 0">批量解锁</el-dropdown-item>
+                <el-dropdown-item command="batchKick" :disabled="selectedRows.length === 0">批量下线</el-dropdown-item>
+                <el-dropdown-item command="delete" divided :disabled="selectedRows.length === 0">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
           <el-input
             v-model="searchQuery"
@@ -312,13 +311,6 @@ const paginatedUsers = computed(() => {
   return filteredUsers.value.slice(start, start + pageSize.value)
 })
 
-const batchToggleType = computed(() => {
-  if (selectedRows.value.length === 0) return 'success'
-  // 如果选中的都是禁用状态，则显示启用按钮；否则显示禁用按钮
-  const allDisabled = selectedRows.value.every((r) => !r.enabled)
-  return allDisabled ? 'success' : 'warning'
-})
-
 const batchToggleLabel = computed(() => {
   if (selectedRows.value.length === 0) return '启用'
   const allDisabled = selectedRows.value.every((r) => !r.enabled)
@@ -507,6 +499,23 @@ async function handleToggle(row) {
   }
 }
 
+/**
+ * 生成跳过提示信息，精确描述实际跳过了哪些用户
+ * @param {Array} original - 原始选中的用户列表
+ * @param {Array} filtered - 过滤后的用户列表
+ * @param {string} extraReasons - 额外的跳过原因（如"离线用户"）
+ * @returns {string|null} 提示信息，无需提示时返回 null
+ */
+function buildSkipMessage(original, filtered, ...extraReasons) {
+  if (filtered.length >= original.length) return null
+  const skipped = original.filter((r) => !filtered.includes(r))
+  const reasons = []
+  if (skipped.some((r) => r.username === 'admin')) reasons.push('admin')
+  if (skipped.some((r) => r.id === currentUserId.value)) reasons.push('当前用户')
+  reasons.push(...extraReasons)
+  return `已自动跳过${reasons.join('、')}，将对剩余 ${filtered.length} 个用户执行操作`
+}
+
 async function handleBatchToggle() {
   if (selectedRows.value.length === 0) return
 
@@ -516,9 +525,8 @@ async function handleBatchToggle() {
     ElMessage.warning('选中的用户中没有可操作的用户')
     return
   }
-  if (operable.length < selectedRows.value.length) {
-    ElMessage.info(`已自动跳过 admin 和当前用户，将对剩余 ${operable.length} 个用户执行操作`)
-  }
+  const skipMsg = buildSkipMessage(selectedRows.value, operable)
+  if (skipMsg) ElMessage.info(skipMsg)
 
   // 根据按钮标签判断操作：如果当前显示"禁用"，则执行禁用（enabled=false）；否则执行启用（enabled=true）
   const enabled = batchToggleLabel.value === '启用'
@@ -552,9 +560,8 @@ async function handleBatchDelete() {
     ElMessage.warning('选中的用户中没有可删除的用户')
     return
   }
-  if (deletable.length < selectedRows.value.length) {
-    ElMessage.info(`已自动跳过 admin 和当前用户，将对剩余 ${deletable.length} 个用户执行删除`)
-  }
+  const skipMsg = buildSkipMessage(selectedRows.value, deletable)
+  if (skipMsg) ElMessage.info(skipMsg)
 
   const names = deletable.map((r) => r.username).join('、')
   try {
@@ -597,6 +604,14 @@ async function handleBatchUnlock() {
 
 function handleMoreCommand(command) {
   switch (command) {
+    case 'edit':
+      if (selectedRows.value.length !== 1) return
+      handleEditSelected()
+      break
+    case 'toggle':
+      if (selectedRows.value.length === 0) return
+      handleBatchToggle()
+      break
     case 'resetPwd':
       if (selectedRows.value.length !== 1 || selectedRow.value?.username === 'admin' || selectedRow.value?.auth_source === 'ldap') return
       handleResetPwdSelected()
@@ -623,9 +638,9 @@ async function handleBatchKick() {
     ElMessage.warning('选中的用户中没有可下线的在线用户')
     return
   }
-  if (kickable.length < selectedRows.value.length) {
-    ElMessage.info(`已自动跳过 admin、当前用户和离线用户，将对剩余 ${kickable.length} 个用户执行下线`)
-  }
+  const offlineSkipped = selectedRows.value.filter((r) => !r.online).length > 0
+  const skipMsg = buildSkipMessage(selectedRows.value, kickable, ...(offlineSkipped ? ['离线用户'] : []))
+  if (skipMsg) ElMessage.info(skipMsg)
 
   const names = kickable.map((r) => r.username).join('、')
   try {
