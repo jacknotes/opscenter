@@ -4,19 +4,20 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
-          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
-            batchToggleLabel
-          }}</el-button>
-          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
-          <el-button
-            type="info"
-            class="el-button--cyan"
-            :disabled="selectedRows.length !== 1"
-            @click="handleCopySelected"
-            >复制</el-button
-          >
-          <el-button type="success" :disabled="selectedRows.length === 0" @click="handleBatchTest">测试连接</el-button>
-          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
+          <el-dropdown @command="handleMoreCommand">
+            <el-button type="info" class="el-button--cyan">
+              更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="edit" :disabled="selectedRows.length !== 1">编辑</el-dropdown-item>
+                <el-dropdown-item command="copy" :disabled="selectedRows.length !== 1">复制</el-dropdown-item>
+                <el-dropdown-item command="toggle" divided :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-dropdown-item>
+                <el-dropdown-item command="test" :disabled="selectedRows.length === 0">测试连接</el-dropdown-item>
+                <el-dropdown-item command="delete" :disabled="selectedRows.length === 0">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
           <el-input
             v-model="searchQuery"
@@ -205,7 +206,7 @@ import { useSelection } from '../composables/useSelection'
 import { showBatchResult } from '../utils/message'
 import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Setting } from '@element-plus/icons-vue'
 
 const servers = shallowRef([])
 const searchQuery = ref('')
@@ -263,12 +264,6 @@ const filteredServers = computed(() => {
 const paginatedServers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredServers.value.slice(start, start + pageSize.value)
-})
-
-const batchToggleType = computed(() => {
-  if (selectedRows.value.length === 0) return 'success'
-  const allDisabled = selectedRows.value.every((r) => !r.enabled)
-  return allDisabled ? 'success' : 'warning'
 })
 
 const batchToggleLabel = computed(() => {
@@ -353,6 +348,31 @@ async function loadData(showMessage = false) {
 
 function handleRefresh() {
   loadData(true)
+}
+
+function handleMoreCommand(command) {
+  switch (command) {
+    case 'edit':
+      if (selectedRows.value.length !== 1) return
+      handleEditSelected()
+      break
+    case 'copy':
+      if (selectedRows.value.length !== 1) return
+      handleCopySelected()
+      break
+    case 'toggle':
+      if (selectedRows.value.length === 0) return
+      handleBatchToggle()
+      break
+    case 'test':
+      if (selectedRows.value.length === 0) return
+      handleBatchTest()
+      break
+    case 'delete':
+      if (selectedRows.value.length === 0) return
+      handleBatchDelete()
+      break
+  }
 }
 
 function handleAdd() {
