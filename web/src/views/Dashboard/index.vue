@@ -178,25 +178,25 @@
         <el-row :gutter="10" class="metric-row">
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">总发布</div>
+              <div class="metric-label">总发布次数</div>
               <div class="metric-value" style="color: #f59e0b">{{ k8sProjectSummary.total }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">全量</div>
+              <div class="metric-label">全量次数</div>
               <div class="metric-value" style="color: #8b5cf6">{{ k8sProjectSummary.full_ops || 0 }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">成功</div>
+              <div class="metric-label">成功次数</div>
               <div class="metric-value" style="color: #22c55e">{{ k8sProjectSummary.success }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">失败</div>
+              <div class="metric-label">失败次数</div>
               <div class="metric-value" style="color: #ef4444">{{ k8sProjectSummary.failed }}</div>
             </div></el-col
           >
@@ -226,7 +226,7 @@
           </el-col>
         </el-row>
         <div v-if="k8sSortedProjects.length > 0" class="project-list-section">
-          <div class="sub-label">项目明细</div>
+          <div class="sub-label">项目明细 <span class="project-total-count">共 {{ k8sSortedProjects.length }} 个项目</span></div>
           <div class="project-list-header">
             <span class="project-list-col-name">项目名称</span>
             <span class="project-list-col-count sortable" @click="k8sProjectSortAsc = !k8sProjectSortAsc">
@@ -281,25 +281,25 @@
         <el-row :gutter="10" class="metric-row">
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">总操作</div>
+              <div class="metric-label">总操作次数</div>
               <div class="metric-value" style="color: #ef4444">{{ preprodProjectSummary.total }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">全量</div>
+              <div class="metric-label">全量次数</div>
               <div class="metric-value" style="color: #8b5cf6">{{ preprodProjectSummary.full_ops || 0 }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">成功</div>
+              <div class="metric-label">成功次数</div>
               <div class="metric-value" style="color: #22c55e">{{ preprodProjectSummary.success }}</div>
             </div></el-col
           >
           <el-col :span="6"
             ><div class="metric">
-              <div class="metric-label">失败</div>
+              <div class="metric-label">失败次数</div>
               <div class="metric-value" style="color: #ef4444">{{ preprodProjectSummary.failed }}</div>
             </div></el-col
           >
@@ -329,7 +329,7 @@
           </el-col>
         </el-row>
         <div v-if="preprodSortedProjects.length > 0" class="project-list-section">
-          <div class="sub-label">项目明细</div>
+          <div class="sub-label">项目明细 <span class="project-total-count">共 {{ preprodSortedProjects.length }} 个项目</span></div>
           <div class="project-list-header">
             <span class="project-list-col-name">项目名称</span>
             <span class="project-list-col-count sortable" @click="preprodProjectSortAsc = !preprodProjectSortAsc">
@@ -1365,6 +1365,12 @@ onActivated(() => {
   font-weight: 600;
   margin-bottom: 8px;
   color: var(--el-text-color-regular);
+}
+.project-total-count {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-left: 8px;
 }
 .ranking-section {
   margin-top: 14px;
