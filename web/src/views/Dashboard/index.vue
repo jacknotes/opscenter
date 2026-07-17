@@ -413,6 +413,7 @@ import {
 import { useUserStore } from '../../stores/user'
 import { useAppStore } from '../../stores/app'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../../utils/message'
 import { DataLine, Refresh, FullScreen, ScaleToOriginal, SortUp, SortDown } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -1035,8 +1036,8 @@ async function loadStats() {
     serverStats.value = res.servers || null
     userStats.value = res.users || null
     onlineUsers.value = res.online_users || 0
-  } catch {
-    ElMessage.error('加载 MySQL 统计失败')
+  } catch (e) {
+    showLoadError(e, '加载 MySQL 统计失败')
   } finally {
     statsLoading.value = false
   }
@@ -1047,8 +1048,8 @@ async function loadOnlineUsers() {
   try {
     const res = await getOnlineUsers()
     onlineUsersList.value = res.users || []
-  } catch {
-    ElMessage.error('加载在线用户列表失败')
+  } catch (e) {
+    showLoadError(e, '加载在线用户列表失败')
   } finally {
     onlineUsersLoading.value = false
   }
@@ -1068,8 +1069,8 @@ async function loadRemoteStats() {
     nginxStats.value = res.nginx || null
     k8sStats.value = res.k8s || null
     preprodStats.value = res.preprod || null
-  } catch {
-    ElMessage.error('加载远程统计失败')
+  } catch (e) {
+    showLoadError(e, '加载远程统计失败')
     remoteError.value = '远程数据加载失败'
   } finally {
     remoteLoading.value = false

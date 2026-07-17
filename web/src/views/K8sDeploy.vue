@@ -144,6 +144,7 @@ import { useSelection } from '../composables/useSelection'
 import { useOutputCache } from '../composables/useOutputCache'
 import { usePreviewExecute } from '../composables/usePreviewExecute'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { Box } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -293,7 +294,7 @@ async function loadData() {
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
-    ElMessage.error('加载数据失败')
+    showLoadError(e, '加载数据失败')
     throw e
   } finally {
     loading.value = false

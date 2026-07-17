@@ -231,7 +231,7 @@ import {
   batchUnlockUsers,
   batchKickUsers,
 } from '../api'
-import { showBatchResult } from '../utils/message'
+import { showBatchResult, showLoadError } from '../utils/message'
 import { formatTime } from '../utils/format'
 import { useUserStore } from '../stores/user'
 import { useSelection } from '../composables/useSelection'
@@ -442,7 +442,7 @@ async function loadData(showMessage = false) {
       ElMessage.success('刷新成功')
     }
   } catch (e) {
-    ElMessage.error('加载用户列表失败')
+    showLoadError(e, '加载用户列表失败')
   } finally {
     loading.value = false
   }

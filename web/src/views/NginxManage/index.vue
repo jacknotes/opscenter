@@ -358,6 +358,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../../utils/message'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../utils/constants'
 import BackupDialog from './BackupDialog.vue'
@@ -592,7 +593,7 @@ async function loadConfigs() {
       await loadUpstreams()
     }
   } catch (e) {
-    ElMessage.error('加载配置列表失败: ' + (e.response?.data?.error || e.message))
+    showLoadError(e, '加载配置列表失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
@@ -616,7 +617,7 @@ async function loadUpstreams() {
       ElMessage.warning('未解析到upstream配置，请检查配置文件格式')
     }
   } catch (e) {
-    ElMessage.error('加载upstream失败: ' + (e.response?.data?.error || e.message))
+    showLoadError(e, '加载upstream失败: ' + (e.response?.data?.error || e.message))
   } finally {
     loadingUpstreams.value = false
   }
@@ -639,7 +640,7 @@ async function openBackupDialog() {
     if (e.name === 'AbortError') {
       ElMessage.error('加载备份列表超时，请检查服务器连接')
     } else {
-      ElMessage.error('加载备份列表失败: ' + (e.response?.data?.error || e.message))
+      showLoadError(e, '加载备份列表失败: ' + (e.response?.data?.error || e.message))
     }
     backups.value = []
   } finally {

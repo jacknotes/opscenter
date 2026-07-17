@@ -100,6 +100,7 @@ import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import { getLogs } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { formatTime } from '../utils/format'
 
@@ -229,7 +230,7 @@ async function loadData() {
     logs.value = res.data || []
     total.value = res.total || 0
   } catch (e) {
-    ElMessage.error('加载日志失败')
+    showLoadError(e, '加载日志失败')
   } finally {
     loading.value = false
   }

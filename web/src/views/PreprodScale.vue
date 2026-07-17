@@ -395,6 +395,7 @@ import { useServerSelector } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { ZoomOut } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -601,7 +602,7 @@ async function loadData() {
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
-    ElMessage.error('加载数据失败')
+    showLoadError(e, '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -637,7 +638,7 @@ async function openBindingDialog() {
     rsTagOptions.value = [...new Set((rsTags || []).map((t) => t.tag).filter(Boolean))]
     bindingDialogVisible.value = true
   } catch (e) {
-    ElMessage.error('加载绑定配置失败')
+    showLoadError(e, '加载绑定配置失败')
   }
 }
 

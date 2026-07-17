@@ -24,6 +24,7 @@ api.interceptors.request.use((config) => {
 })
 
 // 响应拦截器：提取 response.data，401 时自动登出并跳转登录页
+let loginExpiredShown = false
 api.interceptors.response.use(
   (response) => {
     const warning = response.headers['x-warning']
@@ -36,8 +37,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const userStore = useUserStore()
       userStore.logout()
-      if (router.currentRoute.value.path !== '/login') {
-        router.push('/login').catch(() => {})
+      if (!loginExpiredShown && router.currentRoute.value.path !== '/login') {
+        loginExpiredShown = true
+        ElMessage.warning('当前登录已失效，请重新登录')
+        router.push('/login').catch(() => {}).finally(() => {
+          setTimeout(() => { loginExpiredShown = false }, 1000)
+        })
       }
     }
     return Promise.reject(error)

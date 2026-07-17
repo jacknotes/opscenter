@@ -203,7 +203,7 @@ import {
 } from '../api'
 import { clearServerCache } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
-import { showBatchResult } from '../utils/message'
+import { showBatchResult, showLoadError } from '../utils/message'
 import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Setting } from '@element-plus/icons-vue'
@@ -340,7 +340,7 @@ async function loadData(showMessage = false) {
       ElMessage.success('刷新成功')
     }
   } catch (e) {
-    ElMessage.error('加载服务器列表失败')
+    showLoadError(e, '加载服务器列表失败')
   } finally {
     loading.value = false
   }

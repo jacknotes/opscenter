@@ -328,6 +328,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../../utils/message'
 import { ArrowRight, ArrowDown, Connection } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../utils/constants'
 import TagDialog from './TagDialog.vue'
@@ -571,7 +572,7 @@ async function loadData() {
     if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) ElMessage.error('连接超时，目标服务器可能不可达')
     else if (e.response?.data?.error) ElMessage.error(e.response.data.error)
     else if (!e.response) ElMessage.error('网络异常')
-    else ElMessage.error('加载数据失败：' + (e.message || '未知错误'))
+    else showLoadError(e, '加载数据失败：' + (e.message || '未知错误'))
   } finally {
     loading.value = false
   }

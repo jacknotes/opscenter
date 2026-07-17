@@ -1,6 +1,7 @@
 import { ref, onMounted } from 'vue'
 import { getServers } from '../api'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../utils/message'
 
 /**
  * 服务器选择器组合式函数
@@ -54,7 +55,7 @@ export function useServerSelector(serverType, storageKey, onChange) {
         if (onChange) await onChange()
       }
     } catch (e) {
-      ElMessage.error('加载服务器列表失败')
+      showLoadError(e, '加载服务器列表失败')
     } finally {
       loading.value = false
     }
