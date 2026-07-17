@@ -114,9 +114,28 @@ const loading = ref(false)
 const module = ref('all')
 const keyword = ref('')
 const status = ref('all')
-const dateRange = ref(null)
 const sortBy = ref('created_at')
 const sortOrder = ref('desc')
+
+function formatDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getDefaultDateRange() {
+  const e = new Date()
+  const s = new Date()
+  s.setMonth(s.getMonth() - 1)
+  return [formatDate(s), formatDate(e)]
+}
+
+const dateRange = ref(getDefaultDateRange())
+
+// 限制起止日期跨度最多为 1 年
+const MAX_RANGE_DAYS = 365
+
 const dateShortcuts = [
   {
     text: '近一周',
@@ -145,10 +164,19 @@ const dateShortcuts = [
       return [s, e]
     },
   },
+  {
+    text: '近一年',
+    value: () => {
+      const e = new Date()
+      const s = new Date()
+      s.setFullYear(s.getFullYear() - 1)
+      return [s, e]
+    },
+  },
 ]
 
 const hasFilters = computed(
-  () => module.value !== 'all' || status.value !== 'all' || !!keyword.value || !!dateRange.value
+  () => module.value !== 'all' || status.value !== 'all' || !!keyword.value
 )
 
 onMounted(() => {
@@ -193,6 +221,14 @@ function statusLabel(s) {
 }
 
 function onDateChange() {
+  if (dateRange.value && dateRange.value.length === 2) {
+    const diff = new Date(dateRange.value[1]) - new Date(dateRange.value[0])
+    if (diff > MAX_RANGE_DAYS * 86400000) {
+      ElMessage.warning('日期范围不能超过1年，请重新选择')
+      dateRange.value = getDefaultDateRange()
+      return
+    }
+  }
   page.value = 1
   loadData()
 }
