@@ -355,9 +355,13 @@ func (h *WSHandler) Handle(c *gin.Context) {
 			execErr = err
 		}
 	} else {
-		// 客户端已断开，设置超时防止阻塞（SSH 命令可能长时间运行）
+		// 客户端已断开，等待 SSH 命令实际完成，以正确记录审计状态
 		select {
-		case <-errCh:
+		case sshErr := <-errCh:
+			// SSH 命令已结束，根据实际执行结果判断状态
+			if sshErr == nil {
+				execErr = nil // 命令成功完成，清除客户端断开的错误
+			}
 		case <-time.After(30 * time.Second):
 			log.Printf("[WS] Drain timeout, SSH session may still be running")
 		}

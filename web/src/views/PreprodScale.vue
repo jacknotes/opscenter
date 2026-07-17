@@ -121,6 +121,18 @@
           @current-change="handleCurrentChange"
         />
       </div>
+
+      <!-- Streaming Output Area -->
+      <div v-if="wsStore.status !== 'idle'" class="output-section">
+        <div class="stream-header">
+          <span class="chart-title">执行输出</span>
+        </div>
+        <StreamOutput
+          :lines="wsStore.outputLines"
+          :status="wsStore.status"
+          :show-cancel="false"
+        />
+      </div>
     </el-card>
 
     <!-- Preview Dialog -->
@@ -360,18 +372,6 @@
         >
       </template>
     </el-dialog>
-
-    <!-- Streaming Output Area -->
-    <el-card v-if="wsStore.status !== 'idle'" class="output-card" shadow="hover">
-      <template #header>
-        <span class="chart-title">执行输出</span>
-      </template>
-      <StreamOutput
-        :lines="wsStore.outputLines"
-        :status="wsStore.status"
-        :show-cancel="false"
-      />
-    </el-card>
   </div>
 </template>
 
@@ -824,8 +824,11 @@ function executePreview() {
   color: var(--color-warning);
   font-weight: var(--weight-bold);
 }
-.output-card {
+.output-section {
   margin-top: 16px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.06));
+  border-radius: 8px;
+  padding: 16px;
 }
 .chart-title {
   font-weight: 600;
