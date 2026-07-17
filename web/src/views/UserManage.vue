@@ -404,19 +404,24 @@ function restoreLdapSelection() {
   ldapSkipSync.value = true
   nextTick(() => {
     if (!ldapTableRef.value) return
+    // 先清除表格全部选中状态，避免残留旧选中
+    ldapTableRef.value.clearSelection()
     const names = selectedLdapUsernames.value
     paginatedLdapUsers.value.forEach((row) => {
       if (names.has(row.username)) {
         ldapTableRef.value.toggleRowSelection(row, true)
       }
     })
-    ldapSkipSync.value = false
+    // 延迟重置守卫，确保 toggleRowSelection 触发的异步 selection-change 已全部处理完毕
+    setTimeout(() => { ldapSkipSync.value = false }, 50)
   })
 }
 
 function handleLdapSortChange({ prop, order }) {
   ldapSortProp.value = prop || ''
   ldapSortOrder.value = order || ''
+  ldapSkipSync.value = true
+  nextTick(() => restoreLdapSelection())
 }
 
 
