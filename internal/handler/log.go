@@ -33,7 +33,7 @@ func NewLogHandler(db *gorm.DB) *LogHandler {
 //	@Param			username	query		string	false	"用户名（模糊匹配）"
 //	@Param			status		query		string	false	"状态 (success/failed)"
 //	@Param			action		query		string	false	"操作类型"
-//	@Param			keyword		query		string	false	"关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP）"
+//	@Param			keyword		query		string	false	"关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP、输出）"
 //	@Param			start_time	query		string	false	"开始时间 (2006-01-02)"
 //	@Param			end_time	query		string	false	"结束时间 (2006-01-02)"
 //	@Param			sort_by		query		string	false	"排序字段 (created_at/username/module/status)，默认 created_at"
@@ -103,7 +103,7 @@ func (h *LogHandler) List(c *gin.Context) {
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("username LIKE ? OR action LIKE ? OR target LIKE ? OR server_name LIKE ? OR ip LIKE ?", like, like, like, like, like)
+		query = query.Where("username LIKE ? OR action LIKE ? OR target LIKE ? OR server_name LIKE ? OR ip LIKE ? OR output LIKE ?", like, like, like, like, like, like)
 	}
 	if startTime != "" {
 		if t, err := time.Parse("2006-01-02", startTime); err == nil {
