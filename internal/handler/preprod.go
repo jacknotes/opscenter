@@ -280,7 +280,7 @@ func (h *PreprodHandler) ScaleUpExecute(c *gin.Context) {
 //	@Success		200		{object}	object
 //	@Failure		400		{object}	object
 //	@Failure		500		{object}	object
-//	@Router			/preprod/check/lvs_scaledown [post]
+//	@Router			/lvs/check/scaledown [post]
 func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 	ctx := c.Request.Context()
 	var req CheckLvsForScaleDownRequest
