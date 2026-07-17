@@ -169,6 +169,7 @@
         <el-table
           ref="ldapTableRef"
           :data="paginatedLdapUsers"
+          :row-key="(row) => row.username"
           stripe
           border
           max-height="400"
@@ -216,7 +217,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, nextTick, onMounted, onActivated } from 'vue'
 import {
   getUsers,
   createUser,
@@ -349,6 +350,7 @@ const ldapTableRef = ref(null)
 const ldapCurrentPage = ref(1)
 const ldapPageSize = ref(DEFAULT_PAGE_SIZE)
 const selectedLdapUsernames = ref(new Set())
+const ldapSkipSync = ref(false)
 const ldapSortProp = ref('')
 const ldapSortOrder = ref('')
 
@@ -387,11 +389,29 @@ const paginatedLdapUsers = computed(() => {
 })
 
 function handleLdapSizeChange() {
+  ldapSkipSync.value = true
   ldapCurrentPage.value = 1
+  nextTick(() => restoreLdapSelection())
 }
 
 function handleLdapCurrentChange() {
-  // 翻页不清除选择，由 watch(paginatedLdapUsers) 自动恢复选中态
+  ldapSkipSync.value = true
+  nextTick(() => restoreLdapSelection())
+}
+
+// 恢复当前页中已选用户的勾选状态
+function restoreLdapSelection() {
+  ldapSkipSync.value = true
+  nextTick(() => {
+    if (!ldapTableRef.value) return
+    const names = selectedLdapUsernames.value
+    paginatedLdapUsers.value.forEach((row) => {
+      if (names.has(row.username)) {
+        ldapTableRef.value.toggleRowSelection(row, true)
+      }
+    })
+    ldapSkipSync.value = false
+  })
 }
 
 function handleLdapSortChange({ prop, order }) {
@@ -399,18 +419,6 @@ function handleLdapSortChange({ prop, order }) {
   ldapSortOrder.value = order || ''
 }
 
-// 翻页或数据变化后，恢复当前页中已选用户的勾选状态
-watch(
-  paginatedLdapUsers,
-  () => {
-    if (!ldapTableRef.value) return
-    const names = selectedLdapUsernames.value
-    paginatedLdapUsers.value.forEach((row) => {
-      ldapTableRef.value.toggleRowSelection(row, names.has(row.username))
-    })
-  },
-  { flush: 'post' }
-)
 
 function handleSortChange({ prop, order, column }) {
   sortProp.value = prop || column?.columnKey || ''
@@ -732,6 +740,7 @@ async function handleSubmitResetPwd() {
 function handleLdapDialogClose() {
   ldapUsers.value = []
   selectedLdapUsernames.value = new Set()
+  ldapSkipSync.value = false
   ldapSortProp.value = ''
   ldapSortOrder.value = ''
 }
@@ -761,6 +770,7 @@ async function showLdapImport() {
 }
 
 function handleLdapSelectionChange(rows) {
+  if (ldapSkipSync.value) return
   const currentPageUsernames = new Set(paginatedLdapUsers.value.map((r) => r.username))
   const selectedOnPage = new Set(rows.map((r) => r.username))
   const newSet = new Set(selectedLdapUsernames.value)
