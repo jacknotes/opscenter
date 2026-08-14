@@ -81,21 +81,28 @@
         <el-table-column prop="current" label="当前副本" width="100" align="center" sortable>
           <template #default="{ row }">
             <span>{{ row.current }}</span>
-            <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
+            <el-tag v-if="row.ready_desired === 0 && row.ready === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
             <el-tag
-              v-else-if="row.current > 0 && row.current === row.target_replicas"
+              v-else-if="row.ready > 0 && row.ready === row.ready_desired"
               type="success"
               size="small"
               style="margin-left: 4px"
               >正常</el-tag
             >
+            <el-tag v-else type="warning" size="small" style="margin-left: 4px">启动中</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="target_replicas" label="目标副本" width="90" align="center" sortable>
           <template #default="{ row }">
-            <span :class="{ 'text-warning': row.current > 0 && row.current !== row.target_replicas }">
+            <span :class="{ 'text-warning': row.ready_desired > 0 && row.ready < row.ready_desired }">
               {{ row.target_replicas || '-' }}
             </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="ready" label="就绪副本" width="100" align="center" sortable>
+          <template #default="{ row }">
+            <span v-if="row.ready_desired > 0">{{ row.ready }}/{{ row.ready_desired }}</span>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column prop="available" label="可用副本" width="90" align="center" sortable />
@@ -414,9 +421,9 @@ const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] 
 const filteredResources = computed(() => {
   let list = resources.value
   if (statusFilter.value === 'up') {
-    list = list.filter((r) => r.current >= r.target_replicas)
+    list = list.filter((r) => r.ready_desired > 0 && r.ready >= r.ready_desired)
   } else if (statusFilter.value === 'down') {
-    list = list.filter((r) => r.current < r.target_replicas)
+    list = list.filter((r) => r.ready_desired === 0 && r.ready === 0)
   }
   if (search.value) {
     const q = search.value.toLowerCase()

@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -75,6 +75,17 @@ function formatDate(d) {
   return `${y}-${m}-${day}`
 }
 
+// 反向匹配：给定日期范围，判断是否对应某个 preset，不匹配返回 null（自定义日期）。
+// 用于在其它实例修改共享 modelValue 后，同步本实例的快捷按钮高亮。
+function matchPreset(range) {
+  if (!range || range.length !== 2 || !range[0] || !range[1]) return null
+  for (const key of Object.keys(presetMap)) {
+    const [s, e] = presetMap[key]()
+    if (range[0] === s && range[1] === e) return key
+  }
+  return null
+}
+
 function onPresetChange(preset) {
   activePreset.value = preset
   const range = presetMap[preset]()
@@ -96,6 +107,16 @@ function disabledDate(date) {
   }
   return false
 }
+
+// 监听外部 modelValue 变化（如其它图表实例切换快捷按钮导致父级共享 ref 更新），
+// 同步本实例的快捷按钮高亮，避免数据同步但高亮不一致。
+// 不使用 immediate，避免覆盖 onMounted 的初始化。
+watch(
+  () => props.modelValue,
+  (val) => {
+    activePreset.value = matchPreset(val)
+  }
+)
 
 // 初始化时根据 defaultPreset 设置日期范围
 onMounted(() => {

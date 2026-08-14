@@ -14,6 +14,11 @@ type PreprodResource struct {
 	Available      int    `json:"available"`
 	Age            string `json:"age"`
 	TargetReplicas int    `json:"target_replicas"`
+	// Ready 为 READY 列的就绪副本数（分子），ReadyDesired 为 READY 列的目标副本数（分母）。
+	// 与控制器视角的 Current/Desired 不同，二者反映 Pod 真实就绪状态，
+	// 用于准确判断扩容过程中 Pod 是否真正 Running。
+	Ready        int `json:"ready"`
+	ReadyDesired int `json:"ready_desired"`
 }
 
 // PreprodService 提供预生产缩扩容的业务逻辑。
@@ -140,10 +145,15 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 			case "AGE":
 				r.Age = val
 			case "READY":
-				if !hasColumn(colRanges, "DESIRED") {
-					if parts := strings.SplitN(val, "/", 2); len(parts) == 2 {
-						r.Current = parseInt(parts[0])
-						r.Desired = parseInt(parts[1])
+				// READY 列形如 "x/y"，始终解析为就绪/目标副本数，反映 Pod 真实就绪状态。
+				if parts := strings.SplitN(val, "/", 2); len(parts) == 2 {
+					r.Ready = parseInt(parts[0])
+					r.ReadyDesired = parseInt(parts[1])
+					// 仅当无 CURRENT/DESIRED 列时（如 Deployment），用 READY 兜底 Current/Desired。
+					// Rollout 同时有 CURRENT/DESIRED 与 READY，此处兜底不生效。
+					if !hasColumn(colRanges, "DESIRED") {
+						r.Current = r.Ready
+						r.Desired = r.ReadyDesired
 					}
 				}
 			}

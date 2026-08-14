@@ -23,7 +23,7 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// 响应拦截器：提取 response.data，401 时自动登出并跳转登录页
+// 响应拦截器：提取 response.data，401 时智能处理多标签页登录协同
 let loginExpiredShown = false
 api.interceptors.response.use(
   (response) => {
@@ -33,9 +33,30 @@ api.interceptors.response.use(
     }
     return response.data
   },
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
       const userStore = useUserStore()
+      const currentToken = userStore.token
+      const storedToken = localStorage.getItem('token') || ''
+
+      // 多标签页协同：若 localStorage 中的 token 与本页内存 token 不同，
+      // 说明其它标签页已重新登录并写入了新 token。此时本页的 401 是旧 token 导致，
+      // 应同步新 token 并重试原请求，而非清空共享 localStorage（否则会级联登出其它标签页）。
+      if (
+        currentToken &&
+        storedToken &&
+        currentToken !== storedToken &&
+        !error.config._retried &&
+        !error.config.url?.includes('/login')
+      ) {
+        error.config._retried = true
+        // 同步新 token 到内存（storage 事件通常也会触发，这里确保立即生效）
+        userStore.token = storedToken
+        error.config.headers.Authorization = `Bearer ${storedToken}`
+        return api.request(error.config)
+      }
+
+      // 本页 token 确实失效（与 localStorage 一致，或 localStorage 已空），执行登出
       userStore.logout()
       if (!loginExpiredShown && router.currentRoute.value.path !== '/login') {
         loginExpiredShown = true
