@@ -127,3 +127,32 @@ svc-a                Canary     Healthy    5/5    100          0       0        
 		t.Errorf("应判定为已缩容：Ready=%d ReadyDesired=%d", r.Ready, r.ReadyDesired)
 	}
 }
+
+// TestParseListOutputNoReadyColumn 验证输出无 READY 列时（某些 Argo Rollouts 版本
+// 不输出 READY 列），用 AVAILABLE/DESIRED/CURRENT 兜底计算就绪状态，避免误报"已缩容"。
+// 复现场景：current=2 available=2 但 READY 列缺失，修复前 ReadyDesired=0 导致显示"-"且误报已缩容。
+func TestParseListOutputNoReadyColumn(t *testing.T) {
+	// 无 READY 列，资源正常运行：DESIRED=2 CURRENT=2 AVAILABLE=2
+	output := `=== Rollout状态 ===
+NAME                 STRATEGY   STATUS     STEP   SET-WEIGHT   DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+svc-a                Canary     Healthy    5/5    100          2         2         2            2           92d
+`
+	s := &PreprodService{}
+	res := s.ParseListOutput(output)
+	if len(res) != 1 {
+		t.Fatalf("期望1条资源，实际 %d", len(res))
+	}
+	r := res[0]
+	// 兜底：ReadyDesired 取自 DESIRED=2，Ready 取自 AVAILABLE=2
+	if r.Ready != 2 || r.ReadyDesired != 2 {
+		t.Errorf("Ready=%d ReadyDesired=%d，期望 2/2（兜底）", r.Ready, r.ReadyDesired)
+	}
+	// 关键：不应误报为已缩容
+	if r.ReadyDesired == 0 && r.Ready == 0 {
+		t.Errorf("不应判定为已缩容：Ready=%d ReadyDesired=%d", r.Ready, r.ReadyDesired)
+	}
+	// 应判定为就绪
+	if !(r.Ready > 0 && r.Ready == r.ReadyDesired) {
+		t.Errorf("应判定为就绪：Ready=%d ReadyDesired=%d", r.Ready, r.ReadyDesired)
+	}
+}

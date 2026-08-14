@@ -178,9 +178,31 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 				}
 			}
 		}
-		resources = append(resources, r)
+			resources = append(resources, normalizeReady(r))
+		}
+		return resources
+}
+
+// normalizeReady 在 READY 列无法提供可靠的就绪信息时（如 Argo Rollouts 某些版本
+// 不输出 READY 列、或 READY 为单整数但无 DESIRED 列），用其它列兜底计算就绪状态，
+// 避免就绪副本显示为 "-" 且误报"已缩容"。
+//
+// 兜底规则：
+//   - ReadyDesired 为 0 时，若存在 DESIRED 列且 Desired>0，取 Desired；否则若
+//     Current>0，取 Current（控制器已设定目标但未显式输出）。
+//   - Ready 为 0 时，若 Available>0，取 Available（可用副本数近似就绪数）。
+func normalizeReady(r PreprodResource) PreprodResource {
+	if r.ReadyDesired == 0 {
+		if r.Desired > 0 {
+			r.ReadyDesired = r.Desired
+		} else if r.Current > 0 {
+			r.ReadyDesired = r.Current
+		}
 	}
-	return resources
+	if r.Ready == 0 && r.Available > 0 {
+		r.Ready = r.Available
+	}
+	return r
 }
 
 type TargetInfo struct {
