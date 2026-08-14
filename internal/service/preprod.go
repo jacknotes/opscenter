@@ -85,6 +85,16 @@ func hasColumn(ranges []columnRange, name string) bool {
 	return false
 }
 
+// findColumn 按名称查找列范围，未找到返回 nil。
+func findColumn(ranges []columnRange, name string) *columnRange {
+	for i := range ranges {
+		if ranges[i].Name == name {
+			return &ranges[i]
+		}
+	}
+	return nil
+}
+
 // ParseListOutput 解析 list 脚本输出，按类别（rollout/deployment/statefulset）提取资源状态。
 // 使用列位置解析而非固定字段分割，兼容不同列宽的输出格式。
 func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
@@ -145,15 +155,25 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 			case "AGE":
 				r.Age = val
 			case "READY":
-				// READY 列形如 "x/y"，始终解析为就绪/目标副本数，反映 Pod 真实就绪状态。
+				// READY 列可能为 "x/y"（Deployment）或单个整数（Argo Rollouts 的 READY 列
+				// 仅打印 readyReplicas）。统一解析为就绪副本数 Ready 与目标就绪数 ReadyDesired，
+				// 用于准确判断扩容过程中 Pod 是否真正 Running。
 				if parts := strings.SplitN(val, "/", 2); len(parts) == 2 {
+					// "x/y" 形式：分子为就绪数，分母为目标数
 					r.Ready = parseInt(parts[0])
 					r.ReadyDesired = parseInt(parts[1])
-					// 仅当无 CURRENT/DESIRED 列时（如 Deployment），用 READY 兜底 Current/Desired。
-					// Rollout 同时有 CURRENT/DESIRED 与 READY，此处兜底不生效。
+					// 仅当无 DESIRED 列时（如 Deployment），用 READY 兜底 Current/Desired。
 					if !hasColumn(colRanges, "DESIRED") {
 						r.Current = r.Ready
 						r.Desired = r.ReadyDesired
+					}
+				} else {
+					// 单个整数形式（Argo Rollouts）：值为就绪数，目标数取自 DESIRED 列
+					r.Ready = parseInt(val)
+					if cr := findColumn(colRanges, "DESIRED"); cr != nil {
+						if desiredVal := extractColumn(line, *cr); desiredVal != "" {
+							r.ReadyDesired = parseInt(desiredVal)
+						}
 					}
 				}
 			}
