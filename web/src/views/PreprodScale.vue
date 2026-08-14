@@ -104,7 +104,6 @@
             <span>{{ row.ready }}/{{ row.ready_desired }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="age" label="年龄" width="100" sortable :sort-method="sortAge" />
       </el-table>
 
       <div v-if="!loading && paginatedResources.length === 0" class="empty-state">
@@ -434,19 +433,6 @@ const paginatedResources = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredResources.value.slice(start, start + pageSize.value)
 })
-
-function parseAge(age) {
-  if (!age) return 0
-  const match = age.match(/^(\d+)([smhd])$/)
-  if (!match) return 0
-  const n = parseInt(match[1], 10)
-  const units = { s: 1, m: 60, h: 3600, d: 86400 }
-  return n * (units[match[2]] || 0)
-}
-
-function sortAge(a, b) {
-  return parseAge(a.age) - parseAge(b.age)
-}
 
 // --- 组合式函数 ---
 const {
