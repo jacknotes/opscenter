@@ -105,7 +105,6 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="available" label="可用副本" width="90" align="center" sortable />
         <el-table-column prop="age" label="年龄" width="100" sortable :sort-method="sortAge" />
       </el-table>
 
