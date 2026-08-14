@@ -101,8 +101,7 @@
         </el-table-column>
         <el-table-column prop="ready" label="就绪副本" width="100" align="center" sortable>
           <template #default="{ row }">
-            <span v-if="row.ready_desired > 0">{{ row.ready }}/{{ row.ready_desired }}</span>
-            <span v-else>-</span>
+            <span>{{ row.ready }}/{{ row.ready_desired }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="age" label="年龄" width="100" sortable :sort-method="sortAge" />
