@@ -148,74 +148,70 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			"disabled": userDisabled,
 			"by_role":  roleMap,
 		}
-
-		// 在线用户数：通过 Redis 活跃用户集合获取
-		result["online_users"] = middleware.GetActiveUserCount()
 	}
 
+	// 在线用户数：所有用户可见
+	result["online_users"] = middleware.GetActiveUserCount()
+
 	c.JSON(http.StatusOK, result)
+}
+
+// OnlineUsers godoc
+//
+//	@Summary		获取在线用户列表
+//	@Description	获取当前在线用户的详细信息列表（仅管理员）
+//	@Tags			仪表盘
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	object
+//	@Failure		403	{object}	object
+//	@Router			/dashboard/online-users [get]
+func (h *DashboardHandler) OnlineUsers(c *gin.Context) {
+	users := middleware.GetOnlineUsers()
+	if users == nil {
+		users = []gin.H{}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"users": users,
+		"total": len(users),
+	})
 }
 
 // ActivityStats godoc
 //
 //	@Summary		获取仪表盘活动统计数据
-//	@Description	按日/周/月/年统计各模块发布次数和登录成功/失败次数
+//	@Description	按指定日期范围统计各模块发布次数和登录成功/失败次数
 //	@Tags			仪表盘
 //	@Produce		json
-//	@Param			granularity	query	string	true	"时间粒度: day/week/month/year"
+//	@Param			start_date	query	string	true	"开始日期，格式 YYYY-MM-DD"
+//	@Param			end_date	query	string	true	"结束日期，格式 YYYY-MM-DD"
 //	@Security		BearerAuth
 //	@Success		200	{object}	object
 //	@Router			/dashboard/activity-stats [get]
 func (h *DashboardHandler) ActivityStats(c *gin.Context) {
 	ctx := c.Request.Context()
-	granularity := c.DefaultQuery("granularity", "day")
-	actionGranularity := c.DefaultQuery("action_granularity", "")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
-	// 根据粒度确定时间范围和分组表达式
-	var dateFormat string
-	var defaultDuration time.Duration
-	switch granularity {
-	case "week":
-		dateFormat = "%x-W%v"
-		defaultDuration = 12 * 7 * 24 * time.Hour
-	case "month":
-		dateFormat = "%Y-%m"
-		defaultDuration = 365 * 24 * time.Hour
-	case "year":
-		dateFormat = "%Y"
-		defaultDuration = 5 * 365 * 24 * time.Hour
-	default: // day
-		dateFormat = "%Y-%m-%d"
-		defaultDuration = 30 * 24 * time.Hour
+	if startDate == "" || endDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_date 和 end_date 为必填参数"})
+		return
 	}
 
-	startTime := time.Now().Add(-defaultDuration)
-
-	// 操作动作统计使用独立的时间粒度，按自然周期起始点计算
-	actionGran := granularity
-	if actionGranularity != "" {
-		actionGran = actionGranularity
-	}
 	now := time.Now()
-	var actionStartTime time.Time
-	switch actionGran {
-	case "week":
-		// 本周一 00:00
-		weekday := int(now.Weekday())
-		if weekday == 0 {
-			weekday = 7
-		}
-		actionStartTime = time.Date(now.Year(), now.Month(), now.Day()-weekday+1, 0, 0, 0, 0, now.Location())
-	case "month":
-		// 本月 1 日 00:00
-		actionStartTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	case "year":
-		// 本年 1 月 1 日 00:00
-		actionStartTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
-	default: // day
-		// 今天 00:00
-		actionStartTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	sd, err := time.ParseInLocation("2006-01-02", startDate, now.Location())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_date 格式错误，应为 YYYY-MM-DD"})
+		return
 	}
+	ed, err := time.ParseInLocation("2006-01-02", endDate, now.Location())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "end_date 格式错误，应为 YYYY-MM-DD"})
+		return
+	}
+	endTime := ed.Add(24*time.Hour - time.Second) // end_date 23:59:59
+
+	dateFormat := "%Y-%m-%d"
 
 	type moduleStat struct {
 		Period string `json:"period"`
@@ -230,52 +226,39 @@ func (h *DashboardHandler) ActivityStats(c *gin.Context) {
 
 	// 发布统计：LVS/Nginx/K8S/Preprod
 	var deployStats []moduleStat
-	deployQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+	if err := h.db.WithContext(ctx).Model(&model.OperationLog{}).
 		Select("DATE_FORMAT(created_at, ?) as period, module, count(*) as count", dateFormat).
-		Where("module IN ? AND created_at > ?", []string{"lvs", "nginx", "k8s", "preprod"}, startTime).
+		Where("module IN ? AND created_at >= ? AND created_at <= ?", []string{"lvs", "nginx", "k8s", "preprod"}, sd, endTime).
 		Group("period, module").
-		Order("period")
-
-	// 非管理员过滤掉 auth/server 模块（虽然这里只查了 lvs/nginx/k8s/preprod，但保持一致）
-	userRole, _ := c.Get("role")
-	if userRole != "admin" {
-		deployQuery = deployQuery.Where("module NOT IN ?", []string{"auth", "server"})
-	}
-
-	if err := deployQuery.Scan(&deployStats).Error; err != nil {
+		Order("period").
+		Scan(&deployStats).Error; err != nil {
 		log.Printf("查询发布统计失败: %v", err)
 	}
 
-	// 登录统计
+	// 登录统计（所有用户可见）
 	var loginStats []loginStat
-	loginQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+	if err := h.db.WithContext(ctx).Model(&model.OperationLog{}).
 		Select("DATE_FORMAT(created_at, ?) as period, status, count(*) as count", dateFormat).
-		Where("module = ? AND action = ? AND created_at > ?", "auth", "login", startTime).
+		Where("module = ? AND action = ? AND created_at >= ? AND created_at <= ?", "auth", "login", sd, endTime).
 		Group("period, status").
-		Order("period")
-
-	// 非管理员不可见登录统计
-	if userRole != "admin" {
-		loginStats = []loginStat{}
-	} else {
-		if err := loginQuery.Scan(&loginStats).Error; err != nil {
-			log.Printf("查询登录统计失败: %v", err)
-		}
+		Order("period").
+		Scan(&loginStats).Error; err != nil {
+		log.Printf("查询登录统计失败: %v", err)
 	}
 
-	// 操作动作统计：按 module + action 分组，全局累计
+	// 操作动作统计：按 module + action 分组，使用同一时间范围
 	type actionStat struct {
 		Module string `json:"module"`
 		Action string `json:"action"`
 		Count  int64  `json:"count"`
 	}
 	var actionStats []actionStat
-	actionQuery := h.db.WithContext(ctx).Model(&model.OperationLog{}).
+	if err := h.db.WithContext(ctx).Model(&model.OperationLog{}).
 		Select("module, action, count(*) as count").
-		Where("module IN ? AND created_at > ?", []string{"lvs", "nginx", "k8s", "preprod"}, actionStartTime).
+		Where("module IN ? AND created_at >= ? AND created_at <= ?", []string{"lvs", "nginx", "k8s", "preprod"}, sd, endTime).
 		Group("module, action").
-		Order("module, count DESC")
-	if err := actionQuery.Scan(&actionStats).Error; err != nil {
+		Order("module, count DESC").
+		Scan(&actionStats).Error; err != nil {
 		log.Printf("查询操作动作统计失败: %v", err)
 	}
 
@@ -289,38 +272,36 @@ func (h *DashboardHandler) ActivityStats(c *gin.Context) {
 // K8sProjectStats godoc
 //
 //	@Summary		获取 K8s 项目发布统计数据
-//	@Description	按日/周/月/年统计 K8s 各服务的发布次数、成功率和趋势
+//	@Description	按指定日期范围统计 K8s 各服务的发布次数、成功率和趋势
 //	@Tags			仪表盘
 //	@Produce		json
-//	@Param			granularity	query	string	true	"时间粒度: day/week/month/year"
+//	@Param			start_date	query	string	true	"开始日期，格式 YYYY-MM-DD"
+//	@Param			end_date	query	string	true	"结束日期，格式 YYYY-MM-DD"
 //	@Param			server_name	query	string	false	"服务器名称筛选"
 //	@Security		BearerAuth
 //	@Success		200	{object}	object
 //	@Router			/dashboard/k8s-project-stats [get]
 func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 	ctx := c.Request.Context()
-	granularity := c.DefaultQuery("granularity", "day")
 	serverName := c.Query("server_name")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
-	// 根据粒度确定时间范围和日期格式
-	var dateFormat string
-	var defaultDuration time.Duration
-	switch granularity {
-	case "week":
-		dateFormat = "%x-W%v"
-		defaultDuration = 12 * 7 * 24 * time.Hour
-	case "month":
-		dateFormat = "%Y-%m"
-		defaultDuration = 365 * 24 * time.Hour
-	case "year":
-		dateFormat = "%Y"
-		defaultDuration = 5 * 365 * 24 * time.Hour
-	default: // day
-		dateFormat = "%Y-%m-%d"
-		defaultDuration = 30 * 24 * time.Hour
+	if startDate == "" || endDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_date 和 end_date 为必填参数"})
+		return
 	}
 
-	startTime := time.Now().Add(-defaultDuration)
+	now := time.Now()
+	sd, err1 := time.ParseInLocation("2006-01-02", startDate, now.Location())
+	ed, err2 := time.ParseInLocation("2006-01-02", endDate, now.Location())
+	if err1 != nil || err2 != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "日期格式错误，应为 YYYY-MM-DD"})
+		return
+	}
+	endTime := ed.Add(24*time.Hour - time.Second)
+
+	dateFormat := "%Y-%m-%d"
 
 	// 查询 K8s 操作日志（只取需要的字段）
 	type logRow struct {
@@ -328,20 +309,21 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		ProjectNames string
 		Status       string
 		Action       string
+		CreatedAt    time.Time
 	}
 	var rows []logRow
 	query := h.db.WithContext(ctx).Model(&model.OperationLog{}).
-		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action", dateFormat).
-		Where("module = ? AND created_at > ?", "k8s", startTime)
+		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action, created_at", dateFormat).
+		Where("module = ? AND created_at >= ? AND created_at <= ?", "k8s", sd, endTime)
 	if serverName != "" {
 		query = query.Where("server_name = ?", serverName)
 	}
-	err := query.Order("period").Scan(&rows).Error
-	if err != nil {
+	if err := query.Order("period").Scan(&rows).Error; err != nil {
 		log.Printf("查询 K8s 项目统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
+	log.Printf("K8s 项目统计: 查询到 %d 条记录, 范围=%s 至 %s", len(rows), startDate, endDate)
 
 	// 在 Go 中拆分 project_names 并聚合
 	type projectTrend struct {
@@ -360,21 +342,34 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 		Count  int64  `json:"count"`
 	}
 
-	trendMap := make(map[string]*projectTrend)  // "period|project" -> trend
-	summaryMap := make(map[string]*projectSummary) // "project" -> summary
-	actionMap := make(map[string]int64)          // "action" -> count
+	trendMap := make(map[string]*projectTrend)
+	summaryMap := make(map[string]*projectSummary)
+	actionMap := make(map[string]int64)
 	var totalCount, successCount, failedCount, fullOpsCount int64
 
 	for _, row := range rows {
-		// 拆分 project_names
 		isFullOp := row.ProjectNames == "*" || row.ProjectNames == ""
-		if isFullOp {
-			fullOpsCount++
+
+		// 趋势数据
+		if !isFullOp {
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
+				}
+				key := row.Period + "|" + proj
+				if t, ok := trendMap[key]; ok {
+					t.Count++
+				} else {
+					trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
+				}
+			}
 		}
 
-		var projects []string
+		// 汇总数据（整个选定范围）
 		if isFullOp {
-			// 全量操作不参与趋势和排行，仅计入汇总
+			fullOpsCount++
 			totalCount++
 			if row.Status == "success" {
 				successCount++
@@ -382,52 +377,37 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 				failedCount++
 			}
 			actionMap[row.Action]++
-			continue
-		}
-		projects = strings.Split(row.ProjectNames, ",")
-
-		for _, proj := range projects {
-			proj = strings.TrimSpace(proj)
-			if proj == "" {
-				continue
-			}
-
-			// 趋势数据
-			key := row.Period + "|" + proj
-			if t, ok := trendMap[key]; ok {
-				t.Count++
-			} else {
-				trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
-			}
-
-			// 项目汇总
-			if s, ok := summaryMap[proj]; ok {
-				s.Count++
-				if row.Status == "success" {
-					s.Success++
-				} else {
-					s.Failed++
-				}
-			} else {
-				s := &projectSummary{Project: proj, Count: 1}
-				if row.Status == "success" {
-					s.Success = 1
-				} else {
-					s.Failed = 1
-				}
-				summaryMap[proj] = s
-			}
-		}
-
-		// 操作类型统计
-		actionMap[row.Action]++
-
-		// 总计
-		totalCount++
-		if row.Status == "success" {
-			successCount++
 		} else {
-			failedCount++
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
+				}
+				if s, ok := summaryMap[proj]; ok {
+					s.Count++
+					if row.Status == "success" {
+						s.Success++
+					} else {
+						s.Failed++
+					}
+				} else {
+					s := &projectSummary{Project: proj, Count: 1}
+					if row.Status == "success" {
+						s.Success = 1
+					} else {
+						s.Failed = 1
+					}
+					summaryMap[proj] = s
+				}
+			}
+			actionMap[row.Action]++
+			totalCount++
+			if row.Status == "success" {
+				successCount++
+			} else {
+				failedCount++
+			}
 		}
 	}
 
@@ -475,57 +455,57 @@ func (h *DashboardHandler) K8sProjectStats(c *gin.Context) {
 // PreprodProjectStats godoc
 //
 //	@Summary		获取预生产扩缩容项目统计数据
-//	@Description	按日/周/月/年统计预生产各服务的扩缩容次数、成功率和趋势
+//	@Description	按指定日期范围统计预生产各服务的扩缩容次数、成功率和趋势
 //	@Tags			仪表盘
 //	@Produce		json
-//	@Param			granularity	query	string	true	"时间粒度: day/week/month/year"
+//	@Param			start_date	query	string	true	"开始日期，格式 YYYY-MM-DD"
+//	@Param			end_date	query	string	true	"结束日期，格式 YYYY-MM-DD"
 //	@Param			server_name	query	string	false	"服务器名称筛选"
 //	@Security		BearerAuth
 //	@Success		200	{object}	object
 //	@Router			/dashboard/preprod-project-stats [get]
 func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 	ctx := c.Request.Context()
-	granularity := c.DefaultQuery("granularity", "day")
 	serverName := c.Query("server_name")
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
 
-	var dateFormat string
-	var defaultDuration time.Duration
-	switch granularity {
-	case "week":
-		dateFormat = "%x-W%v"
-		defaultDuration = 12 * 7 * 24 * time.Hour
-	case "month":
-		dateFormat = "%Y-%m"
-		defaultDuration = 365 * 24 * time.Hour
-	case "year":
-		dateFormat = "%Y"
-		defaultDuration = 5 * 365 * 24 * time.Hour
-	default:
-		dateFormat = "%Y-%m-%d"
-		defaultDuration = 30 * 24 * time.Hour
+	if startDate == "" || endDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_date 和 end_date 为必填参数"})
+		return
 	}
 
-	startTime := time.Now().Add(-defaultDuration)
+	now := time.Now()
+	sd, err1 := time.ParseInLocation("2006-01-02", startDate, now.Location())
+	ed, err2 := time.ParseInLocation("2006-01-02", endDate, now.Location())
+	if err1 != nil || err2 != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "日期格式错误，应为 YYYY-MM-DD"})
+		return
+	}
+	endTime := ed.Add(24*time.Hour - time.Second)
+
+	dateFormat := "%Y-%m-%d"
 
 	type logRow struct {
 		Period       string
 		ProjectNames string
 		Status       string
 		Action       string
+		CreatedAt    time.Time
 	}
 	var rows []logRow
 	query := h.db.WithContext(ctx).Model(&model.OperationLog{}).
-		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action", dateFormat).
-		Where("module = ? AND created_at > ?", "preprod", startTime)
+		Select("DATE_FORMAT(created_at, ?) as period, project_names, status, action, created_at", dateFormat).
+		Where("module = ? AND created_at >= ? AND created_at <= ?", "preprod", sd, endTime)
 	if serverName != "" {
 		query = query.Where("server_name = ?", serverName)
 	}
-	err := query.Order("period").Scan(&rows).Error
-	if err != nil {
+	if err := query.Order("period").Scan(&rows).Error; err != nil {
 		log.Printf("查询预生产项目统计失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
+	log.Printf("预生产项目统计: 查询到 %d 条记录, 范围=%s 至 %s", len(rows), startDate, endDate)
 
 	type projectTrend struct {
 		Period  string `json:"period"`
@@ -550,12 +530,27 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 
 	for _, row := range rows {
 		isFullOp := row.ProjectNames == "*" || row.ProjectNames == ""
-		if isFullOp {
-			fullOpsCount++
+
+		// 趋势数据
+		if !isFullOp {
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
+				}
+				key := row.Period + "|" + proj
+				if t, ok := trendMap[key]; ok {
+					t.Count++
+				} else {
+					trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
+				}
+			}
 		}
 
-		var projects []string
+		// 汇总数据（整个选定范围）
 		if isFullOp {
+			fullOpsCount++
 			totalCount++
 			if row.Status == "success" {
 				successCount++
@@ -563,47 +558,37 @@ func (h *DashboardHandler) PreprodProjectStats(c *gin.Context) {
 				failedCount++
 			}
 			actionMap[row.Action]++
-			continue
-		}
-		projects = strings.Split(row.ProjectNames, ",")
-
-		for _, proj := range projects {
-			proj = strings.TrimSpace(proj)
-			if proj == "" {
-				continue
-			}
-
-			key := row.Period + "|" + proj
-			if t, ok := trendMap[key]; ok {
-				t.Count++
-			} else {
-				trendMap[key] = &projectTrend{Period: row.Period, Project: proj, Count: 1}
-			}
-
-			if s, ok := summaryMap[proj]; ok {
-				s.Count++
-				if row.Status == "success" {
-					s.Success++
-				} else {
-					s.Failed++
-				}
-			} else {
-				s := &projectSummary{Project: proj, Count: 1}
-				if row.Status == "success" {
-					s.Success = 1
-				} else {
-					s.Failed = 1
-				}
-				summaryMap[proj] = s
-			}
-		}
-
-		actionMap[row.Action]++
-		totalCount++
-		if row.Status == "success" {
-			successCount++
 		} else {
-			failedCount++
+			projects := strings.Split(row.ProjectNames, ",")
+			for _, proj := range projects {
+				proj = strings.TrimSpace(proj)
+				if proj == "" {
+					continue
+				}
+				if s, ok := summaryMap[proj]; ok {
+					s.Count++
+					if row.Status == "success" {
+						s.Success++
+					} else {
+						s.Failed++
+					}
+				} else {
+					s := &projectSummary{Project: proj, Count: 1}
+					if row.Status == "success" {
+						s.Success = 1
+					} else {
+						s.Failed = 1
+					}
+					summaryMap[proj] = s
+				}
+			}
+			actionMap[row.Action]++
+			totalCount++
+			if row.Status == "success" {
+				successCount++
+			} else {
+				failedCount++
+			}
 		}
 	}
 

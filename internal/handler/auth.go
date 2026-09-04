@@ -68,10 +68,18 @@ func validateEmail(email string) bool {
 
 // loginAttempt 用于记录登录尝试信息
 type loginAttempt struct {
-	mu        sync.Mutex
-	Count     int
-	FirstTime time.Time
+	mu           sync.Mutex
+	Count        int       // 当前窗口内失败次数
+	FirstTime    time.Time // 当前窗口起始时间
+	TotalFailures int      // 累计失败次数（窗口过期不清零）
+	CurrentTier   int       // 当前阶梯级别，锁定过期时递增
 }
+
+// maxLockMultiplier 最大阶梯级别（1→2→4→8→16→30分钟）
+const maxLockMultiplier = 6
+
+// maxIdleDuration IP 记录最大空闲时长，超过此时间未活跃的条目将被清理
+const maxIdleDuration = 1 * time.Hour
 
 // LoginRateLimiter 基于 IP 的登录速率限制器
 type LoginRateLimiter struct {
@@ -80,49 +88,87 @@ type LoginRateLimiter struct {
 
 var loginRateLimiter = &LoginRateLimiter{}
 
-// Allow 检查指定 IP 是否允许登录，同时清理过期条目
-func (rl *LoginRateLimiter) Allow(ip string) bool {
-	now := time.Now()
-	lockDuration := config.Global.Auth.LoginLockDuration
+// maxLockDuration 最大锁定时长（封顶30分钟）
+const maxLockDuration = 30 * time.Minute
 
-	// 清理过期条目
-	rl.attempts.Range(func(key, value interface{}) bool {
-		if entry, ok := value.(*loginAttempt); ok {
-			entry.mu.Lock()
-			expired := now.Sub(entry.FirstTime) > lockDuration
-			entry.mu.Unlock()
-			if expired {
-				rl.attempts.Delete(key)
-			}
-		}
-		return true
-	})
+// effectiveLockDuration 根据阶梯级别计算有效锁定/窗口时长
+// 退避策略：1分钟 → 2分钟 → 4分钟 → 8分钟 → 16分钟 → 30分钟（封顶）
+func (rl *LoginRateLimiter) effectiveLockDuration(tier int) time.Duration {
+	baseLockDuration := config.Global.Auth.LoginLockDuration
+	if tier <= 0 {
+		return baseLockDuration
+	}
+	// 指数退避：baseDuration * 2^(tier-1)
+	duration := baseLockDuration * time.Duration(1<<uint(tier-1))
+	if duration > maxLockDuration {
+		duration = maxLockDuration
+	}
+	return duration
+}
+
+// Allow 检查指定 IP 是否允许登录，返回是否允许及剩余锁定时长
+func (rl *LoginRateLimiter) Allow(ip string) (bool, time.Duration) {
+	now := time.Now()
+	maxAttempts := config.Global.Auth.MaxLoginAttempts
 
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
-		return true
+		return true, 0
 	}
 
 	entry := val.(*loginAttempt)
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
-	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置（defer 会解锁，之后由 Record 创建新条目）
+	// 清理长期未活跃的条目
+	if now.Sub(entry.FirstTime) > maxIdleDuration {
 		rl.attempts.Delete(ip)
-		return true
+		return true, 0
 	}
 
-	return entry.Count < config.Global.Auth.MaxLoginAttempts
+	lockDuration := rl.effectiveLockDuration(entry.CurrentTier)
+	baseLockDuration := config.Global.Auth.LoginLockDuration
+
+	// 当前窗口内未达阈值，检查窗口是否过期
+	if entry.Count < maxAttempts && entry.CurrentTier == 0 {
+		if now.Sub(entry.FirstTime) > baseLockDuration {
+			// 窗口已过期，重置窗口计数
+			entry.Count = 0
+			entry.FirstTime = now
+		}
+		return true, 0
+	}
+
+	// 达到阈值（Count >= maxAttempts），触发锁定
+	if entry.Count >= maxAttempts {
+		// 首次触发锁定：升级到 tier=1
+		if entry.CurrentTier == 0 {
+			entry.CurrentTier = 1
+			lockDuration = rl.effectiveLockDuration(1)
+		}
+		if now.Sub(entry.FirstTime) < lockDuration {
+			return false, lockDuration - now.Sub(entry.FirstTime)
+		}
+		// 锁定期已过，升级 tier，重置窗口
+		if entry.CurrentTier < maxLockMultiplier {
+			entry.CurrentTier++
+		}
+		entry.Count = 0
+		entry.FirstTime = now
+		return true, 0
+	}
+
+	// tier > 0 但 Count < maxAttempts（锁定后新窗口期内）
+	// 用户未达到限制，允许登录。窗口过期由 Record 处理。
+	return true, 0
 }
 
 // Record 记录一次登录尝试
 func (rl *LoginRateLimiter) Record(ip string) {
 	now := time.Now()
-	lockDuration := config.Global.Auth.LoginLockDuration
 	val, loaded := rl.attempts.Load(ip)
 	if !loaded {
-		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now, TotalFailures: 1})
 		return
 	}
 
@@ -130,18 +176,41 @@ func (rl *LoginRateLimiter) Record(ip string) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 
+	lockDuration := rl.effectiveLockDuration(entry.CurrentTier)
 	if now.Sub(entry.FirstTime) > lockDuration {
-		// 窗口已过期，重置
-		rl.attempts.Store(ip, &loginAttempt{Count: 1, FirstTime: now})
+		// 窗口已过期，重置窗口但保留累计失败数和 tier
+		entry.Count = 1
+		entry.FirstTime = now
+		entry.TotalFailures++
 		return
 	}
 
 	entry.Count++
+	entry.TotalFailures++
 }
 
-// Reset 重置指定 IP 的登录计数
+// Reset 重置指定 IP 的所有登录状态（成功登录时调用）
 func (rl *LoginRateLimiter) Reset(ip string) {
 	rl.attempts.Delete(ip)
+}
+
+// RemainingAttempts 返回该 IP 当前窗口内剩余尝试次数
+func (rl *LoginRateLimiter) RemainingAttempts(ip string) int {
+	maxAttempts := config.Global.Auth.MaxLoginAttempts
+	val, loaded := rl.attempts.Load(ip)
+	if !loaded {
+		return maxAttempts
+	}
+
+	entry := val.(*loginAttempt)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+
+	remaining := maxAttempts - entry.Count
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 type AuthHandler struct {
@@ -182,8 +251,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	clientIP := c.ClientIP()
 
 	// 检查登录速率限制
-	if !loginRateLimiter.Allow(clientIP) {
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "登录尝试过于频繁，请稍后再试"})
+	if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+		minutes := int(retryAfter.Minutes()) + 1
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
 		return
 	}
 
@@ -199,21 +269,50 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	if config.Global.LDAP.Enabled && req.Username != "admin" {
 		// 先检查用户是否已导入到系统
 		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "ldap").First(&user).Error; err == nil {
-			// 用户已导入，进行 LDAP 认证
-			ldapInfo, ldapErr := h.ldapSvc.Authenticate(req.Username, req.Password)
-			if ldapErr != nil {
-				// LDAP 认证失败
-				loginRateLimiter.Record(clientIP)
-				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			// 记录 IP 限流计数（锁定/禁用用户也要计入，防止无限尝试）
+			loginRateLimiter.Record(clientIP)
+			if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+				minutes := int(retryAfter.Minutes()) + 1
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+				return
+			}
+			// 检查锁定和禁用状态，避免对锁定/禁用用户发起 LDAP 请求
+			if user.Locked {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+				return
+			}
+			if !user.Enabled {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
 				return
 			}
 
-			// 检查用户是否被禁用
-			if !user.Enabled {
+			// 进行 LDAP 认证
+			ldapInfo, ldapErr := h.ldapSvc.Authenticate(req.Username, req.Password)
+			if ldapErr != nil {
+				// LDAP 认证失败，记录后重新检查 IP 限流
 				loginRateLimiter.Record(clientIP)
-				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
+				if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+					minutes := int(retryAfter.Minutes()) + 1
+					c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+					return
+				}
+				// 用户级失败计数（内置 admin 账号不参与锁定）
+				if user.Username != "admin" {
+					h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
+					h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
+					// 重新加载用户以获取最新的 failed_attempts
+					h.db.First(&user, user.ID)
+					// 检查是否刚被锁定
+					if user.Locked {
+						createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+						c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+						return
+					}
+				}
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 				return
 			}
 
@@ -228,23 +327,48 @@ func (h *AuthHandler) Login(c *gin.Context) {
 				return
 			}
 
+			// 重置失败计数
+			if user.FailedAttempts > 0 {
+				h.db.Model(&user).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+			}
+
 			loginRateLimiter.Reset(clientIP)
-			middleware.TrackActiveUser(req.Username)
+			middleware.TrackActiveUser(req.Username, middleware.ActiveUserInfo{
+				Role:        user.Role,
+				LoginTime:   time.Now().Format(time.RFC3339),
+				LoginMethod: "ldap",
+				LastActive:  time.Now().Format(time.RFC3339),
+				JTI:         middleware.ExtractJTI(token),
+			})
 			createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "LDAP 登录成功", 0, "")
 			c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 			return
 		}
 
-		// 用户未导入，提示联系管理员
-		loginRateLimiter.Record(clientIP)
-		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户未授权", 0, "")
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未授权，请联系管理员导入 LDAP 账户"})
-		return
+		// LDAP 中未找到用户，检查是否存在本地用户
+		if err := h.db.Where("username = ? AND auth_source = ?", req.Username, "local").First(&user).Error; err != nil {
+			// 本地也没有该用户
+			loginRateLimiter.Record(clientIP)
+			if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+				minutes := int(retryAfter.Minutes()) + 1
+				c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+				return
+			}
+			createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+			return
+		}
+		// 本地用户存在，继续走本地认证流程（fall through 到下方的本地密码认证）
 	}
 
 	// 本地密码认证
 	if err := h.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
@@ -252,6 +376,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if !user.Enabled {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账户已被禁用", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "账户已被禁用，请联系管理员"})
 		return
@@ -260,6 +389,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// LDAP 用户不能使用本地密码登录
 	if user.AuthSource == "ldap" {
 		loginRateLimiter.Record(clientIP)
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "LDAP 用户请使用域账号登录", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "LDAP 用户请使用域账号登录"})
 		return
@@ -267,8 +401,34 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		loginRateLimiter.Record(clientIP)
+		// 记录失败后重新检查 IP 限流
+		if allowed, retryAfter := loginRateLimiter.Allow(clientIP); !allowed {
+			minutes := int(retryAfter.Minutes()) + 1
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("登录尝试过于频繁，请 %d 分钟后再试", minutes)})
+			return
+		}
+		// 用户级失败计数（内置 admin 账号不参与锁定）
+		if user.Username != "admin" {
+			h.db.Model(&user).Update("failed_attempts", gorm.Expr("failed_attempts + 1"))
+			h.db.Model(&user).Where("failed_attempts >= ?", config.Global.Auth.MaxUserAttempts).Update("locked", true)
+			// 重新加载用户以获取最新的 failed_attempts
+			h.db.First(&user, user.ID)
+			// 检查是否刚被锁定
+			if user.Locked {
+				createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
+				return
+			}
+		}
 		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "用户名或密码错误", 0, "")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		return
+	}
+
+	// 检查用户是否被锁定
+	if user.Locked {
+		createAuditLog(h.db, c, "auth", "login", req.Username, "", "failed", "账号已锁定", 0, "")
+		c.JSON(http.StatusForbidden, gin.H{"error": "账号已锁定，请联系管理员解锁"})
 		return
 	}
 
@@ -278,8 +438,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// 重置失败计数
+	if user.FailedAttempts > 0 {
+		h.db.Model(&user).Updates(map[string]interface{}{"failed_attempts": 0, "locked": false})
+	}
+
 	loginRateLimiter.Reset(clientIP)
-	middleware.TrackActiveUser(req.Username)
+	middleware.TrackActiveUser(req.Username, middleware.ActiveUserInfo{
+		Role:        user.Role,
+		LoginTime:   time.Now().Format(time.RFC3339),
+		LoginMethod: "local",
+		LastActive:  time.Now().Format(time.RFC3339),
+		JTI:         middleware.ExtractJTI(token),
+	})
 	createAuditLog(h.db, c, "auth", "login", req.Username, "", "success", "登录成功", 0, "")
 	c.JSON(http.StatusOK, LoginResponse{Token: token, User: user})
 }
@@ -422,7 +593,27 @@ func (h *AuthHandler) ListUsers(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
-	c.JSON(http.StatusOK, users)
+
+	// 构造带在线状态的响应
+	result := make([]gin.H, len(users))
+	for i, user := range users {
+		online := middleware.GetActiveUserInfo(user.Username) != nil
+		result[i] = gin.H{
+			"id":              user.ID,
+			"username":        user.Username,
+			"name":            user.Name,
+			"email":           user.Email,
+			"role":            user.Role,
+			"enabled":         user.Enabled,
+			"auth_source":     user.AuthSource,
+			"failed_attempts": user.FailedAttempts,
+			"locked":          user.Locked,
+			"online":          online,
+			"created_at":      user.CreatedAt,
+			"updated_at":      user.UpdatedAt,
+		}
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 // CreateUser godoc
@@ -806,6 +997,11 @@ func (h *AuthHandler) BatchToggleUsers(c *gin.Context) {
 			continue
 		}
 
+		// 禁用用户时自动强制下线
+		if !req.Enabled {
+			middleware.ForceKickUser(user.Username)
+		}
+
 		updated++
 		updatedNames = append(updatedNames, user.Username)
 	}
@@ -1109,6 +1305,280 @@ type ImportLDAPUser struct {
 	Email    string `json:"email"`
 	DN       string `json:"dn" binding:"required"`
 }
+
+// UnlockUser godoc
+//
+//	@Summary		解锁用户
+//	@Description	管理员解锁被锁定的用户（重置 failed_attempts 和 locked）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id}/unlock [put]
+func (h *AuthHandler) UnlockUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if user.Username == "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "admin 用户无需解锁"})
+		return
+	}
+
+	if !user.Locked && user.FailedAttempts == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户未被锁定"})
+		return
+	}
+
+	if err := h.db.Model(&user).Updates(map[string]interface{}{
+		"locked":          false,
+		"failed_attempts": 0,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解锁失败"})
+		return
+	}
+
+	createAuditLog(h.db, c, "auth", "unlock_user",
+		fmt.Sprintf("解锁用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
+	c.JSON(http.StatusOK, gin.H{"message": "解锁成功"})
+}
+
+// KickUser godoc
+//
+//	@Summary		强制下线用户
+//	@Description	管理员强制将在线用户踢下线（作废 token + 清除在线状态）
+//	@Tags			用户管理
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"用户 ID"
+//	@Success		200	{object}	object
+//	@Failure		400	{object}	object
+//	@Failure		401	{object}	object
+//	@Failure		403	{object}	object
+//	@Failure		404	{object}	object
+//	@Router			/users/{id}/kick [post]
+func (h *AuthHandler) KickUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的ID"})
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if user.Username == "admin" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能强制下线 admin 用户"})
+		return
+	}
+
+	// 不能踢自己下线
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+	if currentUserID == uint(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能强制下线自己"})
+		return
+	}
+
+	kicked := middleware.ForceKickUser(user.Username)
+	if !kicked {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户当前不在线"})
+		return
+	}
+
+	createAuditLog(h.db, c, "auth", "kick_user",
+		fmt.Sprintf("强制下线用户: %s (ID: %d)", user.Username, id),
+		"", "success", "", 0, "")
+	c.JSON(http.StatusOK, gin.H{"message": "已强制下线"})
+}
+
+type BatchUnlockUsersRequest struct {
+	IDs []uint `json:"ids" binding:"required"`
+}
+
+// BatchUnlockUsers godoc
+//
+//	@Summary		批量解锁用户
+//	@Description	批量解锁被锁定的用户（管理员）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchUnlockUsersRequest	true	"用户 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-unlock [post]
+func (h *AuthHandler) BatchUnlockUsers(c *gin.Context) {
+	var req BatchUnlockUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要解锁的用户"})
+		return
+	}
+
+	unlocked := 0
+	failed := 0
+	var unlockedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if user.Username == "admin" {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if !user.Locked && user.FailedAttempts == 0 {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if err := h.db.Model(&user).Updates(map[string]interface{}{
+			"locked":          false,
+			"failed_attempts": 0,
+		}).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		unlocked++
+		unlockedNames = append(unlockedNames, user.Username)
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_unlock_users",
+		fmt.Sprintf("批量解锁用户: 成功 %d, 失败 %d", unlocked, failed),
+		"", "success", fmt.Sprintf("解锁的用户: %v", unlockedNames), 0, "")
+
+	message := fmt.Sprintf("批量解锁完成: 成功 %d, 失败 %d", unlocked, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  message,
+		"unlocked": unlocked,
+		"failed":   failed,
+	})
+}
+
+// BatchKickUsers godoc
+//
+//	@Summary		批量强制下线用户
+//	@Description	管理员批量强制将在线用户踢下线（作废 token + 清除在线状态）
+//	@Tags			用户管理
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		BatchUnlockUsersRequest	true	"用户 ID 列表"
+//	@Success		200		{object}	object
+//	@Failure		400		{object}	object
+//	@Failure		401		{object}	object
+//	@Failure		403		{object}	object
+//	@Router			/users/batch-kick [post]
+func (h *AuthHandler) BatchKickUsers(c *gin.Context) {
+	var req BatchUnlockUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择要下线的用户"})
+		return
+	}
+
+	currentUserID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未认证"})
+		return
+	}
+
+	kicked := 0
+	failed := 0
+	var kickedNames []string
+	var failedNames []string
+
+	for _, id := range req.IDs {
+		var user model.User
+		if err := h.db.First(&user, id).Error; err != nil {
+			failed++
+			failedNames = append(failedNames, fmt.Sprintf("ID:%d", id))
+			continue
+		}
+
+		if user.Username == "admin" {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if currentUserID == uint(id) {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		if !middleware.ForceKickUser(user.Username) {
+			failed++
+			failedNames = append(failedNames, user.Username)
+			continue
+		}
+
+		kicked++
+		kickedNames = append(kickedNames, user.Username)
+	}
+
+	createAuditLog(h.db, c, "auth", "batch_kick_users",
+		fmt.Sprintf("批量强制下线用户: 成功 %d, 失败 %d", kicked, failed),
+		"", "success", fmt.Sprintf("下线的用户: %v", kickedNames), 0, "")
+
+	message := fmt.Sprintf("批量下线完成: 成功 %d, 失败 %d", kicked, failed)
+	if len(failedNames) > 0 {
+		message += fmt.Sprintf("\n失败: %s", strings.Join(failedNames, ", "))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": message,
+		"updated": kicked,
+		"failed":  failed,
+	})
+}
+
 func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -1142,6 +1612,11 @@ func (h *AuthHandler) ToggleUserEnabled(c *gin.Context) {
 	if err := h.db.Model(&user).Update("enabled", newStatus).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "操作失败"})
 		return
+	}
+
+	// 禁用用户时自动强制下线
+	if !newStatus {
+		middleware.ForceKickUser(user.Username)
 	}
 
 	action := "enable_user"

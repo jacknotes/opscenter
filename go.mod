@@ -3,7 +3,6 @@ module opscenter
 go 1.25.0
 
 require (
-	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/go-redis/redismock/v9 v9.2.0

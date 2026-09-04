@@ -14,6 +14,11 @@ type PreprodResource struct {
 	Available      int    `json:"available"`
 	Age            string `json:"age"`
 	TargetReplicas int    `json:"target_replicas"`
+	// Ready 为 READY 列的就绪副本数（分子），ReadyDesired 为 READY 列的目标副本数（分母）。
+	// 与控制器视角的 Current/Desired 不同，二者反映 Pod 真实就绪状态，
+	// 用于准确判断扩容过程中 Pod 是否真正 Running。
+	Ready        int `json:"ready"`
+	ReadyDesired int `json:"ready_desired"`
 }
 
 // PreprodService 提供预生产缩扩容的业务逻辑。
@@ -80,6 +85,16 @@ func hasColumn(ranges []columnRange, name string) bool {
 	return false
 }
 
+// findColumn 按名称查找列范围，未找到返回 nil。
+func findColumn(ranges []columnRange, name string) *columnRange {
+	for i := range ranges {
+		if ranges[i].Name == name {
+			return &ranges[i]
+		}
+	}
+	return nil
+}
+
 // ParseListOutput 解析 list 脚本输出，按类别（rollout/deployment/statefulset）提取资源状态。
 // 使用列位置解析而非固定字段分割，兼容不同列宽的输出格式。
 func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
@@ -140,17 +155,54 @@ func (s *PreprodService) ParseListOutput(output string) []PreprodResource {
 			case "AGE":
 				r.Age = val
 			case "READY":
-				if !hasColumn(colRanges, "DESIRED") {
-					if parts := strings.SplitN(val, "/", 2); len(parts) == 2 {
-						r.Current = parseInt(parts[0])
-						r.Desired = parseInt(parts[1])
+				// READY 列可能为 "x/y"（Deployment）或单个整数（Argo Rollouts 的 READY 列
+				// 仅打印 readyReplicas）。统一解析为就绪副本数 Ready 与目标就绪数 ReadyDesired，
+				// 用于准确判断扩容过程中 Pod 是否真正 Running。
+				if parts := strings.SplitN(val, "/", 2); len(parts) == 2 {
+					// "x/y" 形式：分子为就绪数，分母为目标数
+					r.Ready = parseInt(parts[0])
+					r.ReadyDesired = parseInt(parts[1])
+					// 仅当无 DESIRED 列时（如 Deployment），用 READY 兜底 Current/Desired。
+					if !hasColumn(colRanges, "DESIRED") {
+						r.Current = r.Ready
+						r.Desired = r.ReadyDesired
+					}
+				} else {
+					// 单个整数形式（Argo Rollouts）：值为就绪数，目标数取自 DESIRED 列
+					r.Ready = parseInt(val)
+					if cr := findColumn(colRanges, "DESIRED"); cr != nil {
+						if desiredVal := extractColumn(line, *cr); desiredVal != "" {
+							r.ReadyDesired = parseInt(desiredVal)
+						}
 					}
 				}
 			}
 		}
-		resources = append(resources, r)
+			resources = append(resources, normalizeReady(r))
+		}
+		return resources
+}
+
+// normalizeReady 在 READY 列无法提供可靠的就绪信息时（如 Argo Rollouts 某些版本
+// 不输出 READY 列、或 READY 为单整数但无 DESIRED 列），用其它列兜底计算就绪状态，
+// 避免就绪副本显示为 "-" 且误报"已缩容"。
+//
+// 兜底规则：
+//   - ReadyDesired 为 0 时，若存在 DESIRED 列且 Desired>0，取 Desired；否则若
+//     Current>0，取 Current（控制器已设定目标但未显式输出）。
+//   - Ready 为 0 时，若 Available>0，取 Available（可用副本数近似就绪数）。
+func normalizeReady(r PreprodResource) PreprodResource {
+	if r.ReadyDesired == 0 {
+		if r.Desired > 0 {
+			r.ReadyDesired = r.Desired
+		} else if r.Current > 0 {
+			r.ReadyDesired = r.Current
+		}
 	}
-	return resources
+	if r.Ready == 0 && r.Available > 0 {
+		r.Ready = r.Available
+	}
+	return r
 }
 
 type TargetInfo struct {

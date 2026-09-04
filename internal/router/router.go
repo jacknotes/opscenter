@@ -4,7 +4,6 @@ package router
 import (
 	"net/http"
 
-	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
@@ -33,13 +32,6 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 
 	// Middleware
 	r.Use(middleware.CORS())
-
-	// 静态资源 gzip 压缩：element-plus/echarts 等大体积 JS 传输体积可降约 70%。
-	// 排除 /api（含 WebSocket 流式输出）与 /swagger，避免影响流式与非 JSON 响应。
-	r.Use(gzip.Gzip(gzip.DefaultCompression,
-		gzip.WithExcludedPathsRegexs([]string{`^/api/`, `^/swagger/`})))
-	// 前端资源缓存策略：带 hash 的 assets 强缓存，index.html 协商缓存
-	r.Use(middleware.StaticCache())
 
 	// Serve static files (frontend)
 	r.StaticFS("/assets", http.Dir("web/dist/assets"))
@@ -104,6 +96,13 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 		protected.GET("/dashboard/k8s-project-stats", dashboardHandler.K8sProjectStats)
 		protected.GET("/dashboard/preprod-project-stats", dashboardHandler.PreprodProjectStats)
 		protected.GET("/dashboard/lvs-conn-stats", dashboardHandler.LvsConnStats)
+
+		// Dashboard admin routes
+		dashboardAdmin := protected.Group("/dashboard")
+		dashboardAdmin.Use(middleware.AdminRequired(db))
+		{
+			dashboardAdmin.GET("/online-users", dashboardHandler.OnlineUsers)
+		}
 
 		// LVS
 		lvs := protected.Group("/lvs")
@@ -212,6 +211,10 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 			users.POST("/batch-toggle", authHandler.BatchToggleUsers)
 			users.PUT("/:id/reset-password", authHandler.ResetPassword)
 			users.PUT("/:id/toggle", authHandler.ToggleUserEnabled)
+			users.PUT("/:id/unlock", authHandler.UnlockUser)
+			users.POST("/batch-unlock", authHandler.BatchUnlockUsers)
+			users.POST("/:id/kick", authHandler.KickUser)
+			users.POST("/batch-kick", authHandler.BatchKickUsers)
 			// LDAP user management
 			users.GET("/ldap", authHandler.ListLDAPUsers)
 			users.POST("/ldap/import", authHandler.ImportLDAPUsers)

@@ -458,8 +458,20 @@ func (h *K8sHandler) generateFullPreview(c *gin.Context, serverID uint, action s
 	}
 	command, description := h.k8sService.GenerateFullPreview(server.ScriptPath, action)
 
+	// 从 list 输出中解析所有项目名称，用于审计日志记录
+	var projectNames []string
+	if currentOutput != "" {
+		rollouts := h.k8sService.ParseListOutput(currentOutput)
+		for _, r := range rollouts {
+			if r.Name != "" {
+				projectNames = append(projectNames, r.Name)
+			}
+		}
+	}
+
 	previewID := h.previewMgr.Create("k8s", "full_"+action, serverID, map[string]interface{}{
-		"command": command,
+		"command":       command,
+		"project_names": projectNames,
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -530,6 +542,7 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 	var projectNames string
 	var projectCount int
 	if projects, ok := params["projects"].([]interface{}); ok {
+		// 单项目/批量操作：从 projects 参数提取
 		var names []string
 		for _, p := range projects {
 			if proj, ok := p.(map[string]interface{}); ok {
@@ -540,8 +553,23 @@ func (h *K8sHandler) executeK8sAction(c *gin.Context, previewID, action string) 
 		}
 		projectNames = strings.Join(names, ",")
 		projectCount = len(names)
+	} else if names, ok := params["project_names"].([]interface{}); ok {
+		// 全量操作：从预览时解析的 project_names 提取
+		var strNames []string
+		for _, n := range names {
+			if s, ok := n.(string); ok && s != "" {
+				strNames = append(strNames, s)
+			}
+		}
+		if len(strNames) > 0 {
+			projectNames = strings.Join(strNames, ",")
+			projectCount = len(strNames)
+		} else {
+			projectNames = "*"
+			projectCount = 0
+		}
 	} else {
-		// 全量操作，无具体项目
+		// 兜底：无项目信息
 		projectNames = "*"
 		projectCount = 0
 	}

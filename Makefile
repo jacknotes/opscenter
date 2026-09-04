@@ -8,7 +8,7 @@ swagger:
 frontend:
 	cd web && npm install && npm run build
 
-# 构建后端（运行时通过 StaticFS 读取 web/dist/ 提供前端资源）
+# 构建后端（通过 go:embed 嵌入 web/dist/ 中的前端资源）
 backend: swagger
 	CGO_ENABLED=0 go build -o opscenter ./cmd/server/
 

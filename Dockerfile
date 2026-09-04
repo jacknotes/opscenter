@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/web
 
@@ -32,6 +32,9 @@ FROM alpine:3.19
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
     apk --no-cache add ca-certificates tzdata
+
+# 设置默认时区为 Asia/Shanghai，确保 Go 的 time.Now() 和 MySQL DATE_FORMAT 使用一致的时区
+ENV TZ=Asia/Shanghai
 
 WORKDIR /app
 

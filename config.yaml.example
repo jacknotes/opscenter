@@ -78,6 +78,8 @@ auth:
   max_login_attempts: 10
   # 登录限流：锁定时长（默认 1m）
   login_lock_duration: 1m
+  # 用户级锁定：连续登录失败多少次后锁定账号（默认 5）
+  max_user_attempts: 5
 
 # 审计日志 JSON 输出（可选，用于 Elasticsearch 等日志系统收集）
 # 配合 Filebeat/Fluentd 等采集器将日志发送到 Elasticsearch

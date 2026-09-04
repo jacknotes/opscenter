@@ -33,9 +33,11 @@ func NewLogHandler(db *gorm.DB) *LogHandler {
 //	@Param			username	query		string	false	"用户名（模糊匹配）"
 //	@Param			status		query		string	false	"状态 (success/failed)"
 //	@Param			action		query		string	false	"操作类型"
-//	@Param			keyword		query		string	false	"关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP）"
+//	@Param			keyword		query		string	false	"关键字搜索（模糊匹配用户名、动作、目标、服务器名、IP、输出）"
 //	@Param			start_time	query		string	false	"开始时间 (2006-01-02)"
 //	@Param			end_time	query		string	false	"结束时间 (2006-01-02)"
+//	@Param			sort_by		query		string	false	"排序字段 (created_at/username/module/status)，默认 created_at"
+//	@Param			sort_order	query		string	false	"排序方向 (asc/desc)，默认 desc"
 //	@Success		200			{object}	object
 //	@Failure		500			{object}	object
 //	@Router			/logs [get]
@@ -50,6 +52,21 @@ func (h *LogHandler) List(c *gin.Context) {
 	keyword := c.Query("keyword")
 	startTime := c.Query("start_time")
 	endTime := c.Query("end_time")
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+	allowedSortFields := map[string]bool{
+		"created_at": true,
+		"username":   true,
+		"module":     true,
+		"status":     true,
+	}
+	if !allowedSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
 
 	if page < 1 {
 		page = 1
@@ -86,7 +103,7 @@ func (h *LogHandler) List(c *gin.Context) {
 	}
 	if keyword != "" {
 		like := "%" + keyword + "%"
-		query = query.Where("username LIKE ? OR action LIKE ? OR target LIKE ? OR server_name LIKE ? OR ip LIKE ?", like, like, like, like, like)
+		query = query.Where("username LIKE ? OR action LIKE ? OR target LIKE ? OR server_name LIKE ? OR ip LIKE ? OR output LIKE ?", like, like, like, like, like, like)
 	}
 	if startTime != "" {
 		if t, err := time.Parse("2006-01-02", startTime); err == nil {
@@ -101,7 +118,11 @@ func (h *LogHandler) List(c *gin.Context) {
 
 	query.Session(&gorm.Session{}).Count(&total)
 
-	if err := query.Order("id DESC").Offset((page - 1) * size).Limit(size).Find(&logs).Error; err != nil {
+	orderClause := sortBy + " " + sortOrder
+	if sortBy != "created_at" {
+		orderClause += ", created_at DESC"
+	}
+	if err := query.Order(orderClause).Offset((page - 1) * size).Limit(size).Find(&logs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "查询失败"})
 		return
 	}
