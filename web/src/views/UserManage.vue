@@ -277,7 +277,7 @@ async function doImport(): Promise<void> {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.operation')" width="240" fixed="right">
+        <el-table-column :label="t('common.operation')" width="290" fixed="right">
           <template #default="{ row }">
             <el-button link size="small" @click="openEdit(row as User)">{{ t('common.edit') }}</el-button>
             <el-button link type="warning" size="small" :disabled="row.auth_source === 'ldap'" @click="openReset(row as User)">

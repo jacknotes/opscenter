@@ -223,7 +223,7 @@ function onRollbackConfirm(backupFile: string): void {
           :loading="configsLoading"
           filterable
           :disabled="!serverId"
-          style="min-width: 200px"
+          style="width: 220px"
         >
           <el-option v-for="f in configFiles" :key="f" :value="f" :label="f" />
         </el-select>

@@ -75,7 +75,9 @@ defineExpose({ reload: load })
 
 <style scoped>
 .server-select {
-  min-width: 240px;
+/* el-select 默认 width:100%，在 page-head 弹性布局中会撑爆标题区 */
+width: 260px;
+max-width: 40vw;
 }
 
 .opt-host {

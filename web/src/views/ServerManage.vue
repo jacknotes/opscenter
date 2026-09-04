@@ -325,7 +325,7 @@ async function batchTest(): Promise<void> {
           </template>
         </el-table-column>
         <el-table-column prop="description" :label="t('servers.description')" min-width="140" show-overflow-tooltip />
-        <el-table-column :label="t('common.operation')" width="240" fixed="right">
+        <el-table-column :label="t('common.operation')" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" size="small" @click="testConn(row as ServerResponse)">
               {{ t('servers.test') }}
