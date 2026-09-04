@@ -4,7 +4,6 @@ import type {
   BatchResult,
   CommandExecuteResult,
   DashboardStats,
-  Granularity,
   K8sExecuteResult,
   K8sPreview,
   K8sProjectRef,
@@ -28,6 +27,7 @@ import type {
   NginxTogglePayload,
   NginxUpstreamPayload,
   NginxUpstreamsResponse,
+  OnlineUsersResponse,
   OperationLog,
   PreprodPreview,
   PreprodResource,
@@ -60,12 +60,15 @@ export const dashboardApi = {
     client
       .get<RemoteStats>('/dashboard/remote-stats', { timeout: 70000 })
       .then((r) => r.data),
-  activityStats: (params: { granularity: Granularity; action_granularity?: Granularity }) =>
+  activityStats: (params: { start_date: string; end_date: string }) =>
     client.get<ActivityStats>('/dashboard/activity-stats', { params }).then((r) => r.data),
-  k8sProjectStats: (params: { granularity: Granularity; server_name?: string }) =>
+  k8sProjectStats: (params: { start_date: string; end_date: string; server_name?: string }) =>
     client.get<ProjectStatsResponse>('/dashboard/k8s-project-stats', { params }).then((r) => r.data),
-  preprodProjectStats: (params: { granularity: Granularity; server_name?: string }) =>
+  preprodProjectStats: (params: { start_date: string; end_date: string; server_name?: string }) =>
     client.get<ProjectStatsResponse>('/dashboard/preprod-project-stats', { params }).then((r) => r.data),
+  /** 在线用户列表（admin，Redis 会话） */
+  onlineUsers: () =>
+    client.get<OnlineUsersResponse>('/dashboard/online-users').then((r) => r.data),
   lvsConnStats: (params: { server_id: number | string; vs_ip: string; rs_ip: string; duration?: number }) =>
     client.get<{ data: { collected_at: string; active_conn: number; inact_conn: number }[] }>(
       '/dashboard/lvs-conn-stats',
@@ -209,6 +212,14 @@ export const userApi = {
   listLdap: () => client.get<LdapUser[]>('/users/ldap').then((r) => r.data),
   importLdap: (users: LdapUser[]) =>
     client.post<LdapImportResult>('/users/ldap/import', { users }).then((r) => r.data),
+  /** 解锁被锁定的用户 */
+  unlockUser: (id: number) => client.put<{ message: string }>(`/users/${id}/unlock`).then((r) => r.data),
+  /** 强制下线在线用户（用户不在线返回 400） */
+  kickUser: (id: number) => client.post<{ message: string }>(`/users/${id}/kick`).then((r) => r.data),
+  batchUnlockUsers: (ids: number[]) =>
+    client.post<BatchResult>('/users/batch-unlock', { ids }).then((r) => r.data),
+  batchKickUsers: (ids: number[]) =>
+    client.post<BatchResult>('/users/batch-kick', { ids }).then((r) => r.data),
 }
 
 // ---------- 日志 ----------

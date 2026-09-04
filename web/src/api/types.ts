@@ -12,6 +12,10 @@ export interface User {
   role: 'admin' | 'user'
   enabled: boolean
   auth_source: 'local' | 'ldap'
+  /** 登录失败次数（达到阈值后锁定） */
+  failed_attempts: number
+  /** 是否被锁定（管理员可解锁） */
+  locked: boolean
   created_at: string
   updated_at: string
 }
@@ -19,6 +23,20 @@ export interface User {
 export interface LoginResponse {
   token: string
   user: User
+}
+
+/** GET /dashboard/online-users —— 在线用户（admin） */
+export interface OnlineUser {
+  username: string
+  role: string
+  login_time: string
+  login_method: string
+  last_active: string
+}
+
+export interface OnlineUsersResponse {
+  users: OnlineUser[]
+  total: number
 }
 
 // ---------- 服务器 ----------
@@ -361,6 +379,9 @@ export interface LogQuery {
   keyword?: string
   start_time?: string // YYYY-MM-DD
   end_time?: string
+  /** 服务端排序字段（后端白名单：created_at/username/module/status） */
+  sort_by?: 'created_at' | 'username' | 'module' | 'status'
+  sort_order?: 'asc' | 'desc'
 }
 
 // ---------- Dashboard ----------
@@ -419,6 +440,8 @@ export interface RemoteStats {
   preprod: PreprodRemoteStat | null
 }
 
+/** Dashboard 日期范围，格式 YYYY-MM-DD */
+export type DateRange = [string, string] | string[] | null
 export type Granularity = 'day' | 'week' | 'month' | 'year'
 
 export interface DeployStatPoint {
