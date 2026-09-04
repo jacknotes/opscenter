@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -20,6 +20,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from '@/composables/useTheme'
+import { STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
 
@@ -30,7 +31,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const { theme, toggle: toggleTheme } = useTheme()
 
-const collapsed = ref(false)
+// 侧边栏折叠状态持久化（刷新后恢复）
+const collapsed = ref(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === '1')
+watch(collapsed, (v) => {
+  if (v) localStorage.setItem(STORAGE_KEYS.SIDEBAR_COLLAPSED, '1')
+  else localStorage.removeItem(STORAGE_KEYS.SIDEBAR_COLLAPSED)
+})
 
 interface NavItem {
   path: string
@@ -70,6 +76,20 @@ async function handleChangePassword(): Promise<void> {
   // 打开修改密码弹窗（全局事件，由页面级对话框组件监听）
   window.dispatchEvent(new CustomEvent('opscenter:change-password'))
 }
+
+// 快捷键 r：刷新当前页面数据（输入框内不触发），页面监听 page-refresh 事件
+function handleKeydown(e: KeyboardEvent): void {
+  const target = e.target as HTMLElement | null
+  const tag = target?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+  if (e.key === 'r' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    window.dispatchEvent(new CustomEvent('page-refresh'))
+  }
+}
+
+onMounted(() => document.addEventListener('keydown', handleKeydown))
+onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>

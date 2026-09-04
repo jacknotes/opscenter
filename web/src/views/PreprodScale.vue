@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { preprodApi, lvsApi, extractErrorMessage } from '@/api'
-import type { PreprodPreview, PreprodResource, LvsScaledownCheck } from '@/api/types'
+import type { PreprodPreview, PreprodResource, LvsScaledownCheck, WsMessage } from '@/api/types'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
+import { useOutputCache } from '@/composables/useOutputCache'
+import { getToken } from '@/utils/session'
+import { STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
@@ -12,6 +15,12 @@ const t = i18n.global.t
 
 // ---------- 资源列表 ----------
 const serverId = ref<number>()
+// 服务器选择记忆（v1 useServerSelector 行为）
+const savedPreprodServer = localStorage.getItem(STORAGE_KEYS.PREPROD_SERVER)
+if (savedPreprodServer) serverId.value = Number(savedPreprodServer)
+watch(serverId, (v) => {
+  if (v) localStorage.setItem(STORAGE_KEYS.PREPROD_SERVER, String(v))
+})
 const resources = ref<PreprodResource[]>([])
 const listLoading = ref(false)
 const keyword = ref('')
@@ -34,6 +43,11 @@ async function loadList(): Promise<void> {
 
 watch(serverId, loadList)
 
+// 已有记忆的服务器时直接加载
+onMounted(() => {
+  if (serverId.value) void loadList()
+})
+
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   if (!kw) return resources.value
@@ -43,9 +57,8 @@ const filtered = computed(() => {
 const categoryType = (c: string): 'primary' | 'warning' | 'info' =>
   c === 'rollout' ? 'primary' : c === 'statefulset' ? 'warning' : 'info'
 
-// ---------- 缩扩容（流式执行） ----------
+// ---------- 缩扩容（预览） ----------
 const previewVisible = ref(false)
-const streamPreviewId = ref('')
 
 const pe = usePreviewExecute<PreprodPreview>()
 
@@ -80,40 +93,137 @@ async function scalePreview(action: ScaleAction): Promise<void> {
       ? preprodApi.scaledownPreview({ server_id: sid, resource_names: names })
       : preprodApi.scaleupPreview({ server_id: sid, resource_names: names }),
   )
-  if (ok) {
-    streamPreviewId.value = ''
-    previewVisible.value = true
+  if (ok) previewVisible.value = true
+}
+
+// ---------- WebSocket 流式执行（页级持有，支持输出缓存） ----------
+interface StreamLine {
+  text: string
+  stream: 'stdout' | 'stderr' | 'system'
+}
+
+type StreamState = 'idle' | 'running' | 'done' | 'failed'
+
+const streamLines = ref<StreamLine[]>([])
+const streamState = ref<StreamState>('idle')
+const terminalRef = ref<HTMLElement>()
+
+let ws: WebSocket | null = null
+
+function pushLine(line: StreamLine): void {
+  streamLines.value.push(line)
+  void nextTick(() => {
+    const el = terminalRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+function disconnectStream(): void {
+  if (ws) {
+    ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+    try {
+      ws.close()
+    } catch {
+      /* 忽略 */
+    }
+    ws = null
   }
 }
+
+function streamFail(message: string): void {
+  streamState.value = 'failed'
+  if (message) ElMessage.error(message)
+  // 契约：执行失败时预览已删除（WS 语义），需要重新预览
+  pe.reset()
+}
+
+function connectStream(previewId: string): void {
+  disconnectStream()
+  streamLines.value = []
+  streamState.value = 'running'
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const url = `${proto}://${location.host}/api/ws/exec?token=${encodeURIComponent(getToken())}`
+  ws = new WebSocket(url)
+
+  ws.onopen = () => {
+    // 契约：连接后首条消息必须是 start
+    ws?.send(JSON.stringify({ type: 'start', preview_id: previewId }))
+  }
+
+  ws.onmessage = (ev: MessageEvent) => {
+    let msg: WsMessage
+    try {
+      msg = JSON.parse(ev.data as string) as WsMessage
+    } catch {
+      return
+    }
+    switch (msg.type) {
+      case 'output':
+        pushLine({ text: msg.data ?? '', stream: msg.stream === 'stderr' ? 'stderr' : 'stdout' })
+        break
+      case 'done':
+        streamState.value = 'done'
+        pushLine({ text: `✔ ${t('common.execSuccess')}`, stream: 'system' })
+        ElMessage.success(t('common.execSuccess'))
+        pe.reset()
+        disconnectStream()
+        void loadList()
+        break
+      case 'lock_error':
+        pushLine({ text: `✖ ${t('ws.lockError', { holder: msg.holder ?? '' })}`, stream: 'system' })
+        streamFail(msg.message ?? '')
+        disconnectStream()
+        break
+      case 'error':
+        pushLine({ text: `✖ ${msg.message ?? t('common.execFailed')}`, stream: 'system' })
+        streamFail(msg.message ?? '')
+        disconnectStream()
+        break
+    }
+  }
+
+  ws.onerror = () => {
+    if (streamState.value === 'running') {
+      pushLine({ text: `✖ ${t('ws.disconnected')}`, stream: 'system' })
+      streamFail(t('ws.disconnected'))
+    }
+  }
+
+  ws.onclose = () => {
+    // 连接异常关闭且无 done → 按失败处理
+    if (streamState.value === 'running') {
+      pushLine({ text: `✖ ${t('ws.disconnected')}`, stream: 'system' })
+      streamFail(t('ws.disconnected'))
+    }
+  }
+}
+
+onBeforeUnmount(disconnectStream)
 
 /** 确认后启动 WebSocket 流式执行 */
 function startStream(): void {
   const id = pe.previewData.value?.preview_id
   if (!id) return
-  streamPreviewId.value = id
-}
-
-function onStreamDone(): void {
-  ElMessage.success(t('common.execSuccess'))
-  pe.reset()
-  streamPreviewId.value = ''
   previewVisible.value = false
-  void loadList()
-}
-
-function onStreamFailed(message: string): void {
-  if (message) ElMessage.error(message)
-  // 契约：执行失败时预览已删除（WS 语义），需要重新预览
-  pe.reset()
-  streamPreviewId.value = ''
+  connectStream(id)
 }
 
 function reproview(): void {
   previewVisible.value = false
   pe.reset()
-  streamPreviewId.value = ''
   void scalePreview(pendingAction.value)
 }
+
+// 切换服务器时缓存/恢复执行输出（执行中不切换，与 v1 行为一致）
+useOutputCache([() => serverId.value ?? ''], streamLines, {
+  getExtra: () => streamState.value,
+  setExtra: (extra) => {
+    streamState.value = extra ?? 'idle'
+  },
+  blockCondition: computed(() => streamState.value === 'running'),
+  emptyValue: () => [],
+})
 </script>
 
 <template>
@@ -178,11 +288,26 @@ function reproview(): void {
       </el-table>
     </div>
 
-    <!-- 预览 + WebSocket 流式执行 -->
+    <!-- 执行输出（页级持有，切换服务器时缓存/恢复） -->
+    <div v-if="streamState !== 'idle'" class="card output-card reveal d-1">
+      <div class="stream-header mono">
+        <span class="dot-live" :class="{ 'is-offline': streamState !== 'running' }" />
+        <span v-if="streamState === 'running'">{{ t('ws.connected') }} · {{ t('preview.executing') }}</span>
+        <span v-else-if="streamState === 'done'">{{ t('common.execSuccess') }}</span>
+        <span v-else>{{ t('common.execFailed') }}</span>
+        <span class="stream-title">{{ t('preprod.streamOutput') }}</span>
+      </div>
+      <div ref="terminalRef" class="terminal mono">
+        <div v-for="(line, idx) in streamLines" :key="idx" class="stream-line" :class="`stream-${line.stream}`">
+          {{ line.text }}
+        </div>
+        <div v-if="streamLines.length === 0" class="stream-line stream-system">{{ t('ws.connecting') }}</div>
+      </div>
+    </div>
+
+    <!-- 预览；确认后关闭弹窗，由页级 WebSocket 流式执行 -->
     <PreviewDialog
       v-model:visible="previewVisible"
-      streaming
-      :stream-preview-id="streamPreviewId"
       :description="pe.previewData.value?.description ?? ''"
       :current-status="pe.previewData.value?.current_status ?? ''"
       :commands="pe.previewData.value ? [pe.previewData.value.command] : []"
@@ -191,8 +316,6 @@ function reproview(): void {
       :executing="pe.executing.value"
       @execute="startStream"
       @repreview="reproview"
-      @stream-done="onStreamDone"
-      @stream-failed="onStreamFailed"
     />
   </div>
 </template>
@@ -214,5 +337,56 @@ function reproview(): void {
 .selected-info {
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+.output-card {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+}
+
+.stream-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-faint);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.stream-title {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.terminal {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-faint);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: var(--space-3);
+  height: 320px;
+  overflow: auto;
+  font-size: var(--text-xs);
+  line-height: 1.75;
+}
+
+.stream-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.stream-stdout {
+  color: var(--text-primary);
+}
+
+.stream-stderr {
+  color: var(--amber-400);
+}
+
+.stream-system {
+  color: var(--text-muted);
 }
 </style>

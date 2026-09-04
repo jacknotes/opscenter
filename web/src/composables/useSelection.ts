@@ -18,6 +18,7 @@ export function useSelection<T>(
   const selectedIds = ref(new Set<string | number>())
   const tableRef = ref<TableInstance | null>(null)
   const skipSelectionSync = ref(false)
+  const currentPage = opts.currentPage
 
   const getKey = typeof keyField === 'function' ? keyField : (row: T) => row[keyField] as string | number
 
@@ -31,16 +32,16 @@ export function useSelection<T>(
     nextTick(() => {
       paginatedItems.value.forEach((row) => {
         if (selectedIds.value.has(getKey(row))) {
-          tableRef.value?.toggleRowSelection(row, true)
+          tableRef.value?.toggleRowSelection(row as never, true)
         }
       })
       skipSelectionSync.value = false
     })
   }
 
-  function handleSizeChange(size: number) {
+  function handleSizeChange(_size: number) {
     skipSelectionSync.value = true
-    if (opts.currentPage) opts.currentPage.value = 1
+    if (currentPage) currentPage.value = 1
     nextTick(() => restoreSelection())
   }
 
@@ -65,16 +66,17 @@ export function useSelection<T>(
         selectedIds.value.add(getKey(row))
       })
       paginatedItems.value.forEach((row) => {
-        tableRef.value?.toggleRowSelection(row, true)
+        tableRef.value?.toggleRowSelection(row as never, true)
       })
     }
   }
 
   // 搜索变化时重置页码并恢复选择
-  if (opts.search && opts.currentPage) {
+  if (opts.search && currentPage) {
+    const resetPage = currentPage
     watch(opts.search, () => {
       skipSelectionSync.value = true
-      opts.currentPage.value = 1
+      resetPage.value = 1
       nextTick(() => restoreSelection())
     })
   }

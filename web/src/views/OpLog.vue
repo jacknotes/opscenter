@@ -3,6 +3,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logApi, extractErrorMessage } from '@/api'
 import type { OperationLog, LogQuery } from '@/api/types'
+import { MODULE_LABELS, MODULE_TAG_TYPES, PAGE_SIZES } from '@/utils/constants'
 import { i18n } from '@/i18n'
 
 const t = i18n.global.t
@@ -23,7 +24,65 @@ const query = reactive({
 
 const MODULES = ['lvs', 'nginx', 'k8s', 'preprod', 'server', 'auth']
 
-const dateRange = ref<[string, string] | null>(null)
+// ---------- 服务端排序 ----------
+type SortField = NonNullable<LogQuery['sort_by']>
+const SORTABLE_FIELDS: SortField[] = ['created_at', 'username', 'module', 'status']
+const sortBy = ref<SortField>('created_at')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+
+function handleSortChange({ prop, order }: { prop?: string | null; order?: string | null }): void {
+  sortBy.value = SORTABLE_FIELDS.includes(prop as SortField) ? (prop as SortField) : 'created_at'
+  sortOrder.value = order === 'ascending' ? 'asc' : 'desc'
+  query.page = 1
+  void load()
+}
+
+// ---------- 日期范围：默认最近 1 个月，最长跨度 1 年 ----------
+function formatDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getDefaultDateRange(): [string, string] {
+  const e = new Date()
+  const s = new Date()
+  s.setMonth(s.getMonth() - 1)
+  return [formatDate(s), formatDate(e)]
+}
+
+const dateRange = ref<[string, string] | null>(getDefaultDateRange())
+
+const MAX_RANGE_DAYS = 365
+
+function shiftDate(days?: number, months?: number, years?: number): Date {
+  const d = new Date()
+  if (days) d.setDate(d.getDate() - days)
+  if (months) d.setMonth(d.getMonth() - months)
+  if (years) d.setFullYear(d.getFullYear() - years)
+  return d
+}
+
+const dateShortcuts = [
+  { text: '近一周', value: () => [shiftDate(7), new Date()] as [Date, Date] },
+  { text: '近一个月', value: () => [shiftDate(undefined, 1), new Date()] as [Date, Date] },
+  { text: '近三个月', value: () => [shiftDate(undefined, 3), new Date()] as [Date, Date] },
+  { text: '近一年', value: () => [shiftDate(undefined, undefined, 1), new Date()] as [Date, Date] },
+]
+
+function onDateChange(): void {
+  if (dateRange.value) {
+    const diff = new Date(dateRange.value[1]).getTime() - new Date(dateRange.value[0]).getTime()
+    if (diff > MAX_RANGE_DAYS * 86400000) {
+      ElMessage.warning('日期范围不能超过1年，请重新选择')
+      dateRange.value = getDefaultDateRange()
+      return
+    }
+  }
+  query.page = 1
+  void load()
+}
 
 async function load(): Promise<void> {
   loading.value = true
@@ -41,6 +100,8 @@ async function load(): Promise<void> {
       params.start_time = dateRange.value[0]
       params.end_time = dateRange.value[1]
     }
+    params.sort_by = sortBy.value
+    params.sort_order = sortOrder.value
     const res = await logApi.list(params)
     logs.value = res.data ?? []
     total.value = res.total
@@ -56,7 +117,9 @@ function resetFilters(): void {
   query.status = ''
   query.username = ''
   query.keyword = ''
-  dateRange.value = null
+  dateRange.value = getDefaultDateRange()
+  sortBy.value = 'created_at'
+  sortOrder.value = 'desc'
   query.page = 1
   void load()
 }
@@ -88,8 +151,11 @@ function showDetail(row: OperationLog): void {
   detailVisible.value = true
 }
 
-const moduleType = (m: string): 'primary' | 'warning' | 'success' | 'danger' | 'info' =>
-  m === 'k8s' ? 'primary' : m === 'nginx' ? 'warning' : m === 'lvs' ? 'success' : m === 'preprod' ? 'danger' : 'info'
+type TagType = 'primary' | 'success' | 'warning' | 'danger' | 'info'
+
+const moduleLabel = (m: string): string => MODULE_LABELS[m] || m
+
+const moduleTagType = (m: string): TagType => (MODULE_TAG_TYPES[m] || 'info') as TagType
 
 function formatTime(ts: string): string {
   if (!ts) return '-'
@@ -111,7 +177,7 @@ function formatTime(ts: string): string {
 
     <div class="filter-bar card">
       <el-select v-model="query.module" :placeholder="t('logs.module')" clearable style="width: 130px">
-        <el-option v-for="m in MODULES" :key="m" :value="m" :label="m.toUpperCase()" />
+        <el-option v-for="m in MODULES" :key="m" :value="m" :label="moduleLabel(m)" />
       </el-select>
       <el-select v-model="query.status" :placeholder="t('logs.status')" clearable style="width: 120px">
         <el-option value="success" :label="t('common.success')" />
@@ -131,29 +197,37 @@ function formatTime(ts: string): string {
         value-format="YYYY-MM-DD"
         :start-placeholder="t('logs.startTime')"
         :end-placeholder="t('logs.endTime')"
-        style="width: 260px"
+        :shortcuts="dateShortcuts"
+        clearable
+        style="width: 280px"
+        @change="onDateChange"
       />
       <el-button type="primary" @click="search">{{ t('common.search') }}</el-button>
       <el-button @click="resetFilters">{{ t('common.reset') }}</el-button>
     </div>
 
     <div v-loading="loading" class="card table-card reveal d-1">
-      <el-table :data="logs" size="default">
-        <el-table-column :label="t('logs.time')" width="170">
+      <el-table
+        :data="logs"
+        size="default"
+        :default-sort="{ prop: 'created_at', order: 'descending' }"
+        @sort-change="handleSortChange"
+      >
+        <el-table-column :label="t('logs.time')" width="170" prop="created_at" sortable="custom">
           <template #default="{ row }">
             <span class="mono">{{ formatTime(row.created_at) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="username" :label="t('logs.user')" width="110" />
-        <el-table-column :label="t('logs.module')" width="100">
+        <el-table-column prop="username" :label="t('logs.user')" width="110" sortable="custom" />
+        <el-table-column :label="t('logs.module')" width="110" prop="module" sortable="custom">
           <template #default="{ row }">
-            <el-tag size="small" :type="moduleType(row.module)" effect="plain">{{ row.module }}</el-tag>
+            <el-tag size="small" :type="moduleTagType(row.module)" effect="plain">{{ moduleLabel(row.module) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="action" :label="t('logs.action')" min-width="120" />
         <el-table-column prop="target" :label="t('logs.target')" min-width="180" show-overflow-tooltip />
         <el-table-column prop="server_name" :label="t('logs.serverName')" width="130" show-overflow-tooltip />
-        <el-table-column :label="t('logs.status')" width="90">
+        <el-table-column :label="t('logs.status')" width="100" prop="status" sortable="custom">
           <template #default="{ row }">
             <el-tag size="small" :type="row.status === 'success' ? 'success' : 'danger'" effect="plain">
               {{ row.status === 'success' ? t('common.success') : t('common.failed') }}
@@ -170,13 +244,19 @@ function formatTime(ts: string): string {
         </el-table-column>
       </el-table>
 
-      <div class="pager">
+      <div class="pagination-wrapper">
+        <div class="pagination-left">
+          <span class="selection-count">
+            {{ sortBy === 'created_at' ? t('logs.time') : moduleLabel(sortBy) }}
+            {{ sortOrder === 'desc' ? '↓ 降序' : '↑ 升序' }}
+          </span>
+        </div>
         <el-pagination
           layout="total, sizes, prev, pager, next"
           :total="total"
           :current-page="query.page"
           :page-size="query.size"
-          :page-sizes="[20, 50, 100]"
+          :page-sizes="[...PAGE_SIZES]"
           @current-change="changePage"
           @size-change="changeSize"
         />
@@ -191,7 +271,7 @@ function formatTime(ts: string): string {
             <span class="mono">{{ formatTime(current.created_at) }}</span>
           </el-descriptions-item>
           <el-descriptions-item :label="t('logs.user')">{{ current.username }}</el-descriptions-item>
-          <el-descriptions-item :label="t('logs.module')">{{ current.module }}</el-descriptions-item>
+          <el-descriptions-item :label="t('logs.module')">{{ moduleLabel(current.module) }}</el-descriptions-item>
           <el-descriptions-item :label="t('logs.action')">{{ current.action }}</el-descriptions-item>
           <el-descriptions-item :label="t('logs.serverName')">{{ current.server_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('logs.ip')">{{ current.ip || '-' }}</el-descriptions-item>
@@ -228,12 +308,6 @@ function formatTime(ts: string): string {
 
 .table-card {
   padding: var(--space-3);
-}
-
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-3) var(--space-2) 0;
 }
 
 .out-pre {

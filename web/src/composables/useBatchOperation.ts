@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { Ref } from 'vue'
 import { BATCH_CONFIRM_TEXT, BATCH_CONFIRM_THRESHOLD } from '../utils/constants'
 
 interface UseBatchOptions {
@@ -14,7 +15,8 @@ interface UseBatchOptions {
  * 提供选择管理、大数量文字确认对话框、批量执行 loading 态
  */
 export function useBatchOperation<T = unknown>(opts: UseBatchOptions = {}) {
-  const selectedRows = ref(new Set<T>())
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Set 元素类型经 ref 包装后 TS 无法自动推导，显式断言
+  const selectedRows = ref(new Set()) as Ref<Set<T>>
   const selectedCount = computed(() => selectedRows.value.size)
   const loading = ref(false)
 

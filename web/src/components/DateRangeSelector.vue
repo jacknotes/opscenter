@@ -1,6 +1,6 @@
 <template>
   <div class="date-range-selector">
-    <el-radio-group :model-value="activePreset" size="small" @update:model-value="onPresetChange">
+    <el-radio-group :model-value="activePreset ?? undefined" size="small" @update:model-value="onPresetChange">
       <el-radio-button value="today">今天</el-radio-button>
       <el-radio-button value="7d">7天</el-radio-button>
       <el-radio-button value="14d">14天</el-radio-button>
@@ -76,7 +76,7 @@ function matchPreset(range: string[] | null | undefined): Preset | null {
   return null
 }
 
-function onPresetChange(preset: Preset | string) {
+function onPresetChange(preset: string | number | boolean | undefined) {
   activePreset.value = preset as Preset
   emit('update:modelValue', presetMap[preset as Preset]())
 }

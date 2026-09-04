@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, watch, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { serverApi, extractErrorMessage } from '@/api'
 import type { ServerEdit, ServerResponse, TestResult, BatchResult } from '@/api/types'
 import { useTablePaging } from '@/composables/useTablePaging'
+import { useSelection } from '@/composables/useSelection'
+import { useBatchOperation } from '@/composables/useBatchOperation'
+import { showBatchResult } from '@/utils/message'
 import { i18n } from '@/i18n'
 
 const t = i18n.global.t
@@ -20,6 +23,8 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     rows.value = await serverApi.list({ all: true })
+    // 数据刷新后恢复当页勾选
+    restoreSelection()
   } catch (err) {
     ElMessage.error(extractErrorMessage(err))
   } finally {
@@ -27,7 +32,10 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  restoreSelection()
+})
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
@@ -45,10 +53,33 @@ const filtered = computed(() => {
 
 const { paged, currentPage, pageSize, total, onSortChange } = useTablePaging(filtered, 20)
 
+// ---------- 跨页选择（翻页/搜索后保留勾选） ----------
+const { selectedIds, tableRef, handleSelectionChange, handleSizeChange, handleCurrentChange, restoreSelection } =
+  useSelection<ServerResponse>('id', paged, { search: keyword, currentPage })
+
+const selectedRows = computed(() => rows.value.filter((s) => selectedIds.value.has(s.id)))
+
+// 类型筛选变化：回到第一页并恢复当页勾选
+watch(typeFilter, () => {
+  currentPage.value = 1
+  restoreSelection()
+})
+
+// ---------- 批量操作（大数量文字确认） ----------
+const batchOp = useBatchOperation<ServerResponse>()
+
+function syncBatchSelection(): void {
+  batchOp.clearAll()
+  batchOp.selectAll(selectedRows.value)
+}
+
+/** 批量启停按钮文案按当前选择动态切换：全部禁用（或未选）时为启用，否则为禁用 */
+const batchToggleLabel = computed(() =>
+  selectedRows.value.length === 0 || selectedRows.value.every((r) => !r.enabled) ? '批量启用' : '批量禁用',
+)
+
 const typeTag = (ty: string): 'success' | 'warning' | 'primary' | 'danger' | 'info' =>
   ty === 'lvs' ? 'success' : ty === 'nginx' ? 'warning' : ty === 'kubernetes' ? 'primary' : ty === 'preprod' ? 'danger' : 'info'
-
-const selected = ref<ServerResponse[]>([])
 
 // ---------- 新增 / 编辑 ----------
 const editVisible = ref(false)
@@ -223,34 +254,52 @@ async function remove(row: ServerResponse): Promise<void> {
   await load()
 }
 
-function showBatchResult(res: BatchResult): void {
-  ElMessage({ type: 'success', message: res.message, duration: 5000 })
-}
-
 async function batchDelete(): Promise<void> {
-  const ids = selected.value.map((s) => s.id)
-  if (ids.length === 0) return
-  await ElMessageBox.confirm(t('common.confirmDelete', { count: ids.length }), t('common.confirm'), {
-    type: 'warning',
+  syncBatchSelection()
+  await batchOp.confirmBatch(t('common.batchDelete'), async () => {
+    try {
+      const ids = selectedRows.value.map((s) => s.id)
+      await ElMessageBox.confirm(t('common.confirmDelete', { count: ids.length }), t('common.confirm'), {
+        type: 'warning',
+      })
+      const res: BatchResult = await serverApi.batchDelete(ids)
+      showBatchResult(res)
+      await load()
+    } catch (err) {
+      if (err !== 'cancel' && (err as { message?: string })?.message !== 'cancel') {
+        ElMessage.error(extractErrorMessage(err) || '批量删除失败')
+      }
+    }
   })
-  const res = await serverApi.batchDelete(ids)
-  showBatchResult(res)
-  await load()
 }
 
-async function batchToggle(enabled: boolean): Promise<void> {
-  const ids = selected.value.map((s) => s.id)
-  if (ids.length === 0) return
-  const res = await serverApi.batchToggle(ids, enabled)
-  showBatchResult(res)
-  await load()
+function batchToggle(): void {
+  syncBatchSelection()
+  const enabled = batchToggleLabel.value === '批量启用'
+  const action = enabled ? '批量启用' : '批量禁用'
+  void batchOp.confirmBatch(action, async () => {
+    try {
+      const ids = selectedRows.value.map((s) => s.id)
+      const res: BatchResult = await serverApi.batchToggle(ids, enabled)
+      showBatchResult(res)
+      await load()
+    } catch (err) {
+      ElMessage.error(extractErrorMessage(err) || `${action}失败`)
+    }
+  })
 }
 
-async function batchTest(): Promise<void> {
-  const ids = selected.value.map((s) => s.id)
-  if (ids.length === 0) return
-  const res = await serverApi.batchTest(ids)
-  showBatchResult(res)
+function batchTest(): void {
+  syncBatchSelection()
+  void batchOp.confirmBatch(t('common.batchTest'), async () => {
+    try {
+      const ids = selectedRows.value.map((s) => s.id)
+      const res: BatchResult = await serverApi.batchTest(ids)
+      showBatchResult(res)
+    } catch (err) {
+      ElMessage.error(extractErrorMessage(err) || '批量测试失败')
+    }
+  })
 }
 </script>
 
@@ -278,21 +327,24 @@ async function batchTest(): Promise<void> {
         style="width: 220px"
         @keyup.enter="load"
       />
-      <el-button :disabled="selected.length === 0" @click="batchTest">{{ t('common.batchTest') }}</el-button>
-      <el-button :disabled="selected.length === 0" @click="batchToggle(true)">
-        {{ t('common.batchToggle') }}
+      <el-button :disabled="selectedRows.length === 0" :loading="batchOp.loading.value" @click="batchTest">
+        {{ t('common.batchTest') }}
       </el-button>
-      <el-button type="danger" :disabled="selected.length === 0" @click="batchDelete">
+      <el-button :disabled="selectedRows.length === 0" :loading="batchOp.loading.value" @click="batchToggle">
+        {{ batchToggleLabel }}
+      </el-button>
+      <el-button type="danger" :disabled="selectedRows.length === 0" :loading="batchOp.loading.value" @click="batchDelete">
         {{ t('common.batchDelete') }}
       </el-button>
     </div>
 
     <div v-loading="loading" class="card table-card reveal d-1">
       <el-table
+        ref="tableRef"
         :data="paged"
         row-key="id"
         @sort-change="onSortChange"
-        @selection-change="(r: ServerResponse[]) => (selected = r)"
+        @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="42" />
         <el-table-column prop="name" :label="t('servers.name')" min-width="150" sortable>
@@ -339,15 +391,18 @@ async function batchTest(): Promise<void> {
         </el-table-column>
       </el-table>
 
-      <div class="pager">
+      <div class="pagination-wrapper">
+        <div class="pagination-left">
+          <span v-if="selectedRows.length > 0" class="selection-count">已选 {{ selectedRows.length }} 项</span>
+        </div>
         <el-pagination
-          layout="total, sizes, prev, pager, next"
+          layout="total, sizes, prev, pager, next, jumper"
           :total="total"
           :current-page="currentPage"
           :page-size="pageSize"
           :page-sizes="[20, 50, 100]"
-          @current-change="(p: number) => (currentPage = p)"
-          @size-change="(s: number) => (pageSize = s)"
+          @current-change="(p: number) => { currentPage = p; handleCurrentChange() }"
+          @size-change="handleSizeChange"
         />
       </div>
     </div>
@@ -430,12 +485,6 @@ async function batchTest(): Promise<void> {
 <style scoped>
 .table-card {
   padding: var(--space-3);
-}
-
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-3) var(--space-2) 0;
 }
 
 .srv-name {

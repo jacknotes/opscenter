@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { lvsApi, preprodApi, extractErrorMessage } from '@/api'
-import type { CommandExecuteResult, VirtualServer, LvsRealServer } from '@/api/types'
+import type { CommandExecuteResult, LvsPreview, VirtualServer, LvsRealServer } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
+import { AUTO_REFRESH_INTERVAL_MS, STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
@@ -24,6 +25,13 @@ const vsList = ref<VirtualServer[]>([])
 const listLoading = ref(false)
 const keyword = ref('')
 
+// 服务器选择记忆（v1 useServerSelector 行为）
+const savedServer = localStorage.getItem(STORAGE_KEYS.LVS_SERVER)
+if (savedServer) serverId.value = Number(savedServer)
+watch(serverId, (v) => {
+  if (v) localStorage.setItem(STORAGE_KEYS.LVS_SERVER, String(v))
+})
+
 async function loadList(): Promise<void> {
   if (!serverId.value) {
     vsList.value = []
@@ -32,6 +40,11 @@ async function loadList(): Promise<void> {
   listLoading.value = true
   try {
     vsList.value = await lvsApi.list(serverId.value)
+    // 过滤条件失效时清空
+    if (vsFilter.value && !vsList.value.some((vs) => vs.ip === vsFilter.value)) vsFilter.value = ''
+    pruneBatchSelection()
+    // 刷新后按当前折叠状态恢复展开行
+    expandedKeys.value = allExpanded.value ? vsList.value.map((vs) => vs.ip) : []
   } catch (err) {
     ElMessage.error(extractErrorMessage(err))
   } finally {
@@ -41,10 +54,21 @@ async function loadList(): Promise<void> {
 
 watch(serverId, loadList)
 
+// ---------- VS 筛选（localStorage 记忆） ----------
+const vsFilter = ref(localStorage.getItem(STORAGE_KEYS.LVS_VS_FILTER) || '')
+watch(vsFilter, (val) => {
+  if (val) localStorage.setItem(STORAGE_KEYS.LVS_VS_FILTER, val)
+  else localStorage.removeItem(STORAGE_KEYS.LVS_VS_FILTER)
+})
+
+const vsOptions = computed(() => vsList.value.map((vs) => vs.ip))
+
 const filteredVs = computed(() => {
+  let list = vsList.value
+  if (vsFilter.value) list = list.filter((vs) => vs.ip === vsFilter.value)
   const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return vsList.value
-  return vsList.value.filter(
+  if (!kw) return list
+  return list.filter(
     (vs) =>
       vs.ip.includes(kw) ||
       (vs.tag ?? '').toLowerCase().includes(kw) ||
@@ -55,7 +79,105 @@ const filteredVs = computed(() => {
 const rsCount = (vs: VirtualServer): string =>
   `${vs.real_servers.filter((r) => r.status === 'up').length}/${vs.real_servers.length}`
 
-// ---------- 预览 → 执行（op / swap 共用） ----------
+// ---------- 一键展开 / 折叠全部 VS 分组 ----------
+const expandedKeys = ref<string[]>([])
+const allExpanded = ref(true)
+
+function toggleExpandAll(): void {
+  allExpanded.value = !allExpanded.value
+  expandedKeys.value = allExpanded.value ? filteredVs.value.map((vs) => vs.ip) : []
+}
+
+function onExpandChange(_row: VirtualServer, expanded: VirtualServer[] | boolean): void {
+  if (!Array.isArray(expanded)) return
+  expandedKeys.value = expanded.map((r) => r.ip)
+  allExpanded.value =
+    filteredVs.value.length > 0 && filteredVs.value.every((vs) => expandedKeys.value.includes(vs.ip))
+}
+
+// ---------- 批量选择（跨分组，key = vip:rsip） ----------
+const batchSelected = ref(new Set<string>())
+const rsKey = (vsIp: string, rsIp: string): string => `${vsIp}:${rsIp}`
+
+/** 过滤后列表中可选择的 RS key（排除禁用） */
+const validRsKeys = computed(() => {
+  const keys: string[] = []
+  for (const vs of filteredVs.value) {
+    for (const rs of vs.real_servers) {
+      if (!rs.disabled) keys.push(rsKey(vs.ip, rs.ip))
+    }
+  }
+  return keys
+})
+
+const selectedCount = computed(() => batchSelected.value.size)
+const isAllFilteredSelected = computed(
+  () => validRsKeys.value.length > 0 && validRsKeys.value.every((k) => batchSelected.value.has(k)),
+)
+
+function isRsSelected(vs: VirtualServer, rs: LvsRealServer): boolean {
+  return batchSelected.value.has(rsKey(vs.ip, rs.ip))
+}
+
+function toggleRs(vs: VirtualServer, rs: LvsRealServer): void {
+  const key = rsKey(vs.ip, rs.ip)
+  const next = new Set(batchSelected.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  batchSelected.value = next
+}
+
+/** 对过滤后列表全选 / 取消全选 */
+function toggleAllFiltered(): void {
+  const next = new Set(batchSelected.value)
+  if (isAllFilteredSelected.value) {
+    for (const k of validRsKeys.value) next.delete(k)
+  } else {
+    for (const k of validRsKeys.value) next.add(k)
+  }
+  batchSelected.value = next
+}
+
+/** 刷新后清理已失效的选择（服务器切换 / 数据变化） */
+function pruneBatchSelection(): void {
+  const valid = new Set<string>()
+  for (const vs of vsList.value) {
+    for (const rs of vs.real_servers) valid.add(rsKey(vs.ip, rs.ip))
+  }
+  const next = new Set([...batchSelected.value].filter((k) => valid.has(k)))
+  if (next.size !== batchSelected.value.size) batchSelected.value = next
+}
+
+// ---------- 5 分钟静默自动刷新 ----------
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+async function silentRefresh(): Promise<void> {
+  // 页面不可见时跳过
+  if (!serverId.value || document.hidden) return
+  try {
+    vsList.value = await lvsApi.list(serverId.value)
+    if (vsFilter.value && !vsList.value.some((vs) => vs.ip === vsFilter.value)) vsFilter.value = ''
+    pruneBatchSelection()
+    if (allExpanded.value) expandedKeys.value = vsList.value.map((vs) => vs.ip)
+  } catch {
+    // 静默失败
+  }
+}
+
+onMounted(() => {
+  autoRefreshTimer = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL_MS)
+  // 已有记忆的服务器时直接加载
+  if (serverId.value) void loadList()
+})
+
+onUnmounted(() => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
+})
+
+// ---------- 预览 → 执行（单台 op / swap） ----------
 const previewVisible = ref(false)
 const outputVisible = ref(false)
 const outputResult = ref<string | string[]>('')
@@ -128,6 +250,11 @@ function requestSwap(vs: VirtualServer, payload: { rs_ip1: string; rs_ip2: strin
 }
 
 async function executePreview(): Promise<void> {
+  // 批量分支
+  if (batchPreviews.value.length > 0) {
+    await executeBatch()
+    return
+  }
   const p = pending.value
   if (!p) return
   const result =
@@ -151,6 +278,12 @@ async function executePreview(): Promise<void> {
 }
 
 function reproview(): void {
+  // 批量分支：按目标重新预览
+  if (batchPreviews.value.length > 0) {
+    previewVisible.value = false
+    void createBatchPreviews(batchState.value, batchTargets.value)
+    return
+  }
   const p = pending.value
   if (!p) return
   previewVisible.value = false
@@ -160,6 +293,147 @@ function reproview(): void {
   } else if (p.kind === 'swap' && p.swap) {
     requestSwap(p.vs, p.swap)
   }
+}
+
+// ---------- 批量上线 / 批量下线（逐台预览、逐台执行） ----------
+interface BatchTarget {
+  vs: VirtualServer
+  rs: LvsRealServer
+}
+
+const batchPreviews = ref<LvsPreview[]>([])
+const batchTargets = ref<BatchTarget[]>([])
+const batchState = ref<'on' | 'off'>('on')
+const batchLoading = ref(false)
+const batchExecuting = ref(false)
+
+/** 批量模式下弹窗展示首个预览内容 */
+const activePreview = computed<PreviewShape | null>(() => batchPreviews.value[0] ?? pe.previewData.value)
+const activeExecuting = computed(() => (batchPreviews.value.length > 0 ? batchExecuting.value : pe.executing.value))
+
+function selectedTargets(): BatchTarget[] {
+  const targets: BatchTarget[] = []
+  for (const vs of filteredVs.value) {
+    for (const rs of vs.real_servers) {
+      if (batchSelected.value.has(rsKey(vs.ip, rs.ip))) targets.push({ vs, rs })
+    }
+  }
+  return targets
+}
+
+async function createBatchPreviews(state: 'on' | 'off', targets: BatchTarget[]): Promise<void> {
+  if (!serverId.value || targets.length === 0) return
+  batchLoading.value = true
+  try {
+    const sid = serverId.value
+    const previews: LvsPreview[] = []
+    for (const { vs, rs } of targets) {
+      previews.push(await lvsApi.opPreview({ server_id: sid, vs_ip: vs.ip, rs_ip: rs.ip, state }))
+    }
+    batchPreviews.value = previews
+    batchTargets.value = targets
+    batchState.value = state
+    previewVisible.value = true
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err) || '预览失败')
+  } finally {
+    batchLoading.value = false
+  }
+}
+
+async function requestBatchOnline(): Promise<void> {
+  const all = selectedTargets()
+  const targets = all.filter(({ rs }) => rs.status !== 'up')
+  if (targets.length === 0) {
+    ElMessage.warning('所选 RS 均已在线，无需上线')
+    return
+  }
+  const skipped = all.length - targets.length
+  if (skipped > 0) ElMessage.warning(`${skipped} 台已在线将跳过，将上线 ${targets.length} 台离线 RS`)
+
+  // 上线前逐台检查预生产资源副本（need_warning 时统一确认一次）
+  const warnings: string[] = []
+  for (const { vs, rs } of targets) {
+    try {
+      const check = await preprodApi.checkLvsOnline({ vs_ip: vs.ip, rs_ip: rs.ip })
+      if (check.need_warning && check.warnings?.length) {
+        warnings.push(
+          ...check.warnings.map((w) => `${w.name} (${w.category}): ${w.current} → ${t('lvs.targetReplicas')} ${w.target}`),
+        )
+      }
+    } catch (err) {
+      ElMessage.error(`预生产安全检查失败: ${extractErrorMessage(err)}，操作中止`)
+      return
+    }
+  }
+  if (warnings.length > 0) {
+    try {
+      await ElMessageBox.confirm(warnings.join('\n'), t('common.confirm'), { type: 'warning' })
+    } catch {
+      return
+    }
+  }
+  await createBatchPreviews('on', targets)
+}
+
+async function requestBatchOffline(): Promise<void> {
+  const all = selectedTargets()
+  const targets = all.filter(({ rs }) => rs.status === 'up')
+  if (targets.length === 0) {
+    ElMessage.warning('所选 RS 均已离线，无需下线')
+    return
+  }
+  // 每个 VS 至少保留一台在线 RS
+  const byVs = new Map<string, BatchTarget[]>()
+  for (const item of targets) {
+    const list = byVs.get(item.vs.ip) ?? []
+    list.push(item)
+    byVs.set(item.vs.ip, list)
+  }
+  for (const [vip, list] of byVs) {
+    const group = vsList.value.find((vs) => vs.ip === vip)
+    if (!group) continue
+    const upCount = group.real_servers.filter((r) => r.status === 'up').length
+    if (upCount - list.length < 1) {
+      ElMessage.warning(`VIP ${vip} 下线后将无在线服务器，至少需要保留一台`)
+      return
+    }
+  }
+  const skipped = all.length - targets.length
+  if (skipped > 0) ElMessage.warning(`${skipped} 台已离线将自动跳过`)
+  await createBatchPreviews('off', targets)
+}
+
+async function executeBatch(): Promise<void> {
+  batchExecuting.value = true
+  let allOutput = ''
+  let hasError = false
+  let expired = false
+  try {
+    for (const p of batchPreviews.value) {
+      try {
+        const res = await lvsApi.opExecute({ preview_id: p.preview_id })
+        allOutput += (res.output || '') + '\n'
+      } catch (err) {
+        const msg = extractErrorMessage(err)
+        allOutput += `[错误] ${msg}\n`
+        hasError = true
+        if (msg.includes('预览已过期')) expired = true
+      }
+    }
+  } finally {
+    batchExecuting.value = false
+  }
+  if (expired) ElMessage.warning(t('preview.expired'))
+  previewVisible.value = false
+  outputResult.value = allOutput
+  outputStatus.value = hasError ? 'failed' : 'success'
+  outputVisible.value = true
+  if (!hasError) ElMessage.success(t('common.execSuccess'))
+  batchSelected.value = new Set()
+  batchPreviews.value = []
+  batchTargets.value = []
+  void loadList()
 }
 
 // ---------- 状态 / 切换 / 标签 / 绑定 ----------
@@ -201,6 +475,15 @@ function openVsTag(vs: VirtualServer): void {
       </div>
       <div class="page-actions head-actions">
         <ServerSelect ref="serverSelectRef" v-model:server-id="serverId" type="lvs" />
+        <el-select
+          v-model="vsFilter"
+          :placeholder="t('lvs.vs')"
+          clearable
+          filterable
+          style="width: 170px"
+        >
+          <el-option v-for="ip in vsOptions" :key="ip" :label="ip" :value="ip" />
+        </el-select>
         <el-input v-model="keyword" :placeholder="t('logs.keyword')" clearable style="width: 180px" />
         <el-button :loading="listLoading" :disabled="!serverId" @click="loadList">
           {{ t('common.refresh') }}
@@ -212,14 +495,47 @@ function openVsTag(vs: VirtualServer): void {
       </div>
     </div>
 
+    <!-- 批量操作栏 -->
+    <div v-if="serverId" class="page-actions" style="margin-bottom: var(--space-4)">
+      <el-button size="small" @click="toggleExpandAll">
+        {{ allExpanded ? t('common.collapseAll') : t('common.expandAll') }}
+      </el-button>
+      <el-button size="small" :disabled="validRsKeys.length === 0" @click="toggleAllFiltered">
+        {{ isAllFilteredSelected ? '取消全选' : t('common.selectAll') }}
+      </el-button>
+      <el-divider direction="vertical" />
+      <el-button type="success" size="small" :disabled="selectedCount === 0" :loading="batchLoading" @click="requestBatchOnline">
+        批量上线
+      </el-button>
+      <el-button type="danger" size="small" :disabled="selectedCount === 0" :loading="batchLoading" @click="requestBatchOffline">
+        批量下线
+      </el-button>
+      <span class="mono selected-info">已选 {{ selectedCount }} 项</span>
+    </div>
+
     <div v-loading="listLoading" class="card table-card reveal d-1">
       <el-empty v-if="!serverId" :description="t('common.serverPlaceholder')" />
       <el-empty v-else-if="filteredVs.length === 0 && !listLoading" :description="t('common.empty')" />
-      <el-table v-else :data="filteredVs" row-key="ip">
+      <el-table
+        v-else
+        :data="filteredVs"
+        row-key="ip"
+        :expand-row-keys="expandedKeys"
+        @expand-change="onExpandChange"
+      >
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="rs-wrap">
               <el-table :data="row.real_servers" size="small">
+                <el-table-column width="42" align="center">
+                  <template #default="{ row: rs }">
+                    <el-checkbox
+                      v-if="!(rs as LvsRealServer).disabled"
+                      :model-value="isRsSelected(row as VirtualServer, rs as LvsRealServer)"
+                      @change="toggleRs(row as VirtualServer, rs as LvsRealServer)"
+                    />
+                  </template>
+                </el-table-column>
                 <el-table-column :label="`RS : ${t('lvs.port')}`" min-width="170">
                   <template #default="{ row: rs }">
                     <span class="mono">{{ rs.ip }}:{{ rs.port }}</span>
@@ -308,15 +624,15 @@ function openVsTag(vs: VirtualServer): void {
       </el-table>
     </div>
 
-    <!-- 预览执行 -->
+    <!-- 预览执行（单台 / 批量共用） -->
     <PreviewDialog
       v-model:visible="previewVisible"
-      :description="pe.previewData.value?.description ?? ''"
-      :current-status="pe.previewData.value?.current_status ?? ''"
-      :commands="pe.previewData.value ? [pe.previewData.value.command] : []"
-      :countdown="pe.countdown.value"
-      :expired="pe.expired.value"
-      :executing="pe.executing.value"
+      :description="activePreview?.description ?? ''"
+      :current-status="activePreview?.current_status ?? ''"
+      :commands="activePreview ? [activePreview.command] : []"
+      :countdown="batchPreviews.length > 0 ? 0 : pe.countdown.value"
+      :expired="batchPreviews.length > 0 ? false : pe.expired.value"
+      :executing="activeExecuting"
       @execute="executePreview"
       @repreview="reproview"
     />
@@ -339,6 +655,11 @@ function openVsTag(vs: VirtualServer): void {
 .table-card {
   padding: var(--space-3);
   min-height: 200px;
+}
+
+.selected-info {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
 }
 
 .vs-table :deep(.el-table__expanded-cell) {

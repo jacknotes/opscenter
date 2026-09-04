@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { k8sApi, extractErrorMessage } from '@/api'
 import type { K8sExecuteResult, K8sPreview, Rollout } from '@/api/types'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
+import { useOutputCache } from '@/composables/useOutputCache'
+import { STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
@@ -13,6 +15,12 @@ const t = i18n.global.t
 
 // ---------- Rollout 列表 ----------
 const serverId = ref<number>()
+// 服务器选择记忆（v1 useServerSelector 行为）
+const savedK8sServer = localStorage.getItem(STORAGE_KEYS.K8S_SERVER)
+if (savedK8sServer) serverId.value = Number(savedK8sServer)
+watch(serverId, (v) => {
+  if (v) localStorage.setItem(STORAGE_KEYS.K8S_SERVER, String(v))
+})
 const rollouts = ref<Rollout[]>([])
 const listLoading = ref(false)
 const keyword = ref('')
@@ -35,6 +43,11 @@ async function loadList(): Promise<void> {
 
 watch(serverId, loadList)
 
+// 已有记忆的服务器时直接加载
+onMounted(() => {
+  if (serverId.value) void loadList()
+})
+
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   if (!kw) return rollouts.value
@@ -56,6 +69,14 @@ const previewVisible = ref(false)
 const outputVisible = ref(false)
 const outputResult = ref<string | string[]>('')
 const outputStatus = ref<'success' | 'failed'>('success')
+
+// 切换服务器时缓存/恢复上一次执行输出
+useOutputCache([() => serverId.value ?? ''], outputResult, {
+  getExtra: () => outputStatus.value,
+  setExtra: (extra) => {
+    outputStatus.value = extra ?? 'success'
+  },
+})
 
 const pe = usePreviewExecute<K8sPreview>()
 
@@ -138,6 +159,20 @@ function reproview(): void {
   if (action.startsWith('full_')) void fullPreview(action as FullAction)
   else void batchPreview(action as BatchAction)
 }
+
+// ---------- page-refresh 全局刷新（AppLayout 快捷键 r 触发） ----------
+async function handlePageRefresh(): Promise<void> {
+  if (!serverId.value) return
+  try {
+    await loadList()
+    ElMessage.success('刷新成功')
+  } catch {
+    // loadList 已提示错误
+  }
+}
+
+onMounted(() => window.addEventListener('page-refresh', handlePageRefresh))
+onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
 </script>
 
 <template>

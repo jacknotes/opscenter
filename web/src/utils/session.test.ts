@@ -16,6 +16,8 @@ const mockUser: User = {
   role: 'admin',
   enabled: true,
   auth_source: 'local',
+  failed_attempts: 0,
+  locked: false,
   created_at: '2026-01-01T00:00:00+08:00',
   updated_at: '2026-01-01T00:00:00+08:00',
 }

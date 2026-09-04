@@ -21,6 +21,7 @@ import OutputDialog from '@/components/OutputDialog.vue'
 import OperateDialog from './OperateDialog.vue'
 import BatchDialog from './BatchDialog.vue'
 import RollbackDialog from './RollbackDialog.vue'
+import ConfigViewer from './ConfigViewer.vue'
 
 const t = i18n.global.t
 
@@ -87,8 +88,6 @@ const serverSummary = (u: NginxUpstream): string => {
 
 const upCount = (u: NginxUpstream): number => u.servers.filter((s) => s.status === 'up').length
 const downCount = (u: NginxUpstream): number => u.servers.length - upCount(u)
-
-const upstreamNames = computed(() => upstreams.value.map((u) => u.name))
 
 // ---------- 预览 → 执行 ----------
 const previewVisible = ref(false)
@@ -182,6 +181,7 @@ function reproview(): void {
 const operateDialogRef = ref<InstanceType<typeof OperateDialog>>()
 const batchDialogRef = ref<InstanceType<typeof BatchDialog>>()
 const rollbackDialogRef = ref<InstanceType<typeof RollbackDialog>>()
+const configVisible = ref(false)
 const operateAction = ref<'online' | 'offline' | 'swap' | 'toggle'>('online')
 const operateUpstream = ref('')
 
@@ -232,6 +232,9 @@ function onRollbackConfirm(backupFile: string): void {
         </el-button>
         <el-button :disabled="!serverId || !configFile" @click="rollbackDialogRef?.open()">
           {{ t('nginx.rollback') }}
+        </el-button>
+        <el-button :disabled="!serverId || !configFile" @click="configVisible = true">
+          {{ t('nginx.config') }}
         </el-button>
       </div>
     </div>
@@ -330,17 +333,14 @@ function onRollbackConfirm(backupFile: string): void {
       :initial-upstream="operateUpstream"
       @confirm="onOperateConfirm"
     />
-    <BatchDialog
-      ref="batchDialogRef"
-      :upstream-names="upstreamNames"
-      @confirm="onBatchConfirm"
-    />
+    <BatchDialog ref="batchDialogRef" :upstreams="upstreams" @confirm="onBatchConfirm" />
     <RollbackDialog
       ref="rollbackDialogRef"
       :server-id="serverId ?? 0"
       :config-file="configFile"
       @confirm="onRollbackConfirm"
     />
+    <ConfigViewer v-model:visible="configVisible" :raw-config="rawConfig" :config-file="configFile" />
   </div>
 </template>
 
