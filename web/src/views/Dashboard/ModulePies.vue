@@ -43,6 +43,8 @@ function tooltipConf(extra = {}) {
     backgroundColor: props.themeColors.tooltipBg,
     borderColor: props.themeColors.tooltipBorder,
     textStyle: { color: props.themeColors.text, fontSize: 13 },
+    confine: true,
+    appendToBody: true,
     ...extra,
   }
 }
@@ -56,7 +58,7 @@ function makeRingOption(data, legendNames, colors, total, unit) {
       {
         type: 'group',
         left: 'center',
-        top: '36%',
+        top: '40%',
         children: [
           {
             type: 'text',
@@ -81,7 +83,7 @@ function makeRingOption(data, legendNames, colors, total, unit) {
       {
         type: 'pie',
         radius: ['50%', '70%'],
-        center: ['50%', '42%'],
+        center: ['50%', '46%'],
         avoidLabelOverlap: false,
         label: { show: false },
         emphasis: {
@@ -128,52 +130,33 @@ const nginxPie = computed(() => {
 const k8sPie = computed(() => {
   if (!props.k8sStats) return null
   const other = (props.k8sStats.total_rollouts || 0) - (props.k8sStats.pending || 0) - (props.k8sStats.online || 0)
-  return {
-    tooltip: tooltipConf({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }),
-    legend: { bottom: 0, textStyle: { color: props.themeColors.subText, fontSize: 11 } },
-    color: [props.colors.pending, props.colors.online, props.colors.other],
-    series: [
-      {
-        type: 'pie',
-        radius: ['15%', '65%'],
-        center: ['50%', '42%'],
-        roseType: 'area',
-        itemStyle: { borderRadius: 6, borderColor: props.cardBg, borderWidth: 2 },
-        label: { show: true, formatter: '{b}\n{c}', color: props.themeColors.subText, fontSize: 11 },
-        emphasis: { label: { fontSize: 13, fontWeight: 'bold', color: props.themeColors.text } },
-        data: [
-          { name: '待发布', value: props.k8sStats.pending || 0 },
-          { name: '已发布', value: props.k8sStats.online || 0 },
-          { name: '其他', value: Math.max(0, other) },
-        ],
-      },
+  return makeRingOption(
+    [
+      { name: '待发布', value: props.k8sStats.pending || 0 },
+      { name: '已发布', value: props.k8sStats.online || 0 },
+      { name: '其他', value: Math.max(0, other) },
     ],
-  }
+    ['待发布', '已发布', '其他'],
+    [props.colors.pending, props.colors.online, props.colors.other],
+    props.k8sStats.total_rollouts || 0,
+    '个'
+  )
 })
 
 const preprodPie = computed(() => {
   if (!props.preprodStats) return null
-  return {
-    tooltip: tooltipConf({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }),
-    legend: { bottom: 0, textStyle: { color: props.themeColors.subText, fontSize: 11 } },
-    color: [props.colors.scaledDown, props.colors.expanded, props.colors.normal],
-    series: [
-      {
-        type: 'pie',
-        radius: ['15%', '65%'],
-        center: ['50%', '42%'],
-        roseType: 'area',
-        itemStyle: { borderRadius: 6, borderColor: props.cardBg, borderWidth: 2 },
-        label: { show: true, formatter: '{b}\n{c}', color: props.themeColors.subText, fontSize: 11 },
-        emphasis: { label: { fontSize: 13, fontWeight: 'bold', color: props.themeColors.text } },
-        data: [
-          { name: '已缩容', value: props.preprodStats.scaled_down || 0 },
-          { name: '已扩容', value: props.preprodStats.expanded || 0 },
-          { name: '正常', value: props.preprodStats.normal || 0 },
-        ],
-      },
+  const total = (props.preprodStats.scaled_down || 0) + (props.preprodStats.expanded || 0) + (props.preprodStats.normal || 0)
+  return makeRingOption(
+    [
+      { name: '已缩容', value: props.preprodStats.scaled_down || 0 },
+      { name: '已扩容', value: props.preprodStats.expanded || 0 },
+      { name: '正常', value: props.preprodStats.normal || 0 },
     ],
-  }
+    ['已缩容', '已扩容', '正常'],
+    [props.colors.scaledDown, props.colors.expanded, props.colors.normal],
+    total,
+    '个'
+  )
 })
 
 const modules = computed(() => [

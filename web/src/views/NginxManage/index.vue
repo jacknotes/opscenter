@@ -180,13 +180,18 @@
         <div class="batch-hint">
           <el-button size="small" @click="toggleBatchSelectAll">{{ isBatchAllSelected ? '取消' : '全选' }}</el-button>
           <el-button size="small" @click="toggleBatchExpandAll">{{ batchAllExpanded ? '折叠' : '展开' }}</el-button>
-          <el-input
-            v-model="batchSearch"
-            placeholder="搜索 IP / 端口"
-            size="small"
-            clearable
-            style="width: 160px; margin-left: 12px"
-          />
+          <div style="display: flex; align-items: center; gap: 8px; margin-left: 12px">
+            <el-input
+              v-model="batchSearch"
+              placeholder="搜索 IP / 端口 或 {端口}{操作|索引}"
+              size="small"
+              clearable
+              style="width: 240px"
+            />
+            <span v-if="syntaxHint" class="batch-syntax-hint" :class="{ 'hint-error': syntaxHint === '语法格式错误' }">
+              {{ syntaxHint }}
+            </span>
+          </div>
         </div>
         <el-table
           ref="batchTableRef"
@@ -214,14 +219,14 @@
               <el-checkbox v-model="row.enabled" :disabled="!row.hasBoth && !row.hasMultipleUp" />
             </template>
           </el-table-column>
-          <el-table-column label="Upstream 组" min-width="150">
+          <el-table-column label="Upstream 组" min-width="150" sortable :sort-method="(a, b) => a.upstreamName.localeCompare(b.upstreamName)">
             <template #default="{ row }">
               <span class="batch-upstream-name" @mousedown.prevent @click="toggleBatchExpand(row)">{{
                 row.upstreamName
               }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="130">
+          <el-table-column label="状态" width="130" sortable :sort-method="(a, b) => a.upCount - b.upCount">
             <template #default="{ row }">
               <span class="badge badge-success">{{ row.upCount }} up</span>
               <span class="badge badge-danger">{{ row.downCount }} down</span>
@@ -353,6 +358,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../../utils/message'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../utils/constants'
 import BackupDialog from './BackupDialog.vue'
@@ -393,9 +399,33 @@ const swapAffectedUpstreams = ref([])
 const batchDialogVisible = ref(false)
 const batchItems = ref([])
 const batchSearch = ref('')
+const syntaxHint = ref('')
+const isSyntaxMode = ref(false)
 const batchTableRef = ref(null)
 const batchAllExpanded = ref(false)
 const selectedMap = ref({})
+
+watch(batchSearch, (val) => {
+  const trimmed = val.trim()
+  if (!trimmed) {
+    syntaxHint.value = ''
+    isSyntaxMode.value = false
+    return
+  }
+  const parsed = parseBatchSearchSyntax(trimmed)
+  if (parsed) {
+    isSyntaxMode.value = true
+    applyBatchSearchSyntax(parsed)
+    syntaxHint.value = getSyntaxHint(trimmed)
+  } else if (trimmed.startsWith('{')) {
+    // 以 { 开头但格式不对 → 语法错误状态
+    isSyntaxMode.value = false
+    syntaxHint.value = '语法格式错误'
+  } else {
+    isSyntaxMode.value = false
+    syntaxHint.value = ''
+  }
+})
 
 // ===== Backup list =====
 function parseBackupTime(filename) {
@@ -541,7 +571,15 @@ onMounted(initServers)
 
 onActivated(async () => {
   await refreshServers()
-  if (serverId.value) loadConfigs()
+  if (serverId.value) {
+    loadConfigs()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    configFiles.value = []
+    configFile.value = ''
+    upstreams.value = []
+    rawConfig.value = ''
+  }
 })
 
 async function loadConfigs() {
@@ -555,7 +593,7 @@ async function loadConfigs() {
       await loadUpstreams()
     }
   } catch (e) {
-    ElMessage.error('加载配置列表失败: ' + (e.response?.data?.error || e.message))
+    showLoadError(e, '加载配置列表失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
@@ -579,7 +617,7 @@ async function loadUpstreams() {
       ElMessage.warning('未解析到upstream配置，请检查配置文件格式')
     }
   } catch (e) {
-    ElMessage.error('加载upstream失败: ' + (e.response?.data?.error || e.message))
+    showLoadError(e, '加载upstream失败: ' + (e.response?.data?.error || e.message))
   } finally {
     loadingUpstreams.value = false
   }
@@ -602,7 +640,7 @@ async function openBackupDialog() {
     if (e.name === 'AbortError') {
       ElMessage.error('加载备份列表超时，请检查服务器连接')
     } else {
-      ElMessage.error('加载备份列表失败: ' + (e.response?.data?.error || e.message))
+      showLoadError(e, '加载备份列表失败: ' + (e.response?.data?.error || e.message))
     }
     backups.value = []
   } finally {
@@ -754,6 +792,95 @@ async function handleToggleAll(upstream) {
   }
 }
 
+function parseBatchSearchSyntax(input) {
+  const trimmed = input.trim()
+  const match = trimmed.match(/^\{([^}]+)\}\{([^}]+)\}$/)
+  if (!match) return null
+
+  const ports = match[1].split(/\s*\|\s*/).map((p) => p.trim()).filter(Boolean)
+  if (ports.length === 0) return null
+
+  const parts = match[2].split(/\s*\|\s*/)
+  const actionMap = { 上线: 'online', 下线: 'offline', 切换: 'toggle' }
+  const action = actionMap[parts[0]?.trim()]
+  if (!action) return null
+
+  let index = 1
+  if (action !== 'toggle') {
+    const rawIndex = parts[1]?.trim()
+    if (rawIndex !== undefined && rawIndex !== '') {
+      const parsed = parseInt(rawIndex, 10)
+      if (isNaN(parsed) || parsed === 0) return null
+      index = parsed
+    }
+  }
+
+  return { ports, action, index }
+}
+
+function applyBatchSearchSyntax(parsed) {
+  let matchedCount = 0
+  for (const item of batchItems.value) {
+    const portMatch = item.servers.some((s) => parsed.ports.includes(s.port))
+    if (!portMatch) {
+      item.enabled = false
+      continue
+    }
+    item.action = parsed.action
+    if (parsed.action === 'toggle') {
+      if (!item.hasBoth) {
+        item.enabled = false
+        item.action = ''
+        continue
+      }
+      item.enabled = true
+      item.backendIPs = []
+    } else {
+      const selectable = getSelectableServers(item)
+      if (selectable.length === 0) {
+        item.enabled = false
+        item.action = ''
+        continue
+      }
+      let idx = parsed.index
+      if (idx === -1) idx = selectable.length
+      else if (idx > selectable.length) {
+        item.enabled = false
+        item.action = ''
+        continue
+      }
+      const target = selectable[idx - 1]
+      if (!target) {
+        item.enabled = false
+        item.action = ''
+        continue
+      }
+      item.enabled = true
+      item.backendIPs = [normalizeIPKey(target)]
+    }
+    matchedCount++
+  }
+  return matchedCount
+}
+
+function getSyntaxHint(input) {
+  const parsed = parseBatchSearchSyntax(input)
+  if (!parsed) return ''
+  if (parsed.action === 'toggle') {
+    const count = batchItems.value.filter(
+      (item) => item.servers.some((s) => parsed.ports.includes(s.port)) && item.hasBoth
+    ).length
+    return count > 0 ? `已选中 ${count} 个upstream组，切换全部` : ''
+  }
+  const actionLabel = parsed.action === 'online' ? '上线' : '下线'
+  const indexLabel = parsed.index === -1 ? '最后 1' : `第 ${parsed.index}`
+  const count = batchItems.value.filter((item) => {
+    if (!item.servers.some((s) => parsed.ports.includes(s.port))) return false
+    return getSelectableServers(item).length > 0
+  }).length
+  return count > 0 ? `已选中 ${count} 个upstream组，${actionLabel} ${indexLabel} 个服务器` : ''
+}
+
 function openBatchDialog() {
   batchItems.value = upstreams.value.map((u) => {
     const upServers = u.servers.filter((s) => s.status === 'up')
@@ -778,6 +905,7 @@ function openBatchDialog() {
 const filteredBatchItems = computed(() => {
   const q = batchSearch.value.trim().toLowerCase()
   if (!q) return batchItems.value
+  if (isSyntaxMode.value) return batchItems.value
   return batchItems.value.filter((item) => {
     if (item.upstreamName.toLowerCase().includes(q)) return true
     return item.servers.some((s) => s.ip.includes(q) || s.port.includes(q))
@@ -1278,6 +1406,14 @@ async function executePreview() {
   color: #f59e0b;
   margin-top: 2px;
   line-height: 1.2;
+}
+.batch-syntax-hint {
+  font-size: 12px;
+  color: var(--el-color-success);
+  white-space: nowrap;
+}
+.batch-syntax-hint.hint-error {
+  color: var(--el-color-danger);
 }
 .batch-upstream-name {
   color: #06b6d4;

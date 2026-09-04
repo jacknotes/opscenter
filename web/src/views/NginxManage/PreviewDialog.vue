@@ -6,7 +6,7 @@
         <div class="diff-header">
           <span class="diff-filename">{{ configFile }}</span>
         </div>
-        <div class="diff-body">
+        <div ref="diffBodyRef" class="diff-body">
           <div v-for="(line, index) in data.line_diffs" :key="index" :class="['diff-line', `diff-${line.type}`]">
             <span class="diff-line-num">{{ line.line_num }}</span>
             <span class="diff-line-prefix">{{ getLinePrefix(line.type) }}</span>
@@ -23,7 +23,9 @@
 </template>
 
 <script setup>
-defineProps({
+import { ref, watch, nextTick } from 'vue'
+
+const props = defineProps({
   data: { type: Object, default: null },
   configFile: { type: String, default: '' },
   executing: { type: Boolean, default: false },
@@ -32,6 +34,16 @@ defineProps({
 defineEmits(['execute'])
 
 const visible = defineModel({ type: Boolean, default: false })
+const diffBodyRef = ref(null)
+
+watch(visible, (val) => {
+  if (val && props.data?.line_diffs?.length) {
+    nextTick(() => {
+      const el = diffBodyRef.value?.querySelector('.diff-added, .diff-removed')
+      if (el) el.scrollIntoView({ block: 'center' })
+    })
+  }
+})
 
 function getLinePrefix(type) {
   switch (type) {

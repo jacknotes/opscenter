@@ -48,7 +48,7 @@
         </div>
       </template>
 
-      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 200px)">
+      <el-table v-force-reflow v-loading="loading" :data="logs" stripe border max-height="calc(100vh - 280px)" @sort-change="handleSortChange">
         <el-table-column type="expand" width="50">
           <template #default="{ row }">
             <div style="padding: 10px">
@@ -59,11 +59,16 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="180">
+        <el-table-column prop="status" label="状态" width="100" sortable="custom">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="时间" width="180" sortable="custom">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="username" label="操作人" width="100" />
-        <el-table-column prop="module" label="模块" width="100">
+        <el-table-column prop="username" label="操作人" width="100" sortable="custom" />
+        <el-table-column prop="module" label="模块" width="100" sortable="custom">
           <template #default="{ row }">
             <el-tag :type="moduleTagType(row.module)">{{ moduleLabel(row.module) }}</el-tag>
           </template>
@@ -72,11 +77,6 @@
         <el-table-column prop="server_name" label="服务器" width="150" show-overflow-tooltip />
         <el-table-column prop="action" label="动作" width="120" />
         <el-table-column prop="target" label="目标" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
       </el-table>
 
       <div class="pagination-wrapper">
@@ -85,7 +85,7 @@
           v-model:current-page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :page-sizes="[20, 50, 100]"
+          :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next"
           @size-change="loadData"
           @current-change="loadData"
@@ -100,6 +100,7 @@ import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import { getLogs } from '../api'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { formatTime } from '../utils/format'
 
@@ -113,7 +114,28 @@ const loading = ref(false)
 const module = ref('all')
 const keyword = ref('')
 const status = ref('all')
-const dateRange = ref(null)
+const sortBy = ref('created_at')
+const sortOrder = ref('desc')
+
+function formatDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getDefaultDateRange() {
+  const e = new Date()
+  const s = new Date()
+  s.setMonth(s.getMonth() - 1)
+  return [formatDate(s), formatDate(e)]
+}
+
+const dateRange = ref(getDefaultDateRange())
+
+// 限制起止日期跨度最多为 1 年
+const MAX_RANGE_DAYS = 365
+
 const dateShortcuts = [
   {
     text: '近一周',
@@ -142,10 +164,19 @@ const dateShortcuts = [
       return [s, e]
     },
   },
+  {
+    text: '近一年',
+    value: () => {
+      const e = new Date()
+      const s = new Date()
+      s.setFullYear(s.getFullYear() - 1)
+      return [s, e]
+    },
+  },
 ]
 
 const hasFilters = computed(
-  () => module.value !== 'all' || status.value !== 'all' || !!keyword.value || !!dateRange.value
+  () => module.value !== 'all' || status.value !== 'all' || !!keyword.value
 )
 
 onMounted(() => {
@@ -184,7 +215,27 @@ function moduleTagType(m) {
   return moduleTagTypes[m] || ''
 }
 
+const statusLabels = { success: '成功', failed: '失败' }
+function statusLabel(s) {
+  return statusLabels[s] || s
+}
+
 function onDateChange() {
+  if (dateRange.value && dateRange.value.length === 2) {
+    const diff = new Date(dateRange.value[1]) - new Date(dateRange.value[0])
+    if (diff > MAX_RANGE_DAYS * 86400000) {
+      ElMessage.warning('日期范围不能超过1年，请重新选择')
+      dateRange.value = getDefaultDateRange()
+      return
+    }
+  }
+  page.value = 1
+  loadData()
+}
+
+function handleSortChange({ prop, order }) {
+  sortBy.value = prop || 'created_at'
+  sortOrder.value = order === 'ascending' ? 'asc' : 'desc'
   page.value = 1
   loadData()
 }
@@ -209,11 +260,13 @@ async function loadData() {
       params.start_time = dateRange.value[0]
       params.end_time = dateRange.value[1]
     }
+    params.sort_by = sortBy.value
+    params.sort_order = sortOrder.value
     const res = await getLogs(params)
     logs.value = res.data || []
     total.value = res.total || 0
   } catch (e) {
-    ElMessage.error('加载日志失败')
+    showLoadError(e, '加载日志失败')
   } finally {
     loading.value = false
   }

@@ -1,6 +1,16 @@
 import { ElMessage } from 'element-plus'
 
 /**
+ * 显示加载失败提示，401 错误自动跳过（已由拦截器统一处理）
+ * @param {any} error - 捕获的错误对象
+ * @param {string} message - 提示信息
+ */
+export function showLoadError(error, message) {
+  if (error?.response?.status === 401) return
+  ElMessage.error(message)
+}
+
+/**
  * HTML 转义，防止 XSS
  */
 export function escapeHtml(str) {

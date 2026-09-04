@@ -6,3 +6,4 @@ export const getActivityStats = (params) => api.get('/dashboard/activity-stats',
 export const getK8sProjectStats = (params) => api.get('/dashboard/k8s-project-stats', { params })
 export const getPreprodProjectStats = (params) => api.get('/dashboard/preprod-project-stats', { params })
 export const getLvsConnStats = (params) => api.get('/dashboard/lvs-conn-stats', { params })
+export const getOnlineUsers = () => api.get('/dashboard/online-users')

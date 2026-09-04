@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+/// <reference types="vitest" />
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -45,5 +46,9 @@ export default defineConfig({
       },
     },
     chunkSizeWarningLimit: 600,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
   },
 })

@@ -81,6 +81,7 @@ type NginxConfig struct {
 type AuthConfig struct {
 	MaxLoginAttempts  int           `yaml:"max_login_attempts"`  // 最大失败尝试次数，默认 10
 	LoginLockDuration time.Duration `yaml:"login_lock_duration"` // 登录锁定时长，默认 1m
+	MaxUserAttempts   int           `yaml:"max_user_attempts"`   // 用户级锁定阈值，默认 5
 }
 
 // AuditLogConfig 是审计日志 JSON 输出配置。
@@ -268,6 +269,9 @@ func Load(path string) error {
 	}
 	if Global.Auth.LoginLockDuration == 0 {
 		Global.Auth.LoginLockDuration = 1 * time.Minute
+	}
+	if Global.Auth.MaxUserAttempts == 0 {
+		Global.Auth.MaxUserAttempts = 5
 	}
 	// LDAP 默认值
 	// 审计日志默认值

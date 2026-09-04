@@ -34,11 +34,13 @@ export function useSelection(keyField, paginatedItems, opts = {}) {
   }
 
   function handleSizeChange(size) {
+    skipSelectionSync.value = true
     if (opts.currentPage) opts.currentPage.value = 1
     nextTick(() => restoreSelection())
   }
 
   function handleCurrentChange() {
+    skipSelectionSync.value = true
     nextTick(() => restoreSelection())
   }
 
@@ -66,6 +68,7 @@ export function useSelection(keyField, paginatedItems, opts = {}) {
   // 搜索变化时重置页码并恢复选择
   if (opts.search && opts.currentPage) {
     watch(opts.search, () => {
+      skipSelectionSync.value = true
       opts.currentPage.value = 1
       nextTick(() => restoreSelection())
     })

@@ -16,8 +16,10 @@ type User struct {
 	Role       string         `gorm:"size:20;not null;default:user" json:"role"`
 	Enabled    bool           `gorm:"default:true" json:"enabled"`
 	AuthSource string         `gorm:"size:20;default:local" json:"auth_source"` // local / ldap
-	LDAPDN     string         `gorm:"size:255" json:"-"`                        // LDAP DN（不返回给前端）
-	CreatedAt  time.Time      `json:"created_at"`
+	LDAPDN         string         `gorm:"size:255" json:"-"`                        // LDAP DN（不返回给前端）
+	FailedAttempts int            `gorm:"default:0" json:"failed_attempts"`
+	Locked         bool           `gorm:"default:false" json:"locked"`
+	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
 	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
 }

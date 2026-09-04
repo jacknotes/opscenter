@@ -66,6 +66,7 @@ func (m *SSHManager) GetClient(server *model.Server) (*ssh.Client, error) {
 			sc.lastUsed.Store(now.UnixNano())
 			client := sc.client
 			m.mu.RUnlock()
+			log.Printf("[SSH] 复用连接 server=%s(%d)", server.Name, server.ID)
 			return client, nil
 		}
 	} else {
@@ -161,10 +162,12 @@ func (m *SSHManager) connect(server *model.Server) (*ssh.Client, error) {
 	}
 
 	addr := fmt.Sprintf("%s:%d", server.Host, server.Port)
+	dialStart := time.Now()
 	client, err := ssh.Dial("tcp", addr, sshCfg)
 	if err != nil {
 		return nil, fmt.Errorf("SSH连接失败: %v", err)
 	}
+	log.Printf("[SSH] 新建连接 server=%s(%d) addr=%s elapsed=%s", server.Name, server.ID, addr, time.Since(dialStart))
 
 	now := time.Now()
 	sc := &sshClient{
@@ -212,8 +215,12 @@ func (m *SSHManager) Execute(ctx context.Context, server *model.Server, command 
 		}
 	}()
 
+	start := time.Now()
 	output, err := session.CombinedOutput(command)
+	elapsed := time.Since(start)
 	close(done)
+
+	log.Printf("[SSH] server=%s(%d) cmd=%q elapsed=%s", server.Name, server.ID, command, elapsed)
 
 	if err != nil {
 		return string(output), fmt.Errorf("执行命令失败: %v, 输出: %s", err, string(output))

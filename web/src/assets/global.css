@@ -1,6 +1,7 @@
 /* ===== Global Font Declaration ===== */
 html {
-  font-family: 'DM Sans', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-variant-numeric: slashed-zero;
 }
 
 :root {
@@ -34,9 +35,6 @@ html {
   --dialog-md: 560px;
   --dialog-lg: 700px;
   --dialog-xl: 900px;
-
-  /* Table Height Token */
-  --table-max-height: calc(100vh - 240px);
 
   /* Border Radius */
   --radius-sm: 4px;
@@ -83,7 +81,7 @@ html {
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
   overflow-y: auto;
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 60px);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .main-card:hover {
@@ -111,13 +109,18 @@ html {
   background-color: var(--bg-elevated) !important;
 }
 
-/* Pagination Wrapper - 统一分页器布局 */
+/* Pagination Wrapper - 统一分页器布局（固定在卡片底部） */
 .pagination-wrapper {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  bottom: 0;
   margin-top: 16px;
   padding: 8px 0;
+  background: var(--card-bg, #fff);
+  z-index: 5;
+  border-top: 1px solid var(--el-border-lighter, #e4e7ed);
 }
 .pagination-left {
   display: flex;
@@ -192,14 +195,13 @@ html {
   flex-wrap: nowrap;
 }
 
-/* 表格固定表头通过 el-table 的 max-height prop 实现 */
-
 /* Empty State - 统一空状态样式 */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   padding: 60px 0;
   color: var(--text-secondary, #909399);
 }
@@ -457,7 +459,7 @@ html .el-dialog ::selection {
 /* 平板 (1024px) */
 @media (min-width: 769px) and (max-width: 1023px) {
   .main-card {
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 80px);
   }
   .el-table {
     font-size: var(--font-sm);
@@ -472,6 +474,11 @@ html .el-dialog ::selection {
   .toolbar {
     padding: 12px 16px;
   }
+}
+
+/* 内容区包含 main-card 时禁用外层滚动（卡片自身管理滚动，Dashboard 不受影响） */
+.content-area:has(.main-card) {
+  overflow: hidden;
 }
 
 

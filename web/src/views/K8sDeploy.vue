@@ -29,7 +29,7 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{
+          <el-button type="info" class="el-button--cyan" @click="toggleSelectAll()">{{
             allSelected ? '取消' : '全选'
           }}</el-button>
           <el-button type="primary" @click="handleAction('online')">{{
@@ -53,20 +53,20 @@
         :row-key="(row) => row.namespace + '/' + row.name"
         stripe
         border
-        max-height="calc(100vh - 240px)"
+        max-height="calc(100vh - 280px)"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="namespace" label="命名空间" width="150" />
-        <el-table-column prop="name" label="名称" min-width="250" />
-        <el-table-column prop="strategy" label="策略" width="100" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="namespace" label="命名空间" width="150" sortable />
+        <el-table-column prop="name" label="名称" min-width="250" sortable />
+        <el-table-column prop="strategy" label="策略" width="100" sortable />
+        <el-table-column prop="status" label="状态" width="100" sortable>
           <template #default="{ row }">
             <el-tag :type="row.status === 'Paused' ? 'warning' : 'success'">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="step" label="步骤" width="80" />
-        <el-table-column prop="ready" label="就绪" width="80" />
+        <el-table-column prop="step" label="步骤" width="80" sortable :sort-method="sortStep" />
+        <el-table-column prop="ready" label="就绪" width="80" sortable :sort-method="sortReady" />
       </el-table>
 
       <div v-if="!loading && paginatedRollouts.length === 0" class="empty-state">
@@ -144,6 +144,7 @@ import { useSelection } from '../composables/useSelection'
 import { useOutputCache } from '../composables/useOutputCache'
 import { usePreviewExecute } from '../composables/usePreviewExecute'
 import { ElMessage } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { Box } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -151,7 +152,7 @@ const rollouts = ref([])
 const search = ref('')
 const statusFilter = ref('all')
 const loading = ref(false)
-const statusFilterLabels = { all: '全部暂停', pending: '待发布', online: '已上线' }
+const statusFilterLabels = { all: '全部', pending: '待发布', online: '已上线' }
 const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] || '全部')
 const currentPage = ref(1)
 const pageSize = ref(DEFAULT_PAGE_SIZE)
@@ -181,6 +182,20 @@ const paginatedRollouts = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredRollouts.value.slice(start, start + pageSize.value)
 })
+
+function parseStep(s) {
+  if (!s) return -1
+  const match = s.match(/^(\d+)\//)
+  return match ? parseInt(match[1], 10) : -1
+}
+
+function sortStep(a, b) {
+  return parseStep(a.step) - parseStep(b.step)
+}
+
+function sortReady(a, b) {
+  return (parseInt(a.ready, 10) || 0) - (parseInt(b.ready, 10) || 0)
+}
 
 // --- 组合式函数 ---
 const keyFn = (row) => row.namespace + '/' + row.name
@@ -258,7 +273,12 @@ onMounted(async () => {
 onActivated(async () => {
   window.addEventListener('page-refresh', handleRefresh)
   await refreshServers()
-  if (serverId.value) loadData()
+  if (serverId.value) {
+    loadData()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    rollouts.value = []
+  }
 })
 onDeactivated(() => {
   window.removeEventListener('page-refresh', handleRefresh)
@@ -274,7 +294,7 @@ async function loadData() {
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
-    ElMessage.error('加载数据失败')
+    showLoadError(e, '加载数据失败')
     throw e
   } finally {
     loading.value = false

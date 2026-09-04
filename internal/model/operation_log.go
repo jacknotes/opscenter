@@ -11,7 +11,7 @@ type OperationLog struct {
 	Username   string    `gorm:"size:50" json:"username"`
 	Module     string    `gorm:"size:20;not null;index" json:"module"`
 	Action     string    `gorm:"size:30;not null" json:"action"`
-	Target     string    `gorm:"size:500" json:"target"`
+	Target     string    `gorm:"type:text" json:"target"`
 	Detail     string    `gorm:"type:text" json:"detail"`
 	Status     string    `gorm:"size:20;not null" json:"status"`
 	Output     string    `gorm:"type:text" json:"output"`
@@ -19,7 +19,7 @@ type OperationLog struct {
 	ServerID   uint      `gorm:"index" json:"server_id"`
 	ServerName string    `gorm:"size:100" json:"server_name"`
 	IP           string    `gorm:"size:255" json:"ip"`
-	ProjectNames string    `gorm:"size:500" json:"project_names"` // 逗号分隔的服务名列表（K8s/Preprod）
+	ProjectNames string    `gorm:"type:text" json:"project_names"` // 逗号分隔的服务名列表（K8s/Preprod）
 	ProjectCount int       `gorm:"default:0" json:"project_count"` // 涉及的服务数量
 	CreatedAt    time.Time `gorm:"index" json:"created_at"`
 }

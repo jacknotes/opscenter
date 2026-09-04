@@ -65,11 +65,11 @@
         :row-key="(row) => row.name"
         stripe
         border
-        max-height="calc(100vh - 240px)"
+        max-height="calc(100vh - 280px)"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="45" />
-        <el-table-column prop="category" label="类型" width="100">
+        <el-table-column prop="category" label="类型" width="100" sortable>
           <template #default="{ row }">
             <el-tag
               :type="row.category === 'rollout' ? 'primary' : row.category === 'deployment' ? 'success' : 'warning'"
@@ -77,29 +77,33 @@
             >
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="300" />
-        <el-table-column prop="current" label="当前副本" width="100" align="center">
+        <el-table-column prop="name" label="名称" min-width="300" sortable />
+        <el-table-column prop="current" label="当前副本" width="100" align="center" sortable>
           <template #default="{ row }">
             <span>{{ row.current }}</span>
-            <el-tag v-if="row.current === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
+            <el-tag v-if="row.ready_desired === 0 && row.ready === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
             <el-tag
-              v-else-if="row.current > 0 && row.current === row.target_replicas"
+              v-else-if="row.ready > 0 && row.ready === row.ready_desired"
               type="success"
               size="small"
               style="margin-left: 4px"
               >正常</el-tag
             >
+            <el-tag v-else type="warning" size="small" style="margin-left: 4px">启动中</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="target_replicas" label="目标副本" width="90" align="center">
+        <el-table-column prop="target_replicas" label="目标副本" width="90" align="center" sortable>
           <template #default="{ row }">
-            <span :class="{ 'text-warning': row.current > 0 && row.current !== row.target_replicas }">
+            <span :class="{ 'text-warning': row.ready_desired > 0 && row.ready < row.ready_desired }">
               {{ row.target_replicas || '-' }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="available" label="可用副本" width="90" align="center" />
-        <el-table-column prop="age" label="年龄" width="100" />
+        <el-table-column prop="ready" label="就绪副本" width="100" align="center" sortable>
+          <template #default="{ row }">
+            <span>{{ row.ready }}/{{ row.ready_desired }}</span>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div v-if="!loading && paginatedResources.length === 0" class="empty-state">
@@ -119,6 +123,18 @@
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
+        />
+      </div>
+
+      <!-- Streaming Output Area -->
+      <div v-if="wsStore.status !== 'idle'" class="output-section">
+        <div class="stream-header">
+          <span class="chart-title">执行输出</span>
+        </div>
+        <StreamOutput
+          :lines="wsStore.outputLines"
+          :status="wsStore.status"
+          :show-cancel="false"
         />
       </div>
     </el-card>
@@ -360,18 +376,6 @@
         >
       </template>
     </el-dialog>
-
-    <!-- Streaming Output Area -->
-    <el-card v-if="wsStore.status !== 'idle'" class="output-card" shadow="hover">
-      <template #header>
-        <span class="chart-title">执行输出</span>
-      </template>
-      <StreamOutput
-        :lines="wsStore.outputLines"
-        :status="wsStore.status"
-        :show-cancel="false"
-      />
-    </el-card>
   </div>
 </template>
 
@@ -395,6 +399,7 @@ import { useServerSelector } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../utils/message'
 import { ZoomOut } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -413,9 +418,9 @@ const statusFilterLabel = computed(() => statusFilterLabels[statusFilter.value] 
 const filteredResources = computed(() => {
   let list = resources.value
   if (statusFilter.value === 'up') {
-    list = list.filter((r) => r.current >= r.target_replicas)
+    list = list.filter((r) => r.ready_desired > 0 && r.ready >= r.ready_desired)
   } else if (statusFilter.value === 'down') {
-    list = list.filter((r) => r.current < r.target_replicas)
+    list = list.filter((r) => r.ready_desired === 0 && r.ready === 0)
   }
   if (search.value) {
     const q = search.value.toLowerCase()
@@ -568,7 +573,15 @@ onActivated(async () => {
     wsStore.reset()
   }
   await refreshServers()
-  if (serverId.value) loadData()
+  if (serverId.value) {
+    loadData()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    resources.value = []
+    bindings.value = []
+    vsTagOptions.value = []
+    rsTagOptions.value = []
+  }
 })
 
 async function loadData() {
@@ -580,7 +593,7 @@ async function loadData() {
     selectedIds.value.clear()
     tableRef.value?.clearSelection()
   } catch (e) {
-    ElMessage.error('加载数据失败')
+    showLoadError(e, '加载数据失败')
   } finally {
     loading.value = false
   }
@@ -616,7 +629,7 @@ async function openBindingDialog() {
     rsTagOptions.value = [...new Set((rsTags || []).map((t) => t.tag).filter(Boolean))]
     bindingDialogVisible.value = true
   } catch (e) {
-    ElMessage.error('加载绑定配置失败')
+    showLoadError(e, '加载绑定配置失败')
   }
 }
 
@@ -803,8 +816,11 @@ function executePreview() {
   color: var(--color-warning);
   font-weight: var(--weight-bold);
 }
-.output-card {
+.output-section {
   margin-top: 16px;
+  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.06));
+  border-radius: 8px;
+  padding: 16px;
 }
 .chart-title {
   font-weight: 600;

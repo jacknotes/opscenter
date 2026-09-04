@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     BatchConfirmDialog: typeof import('./components/common/BatchConfirmDialog.vue')['default']
+    DateRangeSelector: typeof import('./components/DateRangeSelector.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElButton: typeof import('element-plus/es')['ElButton']

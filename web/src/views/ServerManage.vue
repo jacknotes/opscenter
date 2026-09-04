@@ -4,19 +4,20 @@
       <template #header>
         <div class="toolbar">
           <el-button type="primary" @click="handleAdd">添加服务器</el-button>
-          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
-            batchToggleLabel
-          }}</el-button>
-          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
-          <el-button
-            type="info"
-            class="el-button--cyan"
-            :disabled="selectedRows.length !== 1"
-            @click="handleCopySelected"
-            >复制</el-button
-          >
-          <el-button type="success" :disabled="selectedRows.length === 0" @click="handleBatchTest">测试连接</el-button>
-          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
+          <el-dropdown @command="handleMoreCommand">
+            <el-button type="info" class="el-button--cyan">
+              更多操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="edit" :disabled="selectedRows.length !== 1">编辑</el-dropdown-item>
+                <el-dropdown-item command="copy" :disabled="selectedRows.length !== 1">复制</el-dropdown-item>
+                <el-dropdown-item command="toggle" divided :disabled="selectedRows.length === 0">{{ batchToggleLabel }}</el-dropdown-item>
+                <el-dropdown-item command="test" :disabled="selectedRows.length === 0">测试连接</el-dropdown-item>
+                <el-dropdown-item command="delete" :disabled="selectedRows.length === 0">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
           <el-input
             v-model="searchQuery"
@@ -31,25 +32,27 @@
         ref="tableRef"
         v-force-reflow
         :data="paginatedServers"
+        :row-key="(row) => row.id"
         stripe
         border
         :row-class-name="tableRowClassName"
-        max-height="calc(100vh - 250px)"
+        max-height="calc(100vh - 280px)"
         @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" width="80" align="center" sortable="custom" column-key="enabled">
           <template #default="{ row }">
             <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
               row.enabled ? '已启用' : '已禁用'
             }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="host" label="IP地址" min-width="120" />
-        <el-table-column prop="port" label="SSH端口" width="80" />
+        <el-table-column prop="name" label="名称" min-width="120" sortable="custom" />
+        <el-table-column prop="host" label="IP地址" min-width="120" sortable="custom" />
+        <el-table-column prop="port" label="SSH端口" width="80" sortable="custom" />
         <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="server_type" label="类型" min-width="140">
+        <el-table-column prop="server_type" label="类型" min-width="140" sortable="custom">
           <template #default="{ row }">
             <el-tag
               :type="
@@ -71,7 +74,7 @@
             >
           </template>
         </el-table-column>
-        <el-table-column prop="env" label="环境" width="80" />
+        <el-table-column prop="env" label="环境" width="80" sortable="custom" />
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       </el-table>
 
@@ -87,7 +90,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100, 200]"
+          :page-sizes="[10, 20, 50, 100]"
           :total="filteredServers.length"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="handleSizeChange"
@@ -199,47 +202,68 @@ import {
   toggleServerEnabled,
 } from '../api'
 import { clearServerCache } from '../composables/useServerSelector'
-import { showBatchResult } from '../utils/message'
+import { useSelection } from '../composables/useSelection'
+import { showBatchResult, showLoadError } from '../utils/message'
+import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
+import { ArrowDown, Setting } from '@element-plus/icons-vue'
 
 const servers = shallowRef([])
 const searchQuery = ref('')
 const currentPage = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(DEFAULT_PAGE_SIZE)
+const sortProp = ref('')
+const sortOrder = ref('')
 
 const filteredServers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return servers.value
-  return servers.value.filter((s) => {
-    const statusText = s.enabled ? '已启用' : '已禁用'
-    const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
+  let list = servers.value
+  if (q) {
+    list = list.filter((s) => {
+      const statusText = s.enabled ? '已启用' : '已禁用'
+      const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
 
-    return (
-      s.name.toLowerCase().includes(q) ||
-      s.host.toLowerCase().includes(q) ||
-      s.server_type.toLowerCase().includes(q) ||
-      typeText.toLowerCase().includes(q) ||
-      s.env.toLowerCase().includes(q) ||
-      String(s.port).includes(q) ||
-      s.username.toLowerCase().includes(q) ||
-      (s.description && s.description.toLowerCase().includes(q)) ||
-      statusText.includes(q) ||
-      (q === '启用' && s.enabled) ||
-      (q === '禁用' && !s.enabled)
-    )
-  })
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.host.toLowerCase().includes(q) ||
+        s.server_type.toLowerCase().includes(q) ||
+        typeText.toLowerCase().includes(q) ||
+        s.env.toLowerCase().includes(q) ||
+        String(s.port).includes(q) ||
+        s.username.toLowerCase().includes(q) ||
+        (s.description && s.description.toLowerCase().includes(q)) ||
+        statusText.includes(q) ||
+        (q === '启用' && s.enabled) ||
+        (q === '禁用' && !s.enabled)
+      )
+    })
+  }
+  if (sortProp.value && sortOrder.value) {
+    const prop = sortProp.value
+    const order = sortOrder.value === 'ascending' ? 1 : -1
+    list = [...list].sort((a, b) => {
+      let va, vb
+      if (prop === 'enabled') {
+        va = a.enabled ? 1 : 0
+        vb = b.enabled ? 1 : 0
+      } else if (prop === 'port') {
+        va = Number(a.port) || 0
+        vb = Number(b.port) || 0
+      } else {
+        va = (a[prop] || '').toLowerCase()
+        vb = (b[prop] || '').toLowerCase()
+      }
+      if (va < vb) return -1 * order
+      if (va > vb) return 1 * order
+      return 0
+    })
+  }
+  return list
 })
 
 const paginatedServers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredServers.value.slice(start, start + pageSize.value)
-})
-
-const batchToggleType = computed(() => {
-  if (selectedRows.value.length === 0) return 'success'
-  const allDisabled = selectedRows.value.every((r) => !r.enabled)
-  return allDisabled ? 'success' : 'warning'
 })
 
 const batchToggleLabel = computed(() => {
@@ -255,9 +279,17 @@ const editId = ref(null)
 const submitting = ref(false)
 const loading = ref(false)
 const form = ref(getDefaultForm())
-const selectedRow = ref(null)
-const selectedRows = ref([])
-const tableRef = ref(null)
+// 跨页选择管理
+const {
+  selectedIds,
+  tableRef,
+  handleSelectionChange,
+  handleSizeChange,
+  handleCurrentChange,
+} = useSelection('id', paginatedServers, { search: searchQuery, currentPage })
+
+const selectedRows = computed(() => servers.value.filter((s) => selectedIds.value.has(s.id)))
+const selectedRow = computed(() => (selectedRows.value.length > 0 ? selectedRows.value[selectedRows.value.length - 1] : null))
 
 function getDefaultForm() {
   return {
@@ -285,31 +317,10 @@ function tableRowClassName({ row }) {
   return ''
 }
 
-function handleSelectionChange(rows) {
-  selectedRows.value = rows
-  if (rows.length === 1) {
-    selectedRow.value = rows[0]
-  } else if (rows.length > 1) {
-    selectedRow.value = rows[rows.length - 1]
-  } else {
-    selectedRow.value = null
-  }
+function handleSortChange({ prop, order, column }) {
+  sortProp.value = prop || column?.columnKey || ''
+  sortOrder.value = order || ''
 }
-
-function handleSizeChange() {
-  currentPage.value = 1
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-function handleCurrentChange() {
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-watch(searchQuery, () => {
-  currentPage.value = 1
-})
 
 onMounted(() => {
   loadData()
@@ -329,7 +340,7 @@ async function loadData(showMessage = false) {
       ElMessage.success('刷新成功')
     }
   } catch (e) {
-    ElMessage.error('加载服务器列表失败')
+    showLoadError(e, '加载服务器列表失败')
   } finally {
     loading.value = false
   }
@@ -337,6 +348,31 @@ async function loadData(showMessage = false) {
 
 function handleRefresh() {
   loadData(true)
+}
+
+function handleMoreCommand(command) {
+  switch (command) {
+    case 'edit':
+      if (selectedRows.value.length !== 1) return
+      handleEditSelected()
+      break
+    case 'copy':
+      if (selectedRows.value.length !== 1) return
+      handleCopySelected()
+      break
+    case 'toggle':
+      if (selectedRows.value.length === 0) return
+      handleBatchToggle()
+      break
+    case 'test':
+      if (selectedRows.value.length === 0) return
+      handleBatchTest()
+      break
+    case 'delete':
+      if (selectedRows.value.length === 0) return
+      handleBatchDelete()
+      break
+  }
 }
 
 function handleAdd() {
@@ -401,8 +437,7 @@ async function handleBatchToggle() {
       enabled
     )
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
@@ -421,8 +456,7 @@ async function handleBatchDelete() {
     })
     const res = await batchDeleteServers(selectedRows.value.map((r) => r.id))
     showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
+    selectedIds.value.clear()
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {

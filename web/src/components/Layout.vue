@@ -321,15 +321,19 @@ function handleKeydown(e) {
   }
 }
 
-function handleCommand(cmd) {
+async function handleCommand(cmd) {
   if (cmd === 'profile') {
     profileVisible.value = true
   } else if (cmd === 'logout') {
-    // 先清理本地状态并跳转，API 调用异步执行不阻塞
+    // 先调用后端登出 API（需要 token），确保完成后再清理本地状态并跳转
     clearServerCache()
+    try {
+      await logout()
+    } catch {
+      // 即使 API 失败也继续清理
+    }
     userStore.logout()
     router.push('/login').catch(() => {})
-    logout().catch(() => {})
   } else if (cmd === 'changePwd') {
     changePwdForm.value = { old_password: '', new_password: '', confirm_password: '' }
     changePwdVisible.value = true
@@ -377,6 +381,9 @@ async function submitChangePwd() {
   justify-content: space-between;
   border-bottom: 1px solid var(--border-default);
   background: var(--card-bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .header-title {
@@ -685,6 +692,9 @@ async function submitChangePwd() {
   flex-shrink: 0;
   opacity: 0.7;
   will-change: background-position;
+  position: sticky;
+  top: 60px;
+  z-index: 99;
 }
 
 @keyframes accent-shift {

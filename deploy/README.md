@@ -9,12 +9,10 @@
 ├── .dockerignore           # Docker 构建忽略文件
 └── k8s/
     ├── namespace.yaml      # K8s 命名空间
-    ├── secret.yaml         # OpsCenter 敏感配置
     ├── configmap.yaml      # OpsCenter 非敏感配置
     ├── deployment.yaml     # OpsCenter 应用部署
     ├── service.yaml        # OpsCenter 服务
-    ├── ingress.yaml        # OpsCenter Ingress（可选）
-    └── mysql.yaml          # MySQL 数据库部署
+    └── virtualservice.yaml # Istio VirtualService（可选）
 ```
 
 ## Docker 部署
@@ -61,38 +59,30 @@ docker-compose down
 kubectl apply -f k8s/namespace.yaml
 ```
 
-2. **部署 MySQL**
+2. **配置 OpsCenter**
+
+编辑 `k8s/configmap.yaml`，修改数据库连接、JWT 密钥等配置：
 
 ```bash
-kubectl apply -f k8s/mysql.yaml
-```
-
-3. **配置 OpsCenter**
-
-编辑 `k8s/secret.yaml`，修改敏感信息：
-
-```bash
-# 编辑 Secret（密码、密钥等）
-vi k8s/secret.yaml
-
-# 应用配置
-kubectl apply -f k8s/secret.yaml
+vi k8s/configmap.yaml
 kubectl apply -f k8s/configmap.yaml
 ```
 
-4. **部署 OpsCenter**
+敏感信息（密码、密钥等）通过环境变量注入，详见 `config.yaml.example`。
+
+3. **部署 OpsCenter**
 
 ```bash
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 ```
 
-5. **配置 Ingress（可选）**
+4. **配置 Istio VirtualService（可选）**
 
-编辑 `k8s/ingress.yaml`，修改域名后应用：
+如使用 Istio 服务网格，编辑 `k8s/virtualservice.yaml` 配置域名后应用：
 
 ```bash
-kubectl apply -f k8s/ingress.yaml
+kubectl apply -f k8s/virtualservice.yaml
 ```
 
 ### 查看部署状态
@@ -167,7 +157,7 @@ crypto:
 首次启动时会自动创建管理员账号：
 
 - 用户名：`admin`
-- 密码：`admin123`（未配置 `admin_password` 时的默认值）
+- 密码：`Admin@123`（未配置 `admin_password` 时的默认值）
 
 **请在生产环境中通过 `config.yaml` 的 `server.admin_password` 配置强密码！**
 

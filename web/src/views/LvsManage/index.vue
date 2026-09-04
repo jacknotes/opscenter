@@ -46,7 +46,7 @@
         :span-method="mainSpanMethod"
         :row-class-name="({ rowIndex }) => 'vip-group-' + (flattenedMainData[rowIndex]?.groupIdx % 2)"
         border
-        max-height="calc(100vh - 240px)"
+        max-height="calc(100vh - 280px)"
         row-key="uid"
       >
         <el-table-column label="" width="45" align="center">
@@ -328,6 +328,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { showLoadError } from '../../utils/message'
 import { ArrowRight, ArrowDown, Connection } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../utils/constants'
 import TagDialog from './TagDialog.vue'
@@ -571,7 +572,7 @@ async function loadData() {
     if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) ElMessage.error('连接超时，目标服务器可能不可达')
     else if (e.response?.data?.error) ElMessage.error(e.response.data.error)
     else if (!e.response) ElMessage.error('网络异常')
-    else ElMessage.error('加载数据失败：' + (e.message || '未知错误'))
+    else showLoadError(e, '加载数据失败：' + (e.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -608,6 +609,12 @@ onActivated(async () => {
   if (serverId.value) {
     loadData()
     startAutoRefresh()
+  } else {
+    // 服务器全部禁用时清空旧数据，避免显示过期信息
+    lvsData.value = []
+    groupedData.value = []
+    vsFilter.value = ''
+    stopAutoRefresh()
   }
 })
 onDeactivated(() => {

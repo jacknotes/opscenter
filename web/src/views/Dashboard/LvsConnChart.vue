@@ -1,5 +1,5 @@
 <template>
-  <el-card class="chart-card" shadow="hover">
+  <el-card class="chart-card" shadow="hover" :class="{ 'fullscreen-card-el': fullscreen }">
     <template #header>
       <div class="card-header">
         <span class="chart-title">LVS 连接统计</span>
@@ -22,10 +22,13 @@
           <el-button text type="primary" size="small" :loading="loading" @click="loadData">
             <el-icon style="margin-right: 4px"><Refresh /></el-icon>刷新
           </el-button>
+          <el-button text type="primary" size="small" @click="$emit('toggleFullscreen')">
+            <el-icon><component :is="isFullscreen ? ScaleToOriginal : FullScreen" /></el-icon>
+          </el-button>
         </div>
       </div>
     </template>
-    <v-chart v-if="chartData.length > 0" class="conn-chart" :option="chartOption" autoresize />
+    <v-chart v-if="chartData.length > 0" class="conn-chart" :class="{ 'fullscreen-chart-el': fullscreen }" :option="chartOption" autoresize />
     <div v-else class="empty-state">
       <el-icon class="empty-state-icon"><DataLine /></el-icon>
       <span class="empty-state-text">{{ emptyText }}</span>
@@ -35,11 +38,25 @@
 
 <script setup>
 import { ref, computed, onMounted, onActivated, onDeactivated, onUnmounted } from 'vue'
-import { getServers } from '../../api'
 import { getLvsList } from '../../api/lvs'
 import { getLvsConnStats } from '../../api/dashboard'
+import { useServerSelector } from '../../composables/useServerSelector'
 import { STORAGE_KEYS } from '../../utils/constants'
-import { DataLine, Refresh } from '@element-plus/icons-vue'
+import { useAppStore } from '../../stores/app'
+import { DataLine, Refresh, FullScreen, ScaleToOriginal } from '@element-plus/icons-vue'
+
+defineProps({
+  isFullscreen: {
+    type: Boolean,
+    default: false
+  },
+  fullscreen: {
+    type: Boolean,
+    default: false
+  }
+})
+
+defineEmits(['toggleFullscreen'])
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart } from 'echarts/charts'
@@ -49,19 +66,6 @@ import { CanvasRenderer } from 'echarts/renderers'
 use([LineChart, TitleComponent, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 // ---- localStorage 读写 ----
-function loadSaved() {
-  try {
-    return {
-      serverId: Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_SERVER)) || null,
-      vsIp: localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS) || null,
-      rsIp: localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS) || null,
-      duration: Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_DURATION)) || 15,
-    }
-  } catch {
-    return { serverId: null, vsIp: null, rsIp: null, duration: 15 }
-  }
-}
-
 function saveKey(key, val) {
   try {
     if (val === null || val === undefined || val === '') {
@@ -73,26 +77,29 @@ function saveKey(key, val) {
 }
 
 // ---- 主题感知 ----
+const appStore = useAppStore()
 function getCSSVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-const themeColors = computed(() => ({
+const themeColors = computed(() => {
+  // 读取 theme 使其成为响应式依赖，主题切换时自动重新计算
+  void appStore.theme
+  return ({
   text: getCSSVar('--text-primary') || '#E2E8F0',
   subText: getCSSVar('--text-regular') || '#94A3B8',
   muted: getCSSVar('--text-secondary') || '#64748B',
   border: getCSSVar('--border-default') || 'rgba(255,255,255,0.06)',
   tooltipBg: getCSSVar('--bg-elevated') || '#1A1D2E',
   tooltipBorder: getCSSVar('--border-default') || 'rgba(255,255,255,0.1)',
-}))
+  })
+})
 
 // ---- 筛选状态 ----
-const saved = loadSaved()
-const lvsServers = ref([])
-const serverId = ref(saved.serverId)
-const vsIp = ref(saved.vsIp)
-const rsIp = ref(saved.rsIp)
-const duration = ref(saved.duration)
+const { servers: lvsServers, serverId, initServers, refreshServers } = useServerSelector('lvs', STORAGE_KEYS.LVS_CONN_SERVER)
+const vsIp = ref(localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS) || null)
+const rsIp = ref(localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS) || null)
+const duration = ref(Number(localStorage.getItem(STORAGE_KEYS.LVS_CONN_DURATION)) || 15)
 const vsList = ref([])
 const rsList = ref([])
 
@@ -110,14 +117,6 @@ const emptyText = computed(() => {
   return '暂无连接数据（等待首次采集）'
 })
 
-// ---- 加载 LVS 服务器列表 ----
-async function loadLvsServers() {
-  try {
-    const res = await getServers('lvs')
-    lvsServers.value = Array.isArray(res) ? res : []
-  } catch {}
-}
-
 // ---- 服务器变更：加载 VS 列表 ----
 async function onServerChange() {
   saveKey(STORAGE_KEYS.LVS_CONN_SERVER, serverId.value)
@@ -132,13 +131,6 @@ async function onServerChange() {
 
   if (!serverId.value) return
   await loadVsRsList()
-
-  // 如果保存的 VS 在列表中，恢复它
-  if (saved.vsIp && vsList.value.includes(saved.vsIp)) {
-    vsIp.value = saved.vsIp
-    rsList.value = vsRsMap[vsIp.value] || []
-    saved.vsIp = null // 只恢复一次
-  }
 }
 
 // ---- VS 变更：加载 RS 列表 ----
@@ -148,13 +140,6 @@ function onVsChange() {
   rsList.value = vsRsMap[vsIp.value] || []
   chartData.value = []
   saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
-
-  // 如果保存的 RS 在列表中，恢复它
-  if (saved.rsIp && rsList.value.includes(saved.rsIp)) {
-    rsIp.value = saved.rsIp
-    saved.rsIp = null // 只恢复一次
-    loadData()
-  }
 }
 
 // ---- RS 变更 ----
@@ -229,6 +214,7 @@ const chartOption = computed(() => {
       backgroundColor: themeColors.value.tooltipBg,
       borderColor: themeColors.value.tooltipBorder,
       textStyle: { color: themeColors.value.text, fontSize: 13 },
+      confine: true,
     },
     legend: {
       data: ['ActiveConn', 'InActConn'],
@@ -248,7 +234,7 @@ const chartOption = computed(() => {
     yAxis: {
       type: 'value',
       minInterval: 1,
-      splitLine: { lineStyle: { color: themeColors.value.border, type: 'dashed' } },
+      splitLine: { lineStyle: { color: themeColors.value.border } },
       axisLabel: { color: themeColors.value.muted, fontSize: 11 },
     },
     series: [
@@ -317,40 +303,26 @@ function stopAutoRefresh() {
 
 // ---- 初始化：恢复保存的选择并级联加载 ----
 async function init() {
-  await loadLvsServers()
+  // 保存 localStorage 中的值，以便 initServers 完成后恢复
+  const savedVsIp = localStorage.getItem(STORAGE_KEYS.LVS_CONN_VS)
+  const savedRsIp = localStorage.getItem(STORAGE_KEYS.LVS_CONN_RS)
+
+  await initServers()
 
   // 如果保存了 serverId，恢复 VS/RS 列表并自动加载数据
   if (serverId.value) {
-    // 检查保存的服务器是否仍在列表中
-    const exists = lvsServers.value.some((s) => s.id === serverId.value)
-    if (!exists) {
-      serverId.value = null
-      vsIp.value = null
-      rsIp.value = null
-      saveKey(STORAGE_KEYS.LVS_CONN_SERVER, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_VS, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
-      return
-    }
-
     await loadVsRsList()
 
     // 恢复 VS
-    if (vsIp.value && vsList.value.includes(vsIp.value)) {
-      rsList.value = vsRsMap[vsIp.value] || []
+    if (savedVsIp && vsList.value.includes(savedVsIp)) {
+      vsIp.value = savedVsIp
+      rsList.value = vsRsMap[savedVsIp] || []
 
       // 恢复 RS
-      if (rsIp.value && rsList.value.includes(rsIp.value)) {
+      if (savedRsIp && rsList.value.includes(savedRsIp)) {
+        rsIp.value = savedRsIp
         loadData()
-      } else {
-        rsIp.value = null
-        saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
       }
-    } else {
-      vsIp.value = null
-      rsIp.value = null
-      saveKey(STORAGE_KEYS.LVS_CONN_VS, null)
-      saveKey(STORAGE_KEYS.LVS_CONN_RS, null)
     }
   }
 }
@@ -360,7 +332,8 @@ onMounted(async () => {
   startAutoRefresh()
 })
 
-onActivated(() => {
+onActivated(async () => {
+  await refreshServers()
   startAutoRefresh()
 })
 
@@ -392,10 +365,10 @@ onUnmounted(() => {
   font-size: 14px;
 }
 .conn-chart {
-  height: 300px;
+  height: 220px;
 }
 .empty-state {
-  height: 300px;
+  height: 220px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -409,5 +382,22 @@ onUnmounted(() => {
 .empty-state-text {
   font-size: 14px;
   color: var(--el-text-color-secondary);
+}
+.fullscreen-card-el {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-card-el :deep(.el-card__body) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fullscreen-chart-el {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 </style>
