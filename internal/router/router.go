@@ -4,6 +4,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
@@ -32,6 +33,13 @@ func Setup(db *gorm.DB, rdb *redis.Client) *App {
 
 	// Middleware
 	r.Use(middleware.CORS())
+
+	// 静态资源 gzip 压缩：element-plus/echarts 等大体积 JS 传输体积可降约 70%。
+	// 排除 /api（含 WebSocket 流式输出）与 /swagger，避免影响流式与非 JSON 响应。
+	r.Use(gzip.Gzip(gzip.DefaultCompression,
+		gzip.WithExcludedPathsRegexs([]string{`^/api/`, `^/swagger/`})))
+	// 前端资源缓存策略：带 hash 的 assets 强缓存，index.html 协商缓存
+	r.Use(middleware.StaticCache())
 
 	// Serve static files (frontend)
 	r.StaticFS("/assets", http.Dir("web/dist/assets"))
