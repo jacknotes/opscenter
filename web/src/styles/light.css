@@ -1,0 +1,104 @@
+/* ============================================================
+ * 亮色主题：覆盖同一套设计令牌（[data-theme='light']）
+ * ============================================================ */
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-base: #f4f5fb;
+  --bg-deep: #eceef7;
+  --bg-elev: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg-card-solid: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.85);
+  --bg-input: rgba(255, 255, 255, 0.85);
+
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  --border: rgba(71, 85, 105, 0.18);
+  --border-strong: rgba(71, 85, 105, 0.32);
+  --border-faint: rgba(71, 85, 105, 0.09);
+
+  --shadow-card: 0 1px 2px rgba(30, 41, 59, 0.06), 0 8px 28px rgba(30, 41, 59, 0.08);
+  --shadow-float: 0 4px 12px rgba(30, 41, 59, 0.1), 0 16px 48px rgba(30, 41, 59, 0.12);
+  --shadow-glow: 0 0 0 1px rgba(99, 102, 241, 0.3), 0 4px 24px rgba(99, 102, 241, 0.2);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  /* 渐变文字在亮色下调深，保证可读性 */
+  --grad-text: linear-gradient(100deg, #4f46e5, #6366f1, #7c3aed, #6d28d9);
+}
+
+/* 亮色下的大气层背景重绘 */
+[data-theme='light'] body::before {
+  background:
+    radial-gradient(900px 480px at 12% -8%, rgba(99, 102, 241, 0.12), transparent 60%),
+    radial-gradient(760px 420px at 88% -4%, rgba(139, 92, 246, 0.09), transparent 60%),
+    radial-gradient(1100px 520px at 50% 112%, rgba(52, 211, 153, 0.07), transparent 62%),
+    var(--bg-base);
+}
+
+[data-theme='light'] body::after {
+  background:
+    linear-gradient(rgba(71, 85, 105, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(71, 85, 105, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* 亮色下滚动条边框色 */
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  border-color: var(--bg-base);
+}
+
+/* ============================================================
+ * Element Plus 亮色重上色
+ * ============================================================ */
+
+[data-theme='light'] {
+  --el-bg-color: #ffffff;
+  --el-bg-color-overlay: #ffffff;
+  --el-bg-color-page: #f4f5fb;
+  --el-text-color-primary: #1e293b;
+  --el-text-color-regular: #475569;
+  --el-text-color-secondary: #64748b;
+  --el-text-color-placeholder: #94a3b8;
+  --el-border-color: rgba(71, 85, 105, 0.32);
+  --el-border-color-light: rgba(71, 85, 105, 0.18);
+  --el-border-color-lighter: rgba(71, 85, 105, 0.09);
+  --el-fill-color: rgba(71, 85, 105, 0.06);
+  --el-fill-color-light: rgba(71, 85, 105, 0.05);
+  --el-fill-color-blank: transparent;
+  --el-mask-color: rgba(241, 245, 249, 0.7);
+}
+
+[data-theme='light'] .el-input__wrapper,
+[data-theme='light'] .el-textarea__inner,
+[data-theme='light'] .el-select__wrapper {
+  background-color: var(--bg-input);
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+
+[data-theme='light'] .el-dialog {
+  background: var(--bg-glass);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid var(--border);
+}
+
+[data-theme='light'] .el-menu-item.is-active {
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
+}
+
+[data-theme='light'] .el-menu-item:hover,
+[data-theme='light'] .el-sub-menu__title:hover {
+  background: rgba(71, 85, 105, 0.06);
+  color: var(--text-primary);
+}
+
+[data-theme='light'] .el-message {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+}

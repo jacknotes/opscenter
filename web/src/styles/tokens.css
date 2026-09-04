@@ -1,0 +1,102 @@
+/* ============================================================
+ * OpsCenter · Signal Relay 设计令牌（唯一事实源）
+ * 深色为默认；亮色由 light.css 的 [data-theme='light'] 覆盖同一套令牌。
+ * 任何组件不得写死颜色/间距/圆角/阴影/字体数值。
+ * ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- 品牌色板："信号"能量 靛蓝 → 紫 ---- */
+  --indigo-300: #a5b4fc;
+  --indigo-400: #818cf8;
+  --indigo-500: #6366f1;
+  --indigo-600: #4f46e5;
+  --violet-400: #a78bfa;
+  --violet-500: #8b5cf6;
+  --violet-600: #7c3aed;
+
+  --grad-primary: linear-gradient(135deg, #6366f1, #8b5cf6);
+  --grad-text: linear-gradient(100deg, #a5b4fc, #818cf8, #a78bfa, #c4b5fd);
+
+  --emerald-400: #34d399;
+  --rose-400: #f87171;
+  --amber-400: #fbbf24;
+  --sky-400: #38bdf8;
+
+  /* ---- 深色表面：深蓝黑控制室 ---- */
+  --bg-base: #0f172a;
+  --bg-deep: #0b1120;
+  --bg-elev: #1e293b;
+  --bg-card: rgba(30, 41, 59, 0.55);
+  --bg-card-solid: #172133;
+  --bg-glass: rgba(23, 33, 51, 0.72);
+  --bg-input: rgba(15, 23, 42, 0.6);
+
+  /* ---- 文字 ---- */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+
+  /* ---- 边框 ---- */
+  --border: rgba(148, 163, 184, 0.16);
+  --border-strong: rgba(148, 163, 184, 0.3);
+  --border-faint: rgba(148, 163, 184, 0.08);
+
+  /* ---- 圆角 ---- */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  /* ---- 阴影 ---- */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 28px rgba(2, 6, 23, 0.35);
+  --shadow-float: 0 4px 12px rgba(2, 6, 23, 0.4), 0 16px 48px rgba(2, 6, 23, 0.45);
+  --shadow-glow: 0 0 0 1px rgba(99, 102, 241, 0.35), 0 4px 24px rgba(99, 102, 241, 0.28);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* ---- 字体 ---- */
+  --font-display: 'Chakra Petch', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-sans: 'Outfit', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+
+  /* ---- 间距（4px 基） ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- 布局 ---- */
+  --sidebar-w: 248px;
+  --sidebar-w-collapsed: 68px;
+  --topbar-h: 64px;
+  --page-pad: 28px;
+  --content-max: 1440px;
+  --mobile-nav-h: 56px;
+
+  /* ---- 动效 ---- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 140ms;
+  --dur-base: 240ms;
+  --dur-slow: 420ms;
+  --dur-enter: 620ms;
+}

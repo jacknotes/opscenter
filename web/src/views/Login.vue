@@ -1,210 +1,197 @@
-<template>
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-brand">
-        <div class="login-logo">OC</div>
-        <h1 class="login-title">OpsCenter</h1>
-        <p class="login-subtitle">运维发布管理平台</p>
-      </div>
-      <el-form :model="form" class="login-form" @submit.prevent="handleLogin">
-        <el-form-item>
-          <el-input v-model="form.username" placeholder="用户名" size="large">
-            <template #prefix
-              ><el-icon><User /></el-icon
-            ></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.password" type="password" placeholder="密码" show-password size="large">
-            <template #prefix
-              ><el-icon><Lock /></el-icon
-            ></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" style="width: 100%" :loading="loading" native-type="submit" size="large"
-            >登 录</el-button
-          >
-        </el-form-item>
-      </el-form>
-    </div>
-  </div>
-</template>
+<script setup lang="ts">
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import { extractErrorMessage } from '@/api/client'
+import { useTheme } from '@/composables/useTheme'
+import { i18n } from '@/i18n'
 
-<script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useUserStore } from '../stores/user'
-import { login } from '../api'
-import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+const t = i18n.global.t
 
+const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
-const loading = ref(false)
-const form = ref({ username: '', password: '' })
+const auth = useAuthStore()
+const { theme, toggle: toggleTheme } = useTheme()
 
-async function handleLogin() {
-  if (!form.value.username || !form.value.password) {
-    ElMessage.warning('请输入用户名和密码')
-    return
+const formRef = ref<FormInstance>()
+const loading = ref(false)
+const errorBox = ref('')
+
+const form = reactive({
+  username: '',
+  password: '',
+})
+
+// 校验规则用 computed 包裹：文案集中走 i18n
+const rules = computed<FormRules>(() => ({
+  username: [{ required: true, message: t('login.usernamePlaceholder'), trigger: 'blur' }],
+  password: [{ required: true, message: t('login.passwordPlaceholder'), trigger: 'blur' }],
+}))
+
+onMounted(() => {
+  // 已登录直接进首页
+  if (auth.isLoggedIn) {
+    void router.replace('/dashboard')
   }
+})
+
+async function handleSubmit(): Promise<void> {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
 
   loading.value = true
+  errorBox.value = ''
   try {
-    const res = await login(form.value)
-    userStore.setToken(res.token)
-    userStore.setUserInfo(res.user)
-    ElMessage.success('登录成功')
-    router.push('/dashboard')
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '登录失败')
+    await auth.login(form.username.trim(), form.password)
+    ElMessage.success(`${t('common.welcome')}，${auth.displayName}`)
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+    await router.replace(redirect ? decodeURIComponent(redirect) : '/dashboard')
+  } catch (err) {
+    errorBox.value = `${t('login.error')}：${extractErrorMessage(err, t('login.error'))}`
   } finally {
     loading.value = false
   }
 }
 </script>
 
+<template>
+  <div class="login-view">
+    <!-- 右上角固定：主题切换 -->
+    <div class="login-corner">
+      <el-button circle text @click="toggleTheme" :title="t('common.theme')">
+        <el-icon v-if="theme === 'dark'"><Sunny /></el-icon>
+        <el-icon v-else><Moon /></el-icon>
+      </el-button>
+    </div>
+
+    <div class="login-glow" aria-hidden="true" />
+
+    <div class="login-card card reveal d-0">
+      <div class="login-brand">
+        <span class="brand-mark">✦</span>
+        <h1 class="grad-text">OpsCenter</h1>
+        <p class="mono tagline">{{ t('app.tagline') }}</p>
+      </div>
+
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-position="top"
+        size="large"
+        @keyup.enter="handleSubmit"
+      >
+        <el-form-item :label="t('login.username')" prop="username">
+          <el-input v-model="form.username" :placeholder="t('login.usernamePlaceholder')" autocomplete="username">
+            <template #prefix><el-icon><User /></el-icon></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item :label="t('login.password')" prop="password">
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="t('login.passwordPlaceholder')"
+            autocomplete="current-password"
+          >
+            <template #prefix><el-icon><Lock /></el-icon></template>
+          </el-input>
+        </el-form-item>
+
+        <div v-if="errorBox" class="error-box">{{ errorBox }}</div>
+
+        <el-button type="primary" class="login-submit" :loading="loading" @click="handleSubmit">
+          {{ t('login.submit') }}
+        </el-button>
+      </el-form>
+    </div>
+
+    <footer class="mono login-footer">{{ t('login.footer') }}</footer>
+  </div>
+</template>
+
 <style scoped>
-.login-container {
-  height: 100vh;
+.login-view {
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-base);
   position: relative;
-  overflow: hidden;
+  padding: var(--space-6);
 }
 
-/* 背景装饰 — 缓慢呼吸动画 */
-.login-container::before {
-  content: '';
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
-  top: -200px;
-  right: -200px;
-  pointer-events: none;
-  animation: login-blob-1 12s ease-in-out infinite;
+.login-corner {
+  position: fixed;
+  top: var(--space-5);
+  right: var(--space-5);
+  z-index: 10;
 }
-.login-container::after {
-  content: '';
-  position: absolute;
-  width: 500px;
-  height: 500px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
-  bottom: -150px;
-  left: -100px;
+
+.login-glow {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(640px 320px at 50% 36%, rgba(99, 102, 241, 0.18), transparent 68%),
+    radial-gradient(420px 240px at 50% 64%, rgba(139, 92, 246, 0.12), transparent 70%);
   pointer-events: none;
 }
 
 .login-card {
-  width: 400px;
-  max-width: 90vw;
-  background: var(--card-bg);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  padding: 40px;
-  border: var(--card-border);
-  box-shadow:
-    var(--card-shadow),
-    0 25px 60px rgba(0, 0, 0, 0.15);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
-  position: relative;
-  z-index: 1;
-}
-.login-card:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    var(--card-shadow),
-    0 30px 70px rgba(0, 0, 0, 0.2);
+  width: min(400px, 92vw);
+  padding: var(--space-8) var(--space-7);
 }
 
 .login-brand {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: var(--space-6);
 }
 
-.login-logo {
-  width: 64px;
-  height: 64px;
-  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-  border-radius: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: var(--font-2xl);
-  font-weight: var(--weight-bold);
-  margin-bottom: 16px;
-  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.3);
+.brand-mark {
+  font-size: var(--text-2xl);
+  color: var(--indigo-400);
+  text-shadow: 0 0 18px rgba(99, 102, 241, 0.6);
 }
 
-.login-title {
-  font-size: var(--font-2xl);
-  font-weight: var(--weight-bold);
-  color: var(--text-primary);
-  margin: 0 0 8px 0;
+.login-brand h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  margin: var(--space-2) 0 var(--space-1);
+  letter-spacing: 0.03em;
 }
 
-.login-subtitle {
-  font-size: var(--font-md);
-  color: var(--text-secondary);
+.tagline {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.22em;
   margin: 0;
+  text-transform: uppercase;
 }
 
-.login-form {
-  margin-top: 24px;
+.error-box {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: var(--rose-400);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-4);
 }
 
-.login-form :deep(.el-button--primary) {
-  border-radius: 8px;
-  height: 44px;
-  font-size: var(--font-lg);
-  font-weight: var(--weight-semibold);
-  letter-spacing: 4px;
+.login-submit {
+  width: 100%;
+  margin-top: var(--space-2);
 }
 
-/* 移动端适配 */
-@media (max-width: 480px) {
-  .login-card {
-    padding: 24px 20px;
-  }
-  .login-logo {
-    width: 48px;
-    height: 48px;
-    font-size: var(--font-lg);
-  }
-  .login-title {
-    font-size: var(--font-xl);
-  }
-  .login-form :deep(.el-button--primary) {
-    height: 40px;
-    font-size: var(--font-md);
-    letter-spacing: 2px;
-  }
-}
-
-/* 背景光晕呼吸动画 */
-@keyframes login-blob-1 {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-    opacity: 0.8;
-  }
-  33% {
-    transform: translate(-30px, 20px) scale(1.1);
-    opacity: 1;
-  }
-  66% {
-    transform: translate(20px, -15px) scale(0.95);
-    opacity: 0.6;
-  }
+.login-footer {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  letter-spacing: 0.18em;
 }
 </style>

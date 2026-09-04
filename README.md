@@ -18,9 +18,9 @@
 | 层面 | 技术 |
 |------|------|
 | 后端 | Go + Gin + GORM + MySQL |
-| 前端 | Vue 3 + Vite + Element Plus + Pinia |
+| 前端 | Vue 3 + TypeScript + Vite + Element Plus + Pinia + vue-i18n + ECharts（v2.0.0） |
 | 通信 | SSH 远程执行、WebSocket |
-| 部署 | Go embed 内嵌前端，单二进制 + systemd |
+| 部署 | 运行时 StaticFS 读取 `web/dist/`（Docker 多阶段 COPY），单二进制 + systemd |
 
 ## 项目结构
 
@@ -35,7 +35,7 @@ opscenter/
 │   ├── service/          # 业务逻辑（SSH、预览、锁、各业务服务）
 │   ├── router/           # 路由注册
 │   └── pkg/crypto/       # AES-256-GCM 加解密工具
-├── web/                  # Vue 3 前端项目
+├── web/                  # Vue 3 + TypeScript 前端项目（v2.0.0，Signal Relay 设计系统）
 ├── shell/                # 运维脚本
 │   ├── lvs.sh            # LVS 管理脚本
 │   ├── rollouts-online-rollback.sh.example  # K8s 部署脚本示例

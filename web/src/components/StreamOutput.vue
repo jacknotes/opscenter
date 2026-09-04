@@ -1,143 +1,195 @@
+<script setup lang="ts">
+import { ref, watch, onBeforeUnmount, nextTick } from 'vue'
+import { getToken } from '@/utils/session'
+import { i18n } from '@/i18n'
+import type { WsMessage } from '@/api/types'
+
+const t = i18n.global.t
+
+const props = defineProps<{
+  /** 传入非空 previewId 即开始执行流；置空则断开 */
+  previewId: string
+}>()
+
+const emit = defineEmits<{
+  (e: 'done'): void
+  (e: 'failed', message: string): void
+}>()
+
+interface StreamLine {
+  text: string
+  stream: 'stdout' | 'stderr' | 'system'
+}
+
+const lines = ref<StreamLine[]>([])
+const running = ref(false)
+const finished = ref<null | 'success' | 'failed'>(null)
+const terminalRef = ref<HTMLElement>()
+
+let ws: WebSocket | null = null
+
+function push(line: StreamLine): void {
+  lines.value.push(line)
+  void nextTick(() => {
+    const el = terminalRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
+function connect(previewId: string): void {
+  disconnect()
+  lines.value = []
+  finished.value = null
+  running.value = true
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const url = `${proto}://${location.host}/api/ws/exec?token=${encodeURIComponent(getToken())}`
+  ws = new WebSocket(url)
+
+  ws.onopen = () => {
+    // 契约：连接后首条消息必须是 start
+    ws?.send(JSON.stringify({ type: 'start', preview_id: previewId }))
+  }
+
+  ws.onmessage = (ev: MessageEvent) => {
+    let msg: WsMessage
+    try {
+      msg = JSON.parse(ev.data as string) as WsMessage
+    } catch {
+      return
+    }
+    switch (msg.type) {
+      case 'output':
+        push({ text: msg.data ?? '', stream: msg.stream === 'stderr' ? 'stderr' : 'stdout' })
+        break
+      case 'done':
+        finished.value = 'success'
+        running.value = false
+        push({ text: `✔ ${t('common.execSuccess')}`, stream: 'system' })
+        emit('done')
+        disconnect()
+        break
+      case 'lock_error':
+        finished.value = 'failed'
+        running.value = false
+        push({ text: `✖ ${t('ws.lockError', { holder: msg.holder ?? '' })}`, stream: 'system' })
+        emit('failed', msg.message ?? '')
+        disconnect()
+        break
+      case 'error':
+        finished.value = 'failed'
+        running.value = false
+        push({ text: `✖ ${msg.message ?? t('common.execFailed')}`, stream: 'system' })
+        emit('failed', msg.message ?? '')
+        disconnect()
+        break
+    }
+  }
+
+  ws.onerror = () => {
+    if (running.value) {
+      finished.value = 'failed'
+      running.value = false
+      push({ text: `✖ ${t('ws.disconnected')}`, stream: 'system' })
+      emit('failed', t('ws.disconnected'))
+    }
+  }
+
+  ws.onclose = () => {
+    // 连接异常关闭且无 done → 按失败处理
+    if (running.value) {
+      running.value = false
+      if (finished.value === null) {
+        finished.value = 'failed'
+        push({ text: `✖ ${t('ws.disconnected')}`, stream: 'system' })
+        emit('failed', t('ws.disconnected'))
+      }
+    }
+  }
+}
+
+function disconnect(): void {
+  if (ws) {
+    ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null
+    try {
+      ws.close()
+    } catch {
+      /* 忽略 */
+    }
+    ws = null
+  }
+}
+
+watch(
+  () => props.previewId,
+  (id) => {
+    if (id) connect(id)
+    else disconnect()
+  },
+)
+
+onBeforeUnmount(disconnect)
+
+defineExpose({ disconnect })
+</script>
+
 <template>
-  <div>
-    <div class="stream-header">
-      <div class="stream-status">
-        <el-tag v-if="status === 'streaming'" type="warning" size="small">执行中...</el-tag>
-        <el-tag v-else-if="status === 'done'" type="success" size="small">执行完成</el-tag>
-        <el-tag v-else-if="status === 'error'" type="danger" size="small">执行失败</el-tag>
-        <el-tag v-else-if="status === 'connecting'" type="info" size="small">连接中...</el-tag>
-      </div>
-      <el-button v-if="showCancel && status === 'streaming'" type="danger" size="small" @click="$emit('cancel')"
-        >取消</el-button
-      >
+  <div class="stream-output">
+    <div class="stream-header mono">
+      <span class="dot-live" :class="{ 'is-offline': finished !== null }" />
+      <span v-if="running">{{ t('ws.connected') }} · {{ t('preview.executing') }}</span>
+      <span v-else-if="finished === 'success'">{{ t('common.execSuccess') }}</span>
+      <span v-else-if="finished === 'failed'">{{ t('common.execFailed') }}</span>
+      <span v-else>{{ t('ws.connecting') }}</span>
     </div>
-    <div ref="container" class="stream-output" @scroll="onScroll">
-      <div
-        v-for="line in visibleLines"
-        :key="line.id"
-        :class="['output-line', line.stream === 'stderr' ? 'stderr' : 'stdout']"
-      >
+    <div ref="terminalRef" class="terminal mono">
+      <div v-for="(line, idx) in lines" :key="idx" class="stream-line" :class="`stream-${line.stream}`">
         {{ line.text }}
       </div>
-      <div v-if="status === 'streaming'" class="cursor">_</div>
+      <div v-if="lines.length === 0" class="stream-line stream-system">{{ t('ws.connecting') }}</div>
     </div>
   </div>
 </template>
-
-<script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
-
-const MAX_RENDERED_LINES = 300
-
-const props = defineProps({
-  lines: { type: Array, default: () => [] },
-  status: { type: String, default: 'idle' },
-  showCancel: { type: Boolean, default: true },
-})
-
-defineEmits(['cancel'])
-
-// 只渲染最后 N 行，减少 DOM 节点数量
-const visibleLines = computed(() => {
-  const arr = props.lines
-  return arr.length > MAX_RENDERED_LINES ? arr.slice(-MAX_RENDERED_LINES) : arr
-})
-
-const container = ref(null)
-const userScrolled = ref(false)
-let scrollTimer = null
-
-function scrollToBottom() {
-  const el = container.value
-  if (el) {
-    el.scrollTop = el.scrollHeight
-  }
-}
-
-function onScroll() {
-  const el = container.value
-  if (!el) return
-  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
-  userScrolled.value = !atBottom
-}
-
-// 组件挂载时（包括页面切换回来），滚动到底部显示最新内容
-onMounted(async () => {
-  await nextTick()
-  scrollToBottom()
-})
-
-// 防抖滚动：高频消息到来时合并多次滚动为一次
-watch(
-  () => props.lines.length,
-  () => {
-    if (userScrolled.value) return
-    if (scrollTimer) return
-    scrollTimer = requestAnimationFrame(() => {
-      scrollTimer = null
-      scrollToBottom()
-    })
-  }
-)
-</script>
 
 <style scoped>
 .stream-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-faint);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
-.stream-output {
-  background: var(--terminal-bg, #0b0d13);
-  color: var(--terminal-text, #22d3ee);
-  padding: 15px;
-  border-radius: 8px;
-  border: 1px solid var(--border-default, rgba(255, 255, 255, 0.06));
-  max-height: 500px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
-  font-size: var(--font-base, 13px);
-  line-height: 1.6;
-  /* 优化渲染性能（不使用 strict，避免 contain: size 影响 scrollHeight 计算） */
-  contain: layout style;
+.terminal {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-faint);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: var(--space-3);
+  height: 380px;
+  overflow: auto;
+  font-size: var(--text-xs);
+  line-height: 1.75;
 }
 
-.stream-output::selection,
-.stream-output *::selection {
-  background: rgba(34, 211, 238, 0.5) !important;
-  color: #fff !important;
-}
-
-.output-line {
+.stream-line {
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.output-line.stderr {
-  color: var(--color-danger, #fb7185);
+.stream-stdout {
+  color: var(--text-primary);
 }
 
-.output-line.stdout {
-  color: var(--terminal-text, #22d3ee);
+.stream-stderr {
+  color: var(--amber-400);
 }
 
-.cursor {
-  display: inline-block;
-  animation: blink 1s step-end infinite;
-  color: var(--terminal-text, #22d3ee);
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cursor {
-    animation: none;
-  }
+.stream-system {
+  color: var(--text-muted);
 }
 </style>

@@ -8,21 +8,21 @@ OpsCenter 是一个运维发布管理系统，将 Nginx upstream 管理、LVS �
 
 ## 技术栈
 
-- **后端**: Go 1.25 + Gin + GORM + MySQL，通过 `go:embed` 将前端嵌入单二进制文件
-- **前端**: Vue 3 + Vite + Element Plus + Pinia + Vue Router
+- **后端**: Go 1.25 + Gin + GORM + MySQL，运行时通过 `StaticFS` 读取 `web/dist/` 提供前端页面（Docker 构建时通过多阶段 COPY 打包）
+- **前端**: Vue 3.5 + TypeScript（strict）+ Vite + Element Plus + Pinia + Vue Router + vue-i18n（仅中文，AOT 预编译）+ ECharts，版本 2.0.0
 - **通信**: SSH 远程执行、WebSocket 流式输出
 - **认证**: JWT（admin/user 两级权限），AES-256-GCM 加密敏感字段（密码、私钥）
 
 ## 构建与开发命令
 
 ```bash
-# 完整构建（前端嵌入 Go 二进制）
+# 完整构建（前端 dist 供后端运行时 StaticFS 提供服务）
 make build
 
 # 仅构建后端（需要前端已构建到 web/dist/）
 make backend
 
-# 仅构建前端
+# 仅构建前端（vue-tsc 类型检查 + Vitest 可选先行，见 web/package.json）
 make frontend
 
 # 开发模式（前后端分离运行）
@@ -52,15 +52,21 @@ make dev-backend    # Go 服务器 :18080
 - **`internal/router/`** — 路由注册。API 前缀为 `/api`。受保护路由需 JWT。管理员路由额外使用 `AdminRequired` 中间件。
 - **`internal/pkg/crypto/`** — AES-256-GCM 加解密工具。
 
-### 前端 (`web/src/`)
+### 前端 (`web/src/`, Vue3 + TS 重写版 v2.0.0)
 
-- **`api/index.js`** — Axios 实例，带 JWT 拦截器。所有 API 函数在此导出。GET 请求自动添加 `_t` 缓存破坏参数。
-- **`router/index.js`** — Vue Router，含认证守卫（检查 `localStorage.token`）和管理员守卫（`localStorage.role`）。
-- **`stores/user.js`** — Pinia 状态管理，管理认证状态。
-- **`stores/websocket.js`** — 全局 WebSocket 状态管理（Pinia store），用于跨页面保持命令执行状态。解决预生产缩扩容页面切换后命令被误判为 failed 的问题。
-- **`views/`** — 页面组件：Dashboard、LvsManage、NginxManage、K8sDeploy、PreprodScale、OpLog、ServerManage、UserManage、Login。
-- **`components/`** — Layout（侧边导航）、StreamOutput（WebSocket 流式输出展示）。
-- **`composables/useWebSocket.js`** — WebSocket 组合式函数（已迁移到 `stores/websocket.js`，保留用于其他场景）。
+- **`api/client.ts`** — 唯一 axios 实例（baseURL `/api`）：JWT 注入、401 清会话跳登录、响应头 `X-Warning` 解码提示。`extractErrorMessage()` 统一错误文案提取（后端契约：失败返回 `{"error": "中文"}` + HTTP 状态码，无响应包装层）。
+- **`api/types.ts`** — 全部后端契约类型（依据 `docs/frontend-v2/api-contract.md` 生成）。
+- **`api/index.ts`** — 按资源聚合的 API 方法（authApi/dashboardApi/lvsApi/k8sApi/preprodApi/nginxApi/serverApi/userApi/logApi）。
+- **`router/index.ts`** — Vue Router，认证守卫（无 token 跳登录并带 redirect 回跳）与管理员守卫（`meta.adminOnly`）。
+- **`utils/session.ts`** — 会话生命周期：localStorage 凭据 + 会话 Cookie + sessionStorage 窗口标记双判据（`initSession()` 处理浏览器重开/复制标签页竞态）。
+- **`stores/auth.ts`** — Pinia 认证状态（login/logout/refreshUser，isAdmin 守卫依据）。
+- **`composables/usePreviewExecute.ts`** — 预览→执行通用流程（含 5 分钟过期倒计时与过期重预览）。
+- **`composables/useTablePaging.ts`** — 客户端排序分页（布尔 0/1、数值、localeCompare('zh-Hans-CN')，支持派生列 getter）。
+- **`composables/useTheme.ts`** — 深色默认 + 亮色覆盖（`data-theme` 切换，设计令牌唯一事实源 `styles/tokens.css`）。
+- **`components/`** — AppLayout（侧边栏/顶栏/移动端导航）、PreviewDialog（预览确认 + diff 展示 + 流式执行）、StreamOutput（WebSocket 终端）、ServerSelect、BaseChart（ECharts 封装）。
+- **`views/`** — 页面组件：Dashboard、LvsManage、NginxManage、K8sDeploy、PreprodScale（WebSocket 流式）、OpLog、ServerManage（敏感字段 `__keep__` 哨兵）、UserManage、Login。
+- **`locales/zh-CN.json`** — 全部 UI 文案（i18n 架构保留，当前仅中文）。
+- **测试**：`npm run test`（Vitest）、`npm run type-check`（vue-tsc strict）。
 
 ### 核心模式：预览 → 执行
 

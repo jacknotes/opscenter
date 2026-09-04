@@ -1,266 +1,84 @@
-<template>
-  <div>
-    <el-card class="main-card">
-      <template #header>
-        <div class="toolbar">
-          <el-button type="primary" @click="handleAdd">添加服务器</el-button>
-          <el-button :type="batchToggleType" :disabled="selectedRows.length === 0" @click="handleBatchToggle">{{
-            batchToggleLabel
-          }}</el-button>
-          <el-button type="primary" :disabled="selectedRows.length !== 1" @click="handleEditSelected">编辑</el-button>
-          <el-button
-            type="info"
-            class="el-button--cyan"
-            :disabled="selectedRows.length !== 1"
-            @click="handleCopySelected"
-            >复制</el-button
-          >
-          <el-button type="success" :disabled="selectedRows.length === 0" @click="handleBatchTest">测试连接</el-button>
-          <el-button type="danger" :disabled="selectedRows.length === 0" @click="handleBatchDelete">删除</el-button>
-          <el-button type="info" class="el-button--cyan" :loading="loading" @click="handleRefresh">刷新</el-button>
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索服务器信息"
-            clearable
-            class="toolbar-search-input"
-          />
-        </div>
-      </template>
-
-      <el-table
-        ref="tableRef"
-        v-force-reflow
-        :data="paginatedServers"
-        stripe
-        border
-        :row-class-name="tableRowClassName"
-        max-height="calc(100vh - 250px)"
-        @selection-change="handleSelectionChange"
-      >
-        <el-table-column type="selection" width="55" />
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{
-              row.enabled ? '已启用' : '已禁用'
-            }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="120" />
-        <el-table-column prop="host" label="IP地址" min-width="120" />
-        <el-table-column prop="port" label="SSH端口" width="80" />
-        <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="server_type" label="类型" min-width="140">
-          <template #default="{ row }">
-            <el-tag
-              :type="
-                row.server_type === 'lvs'
-                  ? 'primary'
-                  : row.server_type === 'nginx'
-                    ? 'success'
-                    : row.server_type === 'preprod'
-                      ? 'warning'
-                      : 'info'
-              "
-              >{{
-                row.server_type === 'kubernetes'
-                  ? 'k8s'
-                  : row.server_type === 'preprod'
-                    ? 'k8s-prepro'
-                    : row.server_type
-              }}</el-tag
-            >
-          </template>
-        </el-table-column>
-        <el-table-column prop="env" label="环境" width="80" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-      </el-table>
-
-      <div v-if="!loading && paginatedServers.length === 0" class="empty-state">
-        <el-icon class="empty-state-icon"><Setting /></el-icon>
-        <span class="empty-state-text">{{ searchQuery ? '没有匹配的服务器' : '暂无服务器数据' }}</span>
-      </div>
-
-      <div class="pagination-wrapper">
-        <div class="pagination-left">
-          <span v-if="selectedRows.length > 0" class="selection-count">已选 {{ selectedRows.length }} 项</span>
-        </div>
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[20, 50, 100, 200]"
-          :total="filteredServers.length"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
-    </el-card>
-
-    <!-- Add/Edit Dialog -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '编辑服务器' : isCopy ? '复制服务器' : '添加服务器'"
-      width="min(600px, 90vw)"
-      align-center
-    >
-      <el-form :model="form" label-width="120px">
-        <el-form-item label="名称" required>
-          <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item label="IP地址" required>
-          <el-input v-model="form.host" />
-        </el-form-item>
-        <el-form-item label="SSH端口">
-          <el-input-number v-model="form.port" :min="1" :max="65535" />
-        </el-form-item>
-        <el-form-item label="用户名" required>
-          <el-input v-model="form.username" />
-        </el-form-item>
-        <el-form-item label="认证类型" required>
-          <el-radio-group v-model="form.auth_type">
-            <el-radio value="password">密码</el-radio>
-            <el-radio value="key">密钥</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="form.auth_type === 'password'" label="SSH密码" :required="!isEdit">
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            :placeholder="isEdit && form.has_password ? '已设置密码，留空表示不修改' : '请输入SSH密码'"
-          />
-        </el-form-item>
-        <el-form-item v-if="form.auth_type === 'key'" label="私钥" :required="!isEdit">
-          <el-input
-            v-model="form.private_key"
-            type="textarea"
-            :rows="4"
-            :placeholder="isEdit && form.has_private_key ? '已设置私钥，留空表示不修改' : '请输入私钥'"
-          />
-        </el-form-item>
-        <el-form-item label="服务器类型" required>
-          <el-select v-model="form.server_type">
-            <el-option label="LVS" value="lvs" />
-            <el-option label="Nginx" value="nginx" />
-            <el-option label="k8s" value="kubernetes" />
-            <el-option label="k8s-prepro" value="preprod" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="环境">
-          <el-input v-model="form.env" placeholder="env1 / env2 / both" />
-        </el-form-item>
-        <el-form-item v-if="form.server_type !== 'nginx'" label="脚本路径">
-          <el-input v-model="form.script_path" placeholder="/shell/lvs.sh" />
-        </el-form-item>
-        <el-form-item v-if="form.server_type !== 'nginx'" label="脚本密码">
-          <el-input
-            v-model="form.script_password"
-            type="password"
-            show-password
-            :placeholder="isEdit && form.has_script_password ? '已设置密码，留空表示不修改' : '请输入脚本密码'"
-          />
-        </el-form-item>
-        <el-form-item v-if="form.server_type === 'nginx'" label="配置路径">
-          <el-input v-model="form.config_path" placeholder="Nginx配置目录" />
-        </el-form-item>
-        <el-form-item v-if="form.server_type === 'nginx'" label="配置文件模式">
-          <el-input v-model="form.config_pattern" placeholder="upstreamserver_*.conf" />
-        </el-form-item>
-        <el-form-item v-if="form.server_type === 'nginx'" label="备份路径">
-          <el-input v-model="form.backup_path" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="form.enabled" active-text="启用" inactive-text="禁用" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
-  </div>
-</template>
-
-<script setup>
-import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
-import {
-  getServers,
-  getServerForEdit,
-  createServer,
-  updateServer,
-  deleteServer,
-  testConnection,
-  batchDeleteServers,
-  batchToggleServers,
-  batchTestServers,
-  toggleServerEnabled,
-} from '../api'
-import { clearServerCache } from '../composables/useServerSelector'
-import { showBatchResult } from '../utils/message'
+<script setup lang="ts">
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Setting } from '@element-plus/icons-vue'
+import { serverApi, extractErrorMessage } from '@/api'
+import type { ServerEdit, ServerResponse, TestResult, BatchResult } from '@/api/types'
+import { useTablePaging } from '@/composables/useTablePaging'
+import { i18n } from '@/i18n'
 
-const servers = shallowRef([])
-const searchQuery = ref('')
-const currentPage = ref(1)
-const pageSize = ref(20)
+const t = i18n.global.t
 
-const filteredServers = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return servers.value
-  return servers.value.filter((s) => {
-    const statusText = s.enabled ? '已启用' : '已禁用'
-    const typeText = s.server_type === 'kubernetes' ? 'k8s' : s.server_type === 'preprod' ? 'k8s-prepro' : s.server_type
+// ---------- 列表 ----------
+const loading = ref(false)
+const rows = ref<ServerResponse[]>([])
+const keyword = ref('')
+const typeFilter = ref('')
 
+const SERVER_TYPES = ['lvs', 'nginx', 'kubernetes', 'preprod']
+
+async function load(): Promise<void> {
+  loading.value = true
+  try {
+    rows.value = await serverApi.list({ all: true })
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err))
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
+
+const filtered = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  return rows.value.filter((s) => {
+    if (typeFilter.value && s.server_type !== typeFilter.value) return false
+    if (!kw) return true
     return (
-      s.name.toLowerCase().includes(q) ||
-      s.host.toLowerCase().includes(q) ||
-      s.server_type.toLowerCase().includes(q) ||
-      typeText.toLowerCase().includes(q) ||
-      s.env.toLowerCase().includes(q) ||
-      String(s.port).includes(q) ||
-      s.username.toLowerCase().includes(q) ||
-      (s.description && s.description.toLowerCase().includes(q)) ||
-      statusText.includes(q) ||
-      (q === '启用' && s.enabled) ||
-      (q === '禁用' && !s.enabled)
+      s.name.toLowerCase().includes(kw) ||
+      s.host.toLowerCase().includes(kw) ||
+      s.username.toLowerCase().includes(kw) ||
+      s.env.toLowerCase().includes(kw)
     )
   })
 })
 
-const paginatedServers = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredServers.value.slice(start, start + pageSize.value)
+const { paged, currentPage, pageSize, total, onSortChange } = useTablePaging(filtered, 20)
+
+const typeTag = (ty: string): 'success' | 'warning' | 'primary' | 'danger' | 'info' =>
+  ty === 'lvs' ? 'success' : ty === 'nginx' ? 'warning' : ty === 'kubernetes' ? 'primary' : ty === 'preprod' ? 'danger' : 'info'
+
+const selected = ref<ServerResponse[]>([])
+
+// ---------- 新增 / 编辑 ----------
+const editVisible = ref(false)
+const editingId = ref<number | null>(null)
+const saving = ref(false)
+
+const form = reactive({
+  name: '',
+  host: '',
+  port: 22,
+  username: '',
+  auth_type: 'password' as 'password' | 'key',
+  password: '',
+  private_key: '',
+  server_type: 'lvs',
+  env: '',
+  script_path: '',
+  script_password: '',
+  config_path: '',
+  config_pattern: '',
+  backup_path: '',
+  description: '',
+  enabled: true,
+  has_password: false,
+  has_private_key: false,
+  has_script_password: false,
 })
 
-const batchToggleType = computed(() => {
-  if (selectedRows.value.length === 0) return 'success'
-  const allDisabled = selectedRows.value.every((r) => !r.enabled)
-  return allDisabled ? 'success' : 'warning'
-})
-
-const batchToggleLabel = computed(() => {
-  if (selectedRows.value.length === 0) return '启用'
-  const allDisabled = selectedRows.value.every((r) => !r.enabled)
-  return allDisabled ? '启用' : '禁用'
-})
-
-const dialogVisible = ref(false)
-const isEdit = ref(false)
-const isCopy = ref(false)
-const editId = ref(null)
-const submitting = ref(false)
-const loading = ref(false)
-const form = ref(getDefaultForm())
-const selectedRow = ref(null)
-const selectedRows = ref([])
-const tableRef = ref(null)
-
-function getDefaultForm() {
-  return {
+function resetForm(): void {
+  Object.assign(form, {
     name: '',
     host: '',
     port: 22,
@@ -277,208 +95,362 @@ function getDefaultForm() {
     backup_path: '',
     description: '',
     enabled: true,
-  }
+    has_password: false,
+    has_private_key: false,
+    has_script_password: false,
+  })
 }
 
-function tableRowClassName({ row }) {
-  if (row.enabled === false) return 'disabled-row'
-  return ''
+async function openCreate(): Promise<void> {
+  editingId.value = null
+  resetForm()
+  editVisible.value = true
 }
 
-function handleSelectionChange(rows) {
-  selectedRows.value = rows
-  if (rows.length === 1) {
-    selectedRow.value = rows[0]
-  } else if (rows.length > 1) {
-    selectedRow.value = rows[rows.length - 1]
-  } else {
-    selectedRow.value = null
-  }
-}
-
-function handleSizeChange() {
-  currentPage.value = 1
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-function handleCurrentChange() {
-  selectedRows.value = []
-  selectedRow.value = null
-}
-
-watch(searchQuery, () => {
-  currentPage.value = 1
-})
-
-onMounted(() => {
-  loadData()
-})
-
-onActivated(() => {
-  loadData()
-})
-
-async function loadData(showMessage = false) {
-  loading.value = true
+async function openEdit(row: ServerResponse): Promise<void> {
+  editingId.value = row.id
   try {
-    servers.value = await getServers(undefined, true)
-    // 清除 useServerSelector 的缓存，确保其他页面切换时获取最新列表
-    clearServerCache()
-    if (showMessage) {
-      ElMessage.success('刷新成功')
-    }
-  } catch (e) {
-    ElMessage.error('加载服务器列表失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-function handleRefresh() {
-  loadData(true)
-}
-
-function handleAdd() {
-  isEdit.value = false
-  isCopy.value = false
-  editId.value = null
-  form.value = getDefaultForm()
-  dialogVisible.value = true
-}
-
-function handleCopySelected() {
-  if (!selectedRow.value) return
-  handleCopy(selectedRow.value)
-}
-
-async function handleCopy(row) {
-  isEdit.value = false
-  isCopy.value = true
-  editId.value = null
-  try {
-    const data = await getServerForEdit(row.id)
-    form.value = { ...data, name: data.name + ' (副本)' }
-    dialogVisible.value = true
-  } catch (e) {
-    ElMessage.error('获取服务器信息失败')
-  }
-}
-
-function handleEditSelected() {
-  if (!selectedRow.value) return
-  handleEdit(selectedRow.value)
-}
-
-async function handleEdit(row) {
-  isEdit.value = true
-  isCopy.value = false
-  editId.value = row.id
-  try {
-    const data = await getServerForEdit(row.id)
-    form.value = data
-    dialogVisible.value = true
-  } catch (e) {
-    ElMessage.error('获取服务器信息失败')
-  }
-}
-
-async function handleBatchToggle() {
-  if (selectedRows.value.length === 0) return
-
-  const enabled = batchToggleLabel.value === '启用'
-  const action = enabled ? '启用' : '禁用'
-
-  const names = selectedRows.value.map((r) => r.name).join('、')
-  try {
-    await ElMessageBox.confirm(
-      `确定要${action}以下 ${selectedRows.value.length} 个服务器吗？\n${names}`,
-      `批量${action}`,
-      { type: 'warning' }
-    )
-    const res = await batchToggleServers(
-      selectedRows.value.map((r) => r.id),
-      enabled
-    )
-    showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
-    await loadData()
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || `批量${action}失败`)
-    }
-  }
-}
-
-async function handleBatchDelete() {
-  if (selectedRows.value.length === 0) return
-
-  const names = selectedRows.value.map((r) => r.name).join('、')
-  try {
-    await ElMessageBox.confirm(`确定要删除以下 ${selectedRows.value.length} 个服务器吗？\n${names}`, '批量删除', {
-      type: 'warning',
+    const detail: ServerEdit = await serverApi.getForEdit(row.id)
+    Object.assign(form, {
+      name: detail.name,
+      host: detail.host,
+      port: detail.port,
+      username: detail.username,
+      auth_type: detail.auth_type,
+      password: '',
+      private_key: '',
+      server_type: detail.server_type,
+      env: detail.env,
+      script_path: detail.script_path,
+      script_password: '',
+      config_path: detail.config_path,
+      config_pattern: detail.config_pattern,
+      backup_path: detail.backup_path,
+      description: detail.description,
+      enabled: detail.enabled,
+      has_password: detail.has_password,
+      has_private_key: detail.has_private_key,
+      has_script_password: detail.has_script_password,
     })
-    const res = await batchDeleteServers(selectedRows.value.map((r) => r.id))
-    showBatchResult(res)
-    selectedRow.value = null
-    selectedRows.value = []
-    await loadData()
-  } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '批量删除失败')
-    }
+    editVisible.value = true
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err))
   }
 }
 
-async function handleBatchTest() {
-  if (selectedRows.value.length === 0) return
-
-  try {
-    const res = await batchTestServers(selectedRows.value.map((r) => r.id))
-    showBatchResult(res)
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '批量测试失败')
+async function save(): Promise<void> {
+  if (!form.name.trim() || !form.host.trim() || !form.username.trim()) {
+    ElMessage.warning(t('common.save'))
+    return
   }
-}
-
-async function handleSubmit() {
-  if (!isEdit.value) {
-    if (form.value.auth_type === 'password' && !form.value.password) {
-      ElMessage.warning('请输入SSH密码')
-      return
-    }
-    if (form.value.auth_type === 'key' && !form.value.private_key) {
-      ElMessage.warning('请输入私钥')
-      return
-    }
-  }
-  submitting.value = true
+  saving.value = true
   try {
-    if (isEdit.value) {
-      const data = { ...form.value }
-      if (data.auth_type === 'password') {
-        if (!data.password && form.value.has_password) data.password = '__keep__'
-      } else {
-        if (!data.private_key && form.value.has_private_key) data.private_key = '__keep__'
-      }
-      if (!data.script_password && form.value.has_script_password) data.script_password = '__keep__'
-      await updateServer(editId.value, data)
-      ElMessage.success('更新成功')
+    if (editingId.value === null) {
+      await serverApi.create({
+        name: form.name.trim(),
+        host: form.host.trim(),
+        port: form.port,
+        username: form.username.trim(),
+        auth_type: form.auth_type,
+        password: form.password,
+        private_key: form.private_key,
+        script_password: form.script_password,
+        server_type: form.server_type,
+        env: form.env,
+        script_path: form.script_path,
+        config_path: form.config_path,
+        config_pattern: form.config_pattern,
+        backup_path: form.backup_path,
+        description: form.description,
+        enabled: form.enabled,
+      })
     } else {
-      await createServer(form.value)
-      ElMessage.success('添加成功')
+      // 契约：Update 时敏感字段传 "__keep__" 表示保留原值
+      await serverApi.update(editingId.value, {
+        name: form.name.trim(),
+        host: form.host.trim(),
+        port: form.port,
+        username: form.username.trim(),
+        auth_type: form.auth_type,
+        password: form.password || '__keep__',
+        private_key: form.private_key || '__keep__',
+        script_password: form.script_password || '__keep__',
+        server_type: form.server_type,
+        env: form.env,
+        script_path: form.script_path,
+        config_path: form.config_path,
+        config_pattern: form.config_pattern,
+        backup_path: form.backup_path,
+        description: form.description,
+        enabled: form.enabled,
+      })
     }
-    dialogVisible.value = false
-    await loadData()
-  } catch (e) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    ElMessage.success(t('common.execSuccess'))
+    editVisible.value = false
+    await load()
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err))
   } finally {
-    submitting.value = false
+    saving.value = false
   }
+}
+
+// ---------- 测试 / 启停 / 删除 / 批量 ----------
+async function testConn(row: ServerResponse): Promise<void> {
+  const res: TestResult = await serverApi.test(row.id).catch((err) => {
+    ElMessage.error(extractErrorMessage(err))
+    return { success: false } as TestResult
+  })
+  if (res.success) {
+    ElMessage.success(`${t('servers.testSuccess')} · ${res.message ?? ''}`)
+  } else {
+    ElMessage.error(`${t('servers.testFailed')} · ${res.error ?? ''}`)
+  }
+}
+
+async function toggle(row: ServerResponse): Promise<void> {
+  await serverApi.toggle(row.id)
+  ElMessage.success(t('common.execSuccess'))
+  await load()
+}
+
+async function remove(row: ServerResponse): Promise<void> {
+  await ElMessageBox.confirm(t('servers.deleteConfirm', { name: row.name }), t('common.confirm'), {
+    type: 'warning',
+  })
+  await serverApi.delete(row.id)
+  ElMessage.success(t('common.execSuccess'))
+  await load()
+}
+
+function showBatchResult(res: BatchResult): void {
+  ElMessage({ type: 'success', message: res.message, duration: 5000 })
+}
+
+async function batchDelete(): Promise<void> {
+  const ids = selected.value.map((s) => s.id)
+  if (ids.length === 0) return
+  await ElMessageBox.confirm(t('common.confirmDelete', { count: ids.length }), t('common.confirm'), {
+    type: 'warning',
+  })
+  const res = await serverApi.batchDelete(ids)
+  showBatchResult(res)
+  await load()
+}
+
+async function batchToggle(enabled: boolean): Promise<void> {
+  const ids = selected.value.map((s) => s.id)
+  if (ids.length === 0) return
+  const res = await serverApi.batchToggle(ids, enabled)
+  showBatchResult(res)
+  await load()
+}
+
+async function batchTest(): Promise<void> {
+  const ids = selected.value.map((s) => s.id)
+  if (ids.length === 0) return
+  const res = await serverApi.batchTest(ids)
+  showBatchResult(res)
 }
 </script>
 
+<template>
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title grad-text">{{ t('servers.title') }}</h1>
+        <p class="page-subtitle">{{ t('servers.subtitle') }}</p>
+      </div>
+      <div class="page-actions">
+        <el-button type="primary" @click="openCreate">{{ t('common.add') }}</el-button>
+        <el-button @click="load">{{ t('common.refresh') }}</el-button>
+      </div>
+    </div>
+
+    <div class="page-actions" style="margin-bottom: var(--space-4)">
+      <el-select v-model="typeFilter" :placeholder="t('servers.serverType')" clearable style="width: 150px">
+        <el-option v-for="ty in SERVER_TYPES" :key="ty" :value="ty" :label="ty" />
+      </el-select>
+      <el-input
+        v-model="keyword"
+        :placeholder="t('logs.keyword')"
+        clearable
+        style="width: 220px"
+        @keyup.enter="load"
+      />
+      <el-button :disabled="selected.length === 0" @click="batchTest">{{ t('common.batchTest') }}</el-button>
+      <el-button :disabled="selected.length === 0" @click="batchToggle(true)">
+        {{ t('common.batchToggle') }}
+      </el-button>
+      <el-button type="danger" :disabled="selected.length === 0" @click="batchDelete">
+        {{ t('common.batchDelete') }}
+      </el-button>
+    </div>
+
+    <div v-loading="loading" class="card table-card reveal d-1">
+      <el-table
+        :data="paged"
+        row-key="id"
+        @sort-change="onSortChange"
+        @selection-change="(r: ServerResponse[]) => (selected = r)"
+      >
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="name" :label="t('servers.name')" min-width="150" sortable>
+          <template #default="{ row }">
+            <span class="srv-name">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('servers.host')" min-width="160">
+          <template #default="{ row }">
+            <span class="mono">{{ row.host }}:{{ row.port }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="username" :label="t('servers.username')" width="110" />
+        <el-table-column :label="t('servers.authType')" width="100">
+          <template #default="{ row }">
+            {{ row.auth_type === 'password' ? t('servers.authPassword') : t('servers.authKey') }}
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('servers.serverType')" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" :type="typeTag(row.server_type)" effect="plain">{{ row.server_type }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="env" :label="t('servers.env')" width="80" />
+        <el-table-column :label="t('common.enabled')" width="90">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.enabled ? 'success' : 'info'" effect="plain">
+              {{ row.enabled ? t('common.enabled') : t('common.disabled') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" :label="t('servers.description')" min-width="140" show-overflow-tooltip />
+        <el-table-column :label="t('common.operation')" width="240" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="testConn(row as ServerResponse)">
+              {{ t('servers.test') }}
+            </el-button>
+            <el-button link size="small" @click="openEdit(row as ServerResponse)">{{ t('common.edit') }}</el-button>
+            <el-button link :type="row.enabled ? 'warning' : 'success'" size="small" @click="toggle(row as ServerResponse)">
+              {{ row.enabled ? t('common.disabled') : t('common.enabled') }}
+            </el-button>
+            <el-button link type="danger" size="small" @click="remove(row as ServerResponse)">{{ t('common.delete') }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="pager">
+        <el-pagination
+          layout="total, sizes, prev, pager, next"
+          :total="total"
+          :current-page="currentPage"
+          :page-size="pageSize"
+          :page-sizes="[20, 50, 100]"
+          @current-change="(p: number) => (currentPage = p)"
+          @size-change="(s: number) => (pageSize = s)"
+        />
+      </div>
+    </div>
+
+    <!-- 新增/编辑弹窗 -->
+    <el-dialog
+      v-model="editVisible"
+      :title="editingId === null ? t('servers.createTitle') : t('servers.editTitle')"
+      width="680px"
+      append-to-body
+    >
+      <el-form label-position="top">
+        <div class="form-grid">
+          <el-form-item :label="t('servers.name')" required>
+            <el-input v-model="form.name" />
+          </el-form-item>
+          <el-form-item :label="t('servers.env')">
+            <el-input v-model="form.env" placeholder="prod / pre" />
+          </el-form-item>
+          <el-form-item :label="t('servers.host')" required>
+            <el-input v-model="form.host" class="mono" />
+          </el-form-item>
+          <el-form-item :label="t('servers.port')">
+            <el-input-number v-model="form.port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item :label="t('servers.username')" required>
+            <el-input v-model="form.username" />
+          </el-form-item>
+          <el-form-item :label="t('servers.serverType')" required>
+            <el-select v-model="form.server_type">
+              <el-option v-for="ty in SERVER_TYPES" :key="ty" :value="ty" :label="ty" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('servers.authType')">
+            <el-radio-group v-model="form.auth_type">
+              <el-radio-button value="password">{{ t('servers.authPassword') }}</el-radio-button>
+              <el-radio-button value="key">{{ t('servers.authKey') }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item :label="t('common.enabled')">
+            <el-switch v-model="form.enabled" />
+          </el-form-item>
+        </div>
+
+        <el-form-item v-if="form.auth_type === 'password'" :label="t('servers.authPassword')">
+          <el-input v-model="form.password" type="password" show-password :placeholder="form.has_password ? t('servers.keep') : ''" />
+        </el-form-item>
+        <el-form-item v-else :label="t('servers.authKey')">
+          <el-input v-model="form.private_key" type="textarea" :rows="4" :placeholder="form.has_private_key ? t('servers.keep') : ''" />
+        </el-form-item>
+        <el-form-item :label="t('servers.scriptPassword')">
+          <el-input v-model="form.script_password" type="password" show-password :placeholder="form.has_script_password ? t('servers.keep') : ''" />
+        </el-form-item>
+        <el-form-item :label="t('servers.scriptPath')">
+          <el-input v-model="form.script_path" class="mono" placeholder="/opt/scripts/lvs.sh" />
+        </el-form-item>
+        <div v-if="form.server_type === 'nginx'" class="form-grid">
+          <el-form-item :label="t('servers.configPath')">
+            <el-input v-model="form.config_path" class="mono" placeholder="/etc/nginx/conf.d" />
+          </el-form-item>
+          <el-form-item :label="t('servers.configPattern')">
+            <el-input v-model="form.config_pattern" class="mono" placeholder="*.conf,!*.bak.conf" />
+          </el-form-item>
+          <el-form-item :label="t('servers.backupPath')">
+            <el-input v-model="form.backup_path" class="mono" placeholder="/etc/nginx/backup" />
+          </el-form-item>
+        </div>
+        <el-form-item :label="t('servers.description')">
+          <el-input v-model="form.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
 <style scoped>
-/* 页面特有样式 */
+.table-card {
+  padding: var(--space-3);
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-2) 0;
+}
+
+.srv-name {
+  font-weight: 600;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-4);
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>
