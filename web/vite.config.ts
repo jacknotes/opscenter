@@ -12,11 +12,13 @@ export default defineConfig({
     vue(),
     AutoImport({
       imports: ['vue', 'vue-router', 'pinia'],
-      resolvers: [ElementPlusResolver()],
+      // importStyle:false：样式统一由 main.ts 引入的 element-plus/dist/index.css 提供。
+      // 按组件 style/css 会被 vite 运行时"按需发现"而反复触发依赖重预构建 + 整页刷新（表现为点页面卡住）
+      resolvers: [ElementPlusResolver({ importStyle: false })],
       dts: 'src/auto-imports.d.ts',
     }),
     Components({
-      resolvers: [ElementPlusResolver()],
+      resolvers: [ElementPlusResolver({ importStyle: false })],
       dts: 'src/components.d.ts',
     }),
     // i18n 消息 AOT 预编译：构建期把 locale JSON 编译为消息函数，运行时零编译

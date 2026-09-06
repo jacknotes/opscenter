@@ -5,11 +5,9 @@ import router from './router'
 import { i18n } from './i18n'
 import { initSession } from './utils/session'
 
-// Element Plus 程序化组件的基础样式（unplugin-vue-components 无法自动导入）
-import 'element-plus/theme-chalk/el-message.css'
-import 'element-plus/theme-chalk/el-notification.css'
-import 'element-plus/theme-chalk/el-message-box.css'
-import 'element-plus/theme-chalk/el-loading.css'
+// Element Plus 全量样式：vite.config 中 resolver 已关闭按组件 style/css 导入，
+// 统一在此引入，避免运行时按需发现新依赖触发重预构建（dev 模式点页面卡住的根因）
+import 'element-plus/dist/index.css'
 
 // 全局样式（令牌 → 全局氛围 + EP 重上色 → 亮色覆盖）
 import './styles/tokens.css'
