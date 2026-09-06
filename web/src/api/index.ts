@@ -43,6 +43,11 @@ import type {
   VirtualServer,
 } from './types'
 
+// Go 后端的空列表（nil 切片）会序列化为 JSON null，这里统一兜底为空数组
+function listOf<T>(data: T[] | null): T[] {
+  return data ?? []
+}
+
 // ---------- 认证 ----------
 export const authApi = {
   login: (data: { username: string; password: string }) =>
@@ -79,17 +84,19 @@ export const dashboardApi = {
 // ---------- LVS ----------
 export const lvsApi = {
   list: (serverId: number | string) =>
-    client.get<VirtualServer[]>('/lvs/list', { params: { server_id: serverId } }).then((r) => r.data),
+    client
+      .get<VirtualServer[] | null>('/lvs/list', { params: { server_id: serverId } })
+      .then((r) => listOf(r.data)),
   status: (serverId: number | string) =>
     client
       .get<{ output: string; groups: LvsStatusGroup[] }>('/lvs/status', { params: { server_id: serverId } })
       .then((r) => r.data),
   listRSTags: (params?: { rs_ips?: string; vs_ip?: string }) =>
-    client.get<LvsRSTag[]>('/lvs/tags', { params }).then((r) => r.data),
+    client.get<LvsRSTag[] | null>('/lvs/tags', { params }).then((r) => listOf(r.data)),
   listVSTags: (params?: { vs_ips?: string }) =>
-    client.get<LvsVSTag[]>('/lvs/vs_tags', { params }).then((r) => r.data),
+    client.get<LvsVSTag[] | null>('/lvs/vs_tags', { params }).then((r) => listOf(r.data)),
   listBindings: (params?: { preprod_server_id?: number }) =>
-    client.get<LvsPreprodBinding[]>('/lvs/bindings', { params }).then((r) => r.data),
+    client.get<LvsPreprodBinding[] | null>('/lvs/bindings', { params }).then((r) => listOf(r.data)),
   opPreview: (data: { server_id: number; vs_ip: string; rs_ip: string; state: 'on' | 'off' }) =>
     client.post<LvsPreview>('/lvs/op/preview', data).then((r) => r.data),
   opExecute: (data: PreviewExecutePayload) =>
@@ -117,23 +124,32 @@ export const lvsApi = {
 // ---------- K8s ----------
 export const k8sApi = {
   rollouts: (serverId: number | string) =>
-    client.get<Rollout[]>('/k8s/rollouts', { params: { server_id: serverId } }).then((r) => r.data),
+    client
+      .get<Rollout[] | null>('/k8s/rollouts', { params: { server_id: serverId } })
+      .then((r) => listOf(r.data)),
   batchPreview: (
     action: 'online' | 'sync' | 'rollback',
     data: { server_id: number; projects: K8sProjectRef[] },
   ) => client.post<K8sPreview>(`/k8s/${action}/preview`, data).then((r) => r.data),
+  // 后端同步串行执行全部命令，旧前端超时 600s，全局 30s 会误报超时（后端仍在执行）
   batchExecute: (action: 'online' | 'sync' | 'rollback', data: PreviewExecutePayload) =>
-    client.post<K8sExecuteResult>(`/k8s/${action}/execute`, data).then((r) => r.data),
+    client
+      .post<K8sExecuteResult>(`/k8s/${action}/execute`, data, { timeout: 600000 })
+      .then((r) => r.data),
   fullPreview: (action: 'full_online' | 'full_sync' | 'full_rollback', data: { server_id: number }) =>
     client.post<K8sPreview>(`/k8s/${action}/preview`, data).then((r) => r.data),
   fullExecute: (action: 'full_online' | 'full_sync' | 'full_rollback', data: PreviewExecutePayload) =>
-    client.post<K8sExecuteResult>(`/k8s/${action}/execute`, data).then((r) => r.data),
+    client
+      .post<K8sExecuteResult>(`/k8s/${action}/execute`, data, { timeout: 600000 })
+      .then((r) => r.data),
 }
 
 // ---------- Preprod ----------
 export const preprodApi = {
   status: (serverId: number | string) =>
-    client.get<PreprodResource[]>('/preprod/status', { params: { server_id: serverId } }).then((r) => r.data),
+    client
+      .get<PreprodResource[] | null>('/preprod/status', { params: { server_id: serverId } })
+      .then((r) => listOf(r.data)),
   scaledownPreview: (data: { server_id: number; resource_names?: string[] }) =>
     client.post<PreprodPreview>('/preprod/scaledown/preview', data).then((r) => r.data),
   scaleupPreview: (data: { server_id: number; resource_names?: string[] }) =>
@@ -150,13 +166,17 @@ export const preprodApi = {
 // ---------- Nginx ----------
 export const nginxApi = {
   configs: (serverId: number | string) =>
-    client.get<string[]>('/nginx/configs', { params: { server_id: serverId } }).then((r) => r.data),
+    client
+      .get<string[] | null>('/nginx/configs', { params: { server_id: serverId } })
+      .then((r) => listOf(r.data)),
   upstreams: (serverId: number | string, configFile: string) =>
     client
       .get<NginxUpstreamsResponse>('/nginx/upstreams', { params: { server_id: serverId, config_file: configFile } })
       .then((r) => r.data),
   backups: (serverId: number | string) =>
-    client.get<string[]>('/nginx/backups', { params: { server_id: serverId } }).then((r) => r.data),
+    client
+      .get<string[] | null>('/nginx/backups', { params: { server_id: serverId } })
+      .then((r) => listOf(r.data)),
   onlinePreview: (data: NginxUpstreamPayload) =>
     client.post<NginxPreview>('/nginx/upstream/online/preview', data).then((r) => r.data),
   offlinePreview: (data: NginxUpstreamPayload) =>
@@ -170,13 +190,19 @@ export const nginxApi = {
   rollbackPreview: (data: NginxRollbackPayload) =>
     client.post<NginxPreview>('/nginx/rollback/preview', data).then((r) => r.data),
   execute: (path: 'online' | 'offline' | 'swap' | 'toggle' | 'batch' | 'rollback', data: PreviewExecutePayload) =>
-    client.post<NginxExecuteResult>(`/nginx/upstream/${path}/execute`, data).then((r) => r.data),
+    // 后端 rollback 不在 /upstream 前缀下（POST /nginx/rollback/execute），单独分支
+    client
+      .post<NginxExecuteResult>(
+        path === 'rollback' ? '/nginx/rollback/execute' : `/nginx/upstream/${path}/execute`,
+        data,
+      )
+      .then((r) => r.data),
 }
 
 // ---------- 服务器 ----------
 export const serverApi = {
   list: (params?: { type?: string; all?: boolean }) =>
-    client.get<ServerResponse[]>('/servers', { params }).then((r) => r.data),
+    client.get<ServerResponse[] | null>('/servers', { params }).then((r) => listOf(r.data)),
   get: (id: number | string) => client.get<ServerResponse>(`/servers/${id}`).then((r) => r.data),
   getForEdit: (id: number | string) => client.get<ServerEdit>(`/servers/${id}/edit`).then((r) => r.data),
   create: (data: ServerPayload) => client.post<ServerResponse>('/servers', data).then((r) => r.data),
@@ -196,7 +222,7 @@ export const serverApi = {
 
 // ---------- 用户（admin） ----------
 export const userApi = {
-  list: () => client.get<User[]>('/users').then((r) => r.data),
+  list: () => client.get<User[] | null>('/users').then((r) => listOf(r.data)),
   create: (data: { username: string; password: string; name: string; email: string; role: 'admin' | 'user' }) =>
     client.post<User>('/users', data).then((r) => r.data),
   update: (id: number, data: { username: string; name: string; email: string; role: 'admin' | 'user'; enabled?: boolean }) =>
@@ -209,7 +235,7 @@ export const userApi = {
   resetPassword: (id: number, password: string) =>
     client.put<{ message: string }>(`/users/${id}/reset-password`, { password }).then((r) => r.data),
   toggle: (id: number) => client.put<{ enabled: boolean }>(`/users/${id}/toggle`).then((r) => r.data),
-  listLdap: () => client.get<LdapUser[]>('/users/ldap').then((r) => r.data),
+  listLdap: () => client.get<LdapUser[] | null>('/users/ldap').then((r) => listOf(r.data)),
   importLdap: (users: LdapUser[]) =>
     client.post<LdapImportResult>('/users/ldap/import', { users }).then((r) => r.data),
   /** 解锁被锁定的用户 */

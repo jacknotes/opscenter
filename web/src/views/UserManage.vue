@@ -92,6 +92,10 @@ const {
 
 const selectedRows = computed(() => rows.value.filter((u) => selectedIds.value.has(u.id)))
 const hasSelection = computed(() => selectedRows.value.length > 0)
+/** 批量启停方向：勾选全部为禁用 → 启用；否则 → 禁用（对齐 v1） */
+const batchEnable = computed(
+  () => selectedRows.value.length > 0 && selectedRows.value.every((u) => !u.enabled),
+)
 
 function handleSortChange({ prop, order }: SortPayload): void {
   onTableSortChange({ prop, order })
@@ -456,8 +460,8 @@ async function doImport(): Promise<void> {
         clearable
         style="width: 220px"
       />
-      <el-button :disabled="!hasSelection" @click="batchToggle(true)">
-        {{ t('common.batchToggle') }}
+      <el-button :disabled="!hasSelection" @click="batchToggle(batchEnable)">
+        {{ batchEnable ? '批量启用' : '批量禁用' }}
       </el-button>
       <el-button :disabled="!hasSelection" @click="batchUnlock">批量解锁</el-button>
       <el-button type="warning" :disabled="!hasSelection" @click="batchKick">批量强制下线</el-button>

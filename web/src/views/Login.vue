@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { Lock, Moon, Sunny, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { extractErrorMessage } from '@/api/client'
 import { useTheme } from '@/composables/useTheme'
