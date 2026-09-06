@@ -31,6 +31,7 @@ web/node_modules/
 web/dist/
 web/.env.local
 web/.env.*.local
+web/vite.config.ts.timestamp-*
 
 # Config
 config.yaml
