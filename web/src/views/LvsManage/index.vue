@@ -541,6 +541,7 @@ function openVsTag(vs: VirtualServer): void {
       <el-empty v-if="!serverId" :description="t('common.serverPlaceholder')" />
       <el-empty v-else-if="filteredVs.length === 0 && !listLoading" :description="t('common.empty')" />
       <el-table
+        v-force-reflow
         v-else
         :data="filteredVs"
         row-key="ip"

@@ -491,6 +491,7 @@ async function doImport(): Promise<void> {
 
     <div v-loading="loading" class="card table-card reveal d-1">
       <el-table
+        v-force-reflow
         ref="tableRef"
         :data="paged"
         row-key="id"

@@ -213,6 +213,7 @@ function formatTime(ts: string): string {
 
     <div v-loading="loading" class="card table-card reveal d-1">
       <el-table
+        v-force-reflow
         :data="logs"
         size="default"
         :default-sort="{ prop: 'created_at', order: 'descending' }"
