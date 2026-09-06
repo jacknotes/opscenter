@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { logApi, extractErrorMessage } from '@/api'
 import type { OperationLog, LogQuery } from '@/api/types'
 import { MODULE_LABELS, MODULE_TAG_TYPES, PAGE_SIZES } from '@/utils/constants'
+import { useAuthStore } from '@/stores/auth'
 import { i18n } from '@/i18n'
 
 const t = i18n.global.t
+const auth = useAuthStore()
 
 const loading = ref(false)
 const logs = ref<OperationLog[]>([])
@@ -23,6 +25,9 @@ const query = reactive({
 })
 
 const MODULES = ['lvs', 'nginx', 'k8s', 'preprod', 'server', 'auth']
+
+// 认证/服务器模块日志仅 admin 可筛（对齐 v1，后端仍会兜底过滤）
+const moduleOptions = computed(() => (auth.isAdmin ? MODULES : MODULES.filter((m) => m !== 'auth' && m !== 'server')))
 
 // ---------- 服务端排序 ----------
 type SortField = NonNullable<LogQuery['sort_by']>
@@ -177,7 +182,7 @@ function formatTime(ts: string): string {
 
     <div class="filter-bar card">
       <el-select v-model="query.module" :placeholder="t('logs.module')" clearable style="width: 130px">
-        <el-option v-for="m in MODULES" :key="m" :value="m" :label="moduleLabel(m)" />
+        <el-option v-for="m in moduleOptions" :key="m" :value="m" :label="moduleLabel(m)" />
       </el-select>
       <el-select v-model="query.status" :placeholder="t('logs.status')" clearable style="width: 120px">
         <el-option value="success" :label="t('common.success')" />

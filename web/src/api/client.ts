@@ -14,12 +14,21 @@ const client: AxiosInstance = axios.create({
   timeout: 30000,
 })
 
-client.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
+/** 请求附带的内部标记：记录发出请求时用的 token，用于多标签页 token 刷新后重试 */
+type RetryConfig = InternalAxiosRequestConfig & { _token?: string; _retried?: boolean }
+
+client.interceptors.request.use((cfg) => {
+  const c = cfg as RetryConfig
   const token = getToken()
   if (token) {
-    cfg.headers.Authorization = `Bearer ${token}`
+    c.headers.Authorization = `Bearer ${token}`
+    c._token = token
   }
-  return cfg
+  // 对齐 v1：GET 加 no-cache，避免代理/浏览器缓存陈旧列表
+  if (c.method === 'get') {
+    c.headers['Cache-Control'] = 'no-cache'
+  }
+  return c
 })
 
 client.interceptors.response.use(
@@ -35,8 +44,16 @@ client.interceptors.response.use(
     }
     return res
   },
-  (err: AxiosError<{ error?: string }>) => {
-    if (err.response?.status === 401) {
+  async (err: AxiosError<{ error?: string }>) => {
+    const cfg = err.config as RetryConfig | undefined
+    if (err.response?.status === 401 && cfg) {
+      // 多标签页场景：token 已被其他标签页登录刷新 → 用新 token 重试一次（对齐 v1）
+      const fresh = getToken()
+      if (fresh && cfg._token && fresh !== cfg._token && !cfg._retried) {
+        cfg._retried = true
+        cfg.headers.Authorization = `Bearer ${fresh}`
+        return client.request(cfg)
+      }
       const msg = err.response.data?.error
       clearSession()
       if (!location.pathname.startsWith('/login')) {

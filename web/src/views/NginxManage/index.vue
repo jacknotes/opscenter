@@ -14,6 +14,7 @@ import type {
   NginxSwapPayload,
 } from '@/api/types'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
+import { STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
@@ -39,6 +40,9 @@ watch(serverId, async (id) => {
   configsLoading.value = true
   try {
     configFiles.value = await nginxApi.configs(id)
+    // 恢复该服务器上次选择的配置文件（对齐 v1 nginx_config_<id> 记忆）
+    const saved = localStorage.getItem(STORAGE_KEYS.nginxConfig(id))
+    if (saved && configFiles.value.includes(saved)) configFile.value = saved
   } catch (err) {
     ElMessage.error(extractErrorMessage(err))
   } finally {
@@ -46,7 +50,8 @@ watch(serverId, async (id) => {
   }
 })
 
-watch(configFile, () => {
+watch(configFile, (f) => {
+  if (serverId.value && f) localStorage.setItem(STORAGE_KEYS.nginxConfig(serverId.value), f)
   void loadUpstreams()
 })
 
@@ -73,14 +78,6 @@ async function loadUpstreams(): Promise<void> {
   }
 }
 
-const filteredUpstreams = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return upstreams.value
-  return upstreams.value.filter(
-    (u) => u.name.toLowerCase().includes(kw) || u.servers.some((s) => s.ip.includes(kw)),
-  )
-})
-
 const serverSummary = (u: NginxUpstream): string => {
   const up = u.servers.filter((s) => s.status === 'up').length
   return `${up}/${u.servers.length}`
@@ -88,6 +85,32 @@ const serverSummary = (u: NginxUpstream): string => {
 
 const upCount = (u: NginxUpstream): number => u.servers.filter((s) => s.status === 'up').length
 const downCount = (u: NginxUpstream): number => u.servers.length - upCount(u)
+
+// 状态筛选：点击"离线"chip 仅显示含离线后端的 upstream（对齐 v1）
+const statusFilter = ref<'all' | 'down'>('all')
+function toggleStatusFilter(): void {
+  statusFilter.value = statusFilter.value === 'down' ? 'all' : 'down'
+}
+
+const filteredUpstreams = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  let list = upstreams.value
+  if (kw) {
+    list = list.filter((u) => u.name.toLowerCase().includes(kw) || u.servers.some((s) => s.ip.includes(kw)))
+  }
+  if (statusFilter.value === 'down') list = list.filter((u) => downCount(u) > 0)
+  return list
+})
+
+// 统计 chips（对齐 v1）
+const totalUpCount = computed(() => filteredUpstreams.value.reduce((sum, u) => sum + upCount(u), 0))
+const totalDownCount = computed(() => filteredUpstreams.value.reduce((sum, u) => sum + downCount(u), 0))
+
+// 健康度行配色：全在线绿 / 混合黄 / 全离线红（对齐 v1 组级左边框）
+const healthClass = (u: NginxUpstream): string =>
+  downCount(u) === 0 ? 'health-healthy' : upCount(u) === 0 ? 'health-critical' : 'health-degraded'
+
+const healthRowClass = ({ row }: { row: unknown }): string => healthClass(row as NginxUpstream)
 
 // ---------- 预览 → 执行 ----------
 const previewVisible = ref(false)
@@ -99,6 +122,32 @@ const pe = usePreviewExecute<NginxPreview>()
 
 type NgAction = 'online' | 'offline' | 'swap' | 'toggle' | 'batch' | 'rollback'
 const pendingAction = ref<NgAction>('online')
+
+const ACTION_LABELS = computed<Record<NgAction, string>>(() => ({
+  online: t('nginx.online'),
+  offline: t('nginx.offline'),
+  swap: t('nginx.swap'),
+  toggle: t('nginx.toggle'),
+  batch: t('nginx.batch'),
+  rollback: t('nginx.rollback'),
+}))
+
+// 执行结果元信息条（对齐 v1：操作/对象/配置文件/时间）
+const outputMeta = ref('')
+const pendingSummary = ref('')
+
+function nowStr(): string {
+  const d = new Date()
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function payloadSummary(action: NgAction, payload: unknown): string {
+  if (action === 'rollback') return String(payload)
+  if (action === 'batch') return (payload as NginxBatchItem[]).map((i) => i.upstream_name).join('、')
+  const p = payload as { upstream_names?: string[] } | null
+  return (p?.upstream_names ?? []).join('、')
+}
 
 function buildPayload(
   action: NgAction,
@@ -126,6 +175,7 @@ async function previewAction(
 ): Promise<void> {
   if (!serverId.value || !configFile.value) return
   pendingAction.value = action
+  pendingSummary.value = payloadSummary(action, payload)
   const body = buildPayload(action, payload)
   const fn = (): Promise<NginxPreview> => {
     switch (action) {
@@ -150,11 +200,13 @@ async function previewAction(
 async function executePreview(): Promise<void> {
   const action = pendingAction.value
   const result = await pe.execute((id) => nginxApi.execute(action, { preview_id: id }))
+  const metaBase = `${ACTION_LABELS.value[action]}${pendingSummary.value ? ` · ${pendingSummary.value}` : ''} · ${configFile.value}`
   if (result.ok && result.result) {
     previewVisible.value = false
     const res = result.result as NginxExecuteResult
     outputResult.value = res.output ?? res.message
     outputStatus.value = 'success'
+    outputMeta.value = `${metaBase} · ${nowStr()}`
     outputVisible.value = true
     ElMessage.success(t('common.execSuccess'))
     pe.reset()
@@ -166,6 +218,7 @@ async function executePreview(): Promise<void> {
       // 契约：nginx -t 失败会自动回滚并返回 400，错误里带说明
       outputResult.value = result.error
       outputStatus.value = 'failed'
+      outputMeta.value = `${metaBase}（失败）· ${nowStr()}`
       outputVisible.value = true
     }
   }
@@ -245,11 +298,21 @@ function onRollbackConfirm(backupFile: string): void {
         <el-button type="primary" :disabled="upstreams.length === 0" @click="batchDialogRef?.open()">
           {{ t('nginx.batch') }}
         </el-button>
+        <span class="chip-spacer" />
+        <span class="stat-chip">Upstream <b>{{ filteredUpstreams.length }}</b></span>
+        <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
+        <span
+          class="stat-chip stat-chip-danger"
+          :class="{ 'stat-chip-active': statusFilter === 'down' }"
+          @click="toggleStatusFilter"
+        >
+          离线 <b>{{ totalDownCount }}</b>
+        </span>
       </div>
 
       <div v-loading="listLoading" class="card table-card reveal d-1">
         <el-empty v-if="filteredUpstreams.length === 0 && !listLoading" :description="t('common.empty')" />
-        <el-table v-else :data="filteredUpstreams" row-key="name">
+        <el-table v-else :data="filteredUpstreams" row-key="name" :row-class-name="healthRowClass">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="srv-wrap">
@@ -323,7 +386,7 @@ function onRollbackConfirm(backupFile: string): void {
       @repreview="reproview"
     />
 
-    <OutputDialog v-model:visible="outputVisible" :output="outputResult" :status="outputStatus" />
+    <OutputDialog v-model:visible="outputVisible" :output="outputResult" :status="outputStatus" :meta="outputMeta" />
 
     <!-- 操作 / 批量 / 回滚 -->
     <OperateDialog
@@ -382,5 +445,68 @@ function onRollbackConfirm(backupFile: string): void {
 
 .bad {
   color: var(--rose-400);
+}
+
+/* 统计 chips（对齐 v1） */
+.chip-spacer {
+  margin-left: auto;
+}
+
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  white-space: nowrap;
+}
+
+.stat-chip b {
+  color: var(--text-primary);
+}
+
+.stat-chip-success {
+  border-color: var(--el-color-success, #67c23a);
+  color: var(--el-color-success, #67c23a);
+}
+
+.stat-chip-success b {
+  color: var(--el-color-success, #67c23a);
+}
+
+.stat-chip-danger {
+  border-color: var(--el-color-danger, #f56c6c);
+  color: var(--el-color-danger, #f56c6c);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.stat-chip-danger b {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.stat-chip-danger:hover {
+  background: rgba(245, 108, 108, 0.12);
+}
+
+.stat-chip-danger.stat-chip-active {
+  background: rgba(245, 108, 108, 0.2);
+}
+
+/* 健康度行左边框（对齐 v1 组级配色）：全绿/混合/全红 */
+.table-card :deep(tr.health-healthy td:first-child) {
+  box-shadow: inset 3px 0 0 var(--el-color-success, #67c23a);
+}
+
+.table-card :deep(tr.health-degraded td:first-child) {
+  box-shadow: inset 3px 0 0 var(--el-color-warning, #e6a23c);
+}
+
+.table-card :deep(tr.health-critical td:first-child) {
+  box-shadow: inset 3px 0 0 var(--el-color-danger, #f56c6c);
 }
 </style>

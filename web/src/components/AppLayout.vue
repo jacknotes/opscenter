@@ -10,6 +10,7 @@ import {
   ScaleToOriginal,
   Document,
   Cpu,
+  User,
   UserFilled,
   Fold,
   Expand,
@@ -66,15 +67,22 @@ const pageTitle = computed(() => {
 
 const avatarChar = computed(() => (auth.displayName || '?').charAt(0).toUpperCase())
 
+// 个人信息弹窗
+const profileVisible = ref(false)
+
 async function handleLogout(): Promise<void> {
   await auth.logout()
   ElMessage.success(t('auth.logoutSuccess'))
   await router.replace('/login')
 }
 
-async function handleChangePassword(): Promise<void> {
+function handleChangePassword(): void {
   // 打开修改密码弹窗（全局事件，由页面级对话框组件监听）
   window.dispatchEvent(new CustomEvent('opscenter:change-password'))
+}
+
+function openSwagger(): void {
+  window.open('/swagger/index.html', '_blank', 'noopener')
 }
 
 // 快捷键 r：刷新当前页面数据（输入框内不触发），页面监听 page-refresh 事件
@@ -88,7 +96,11 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
-onMounted(() => document.addEventListener('keydown', handleKeydown))
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+  // 拉取最新用户信息（角色/启用状态可能被管理员变更），失败静默（保留登录时缓存）
+  auth.refreshUser().catch(() => {})
+})
 onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
 </script>
 
@@ -143,8 +155,14 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
             </div>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item @click="profileVisible = true">
+                  <el-icon><User /></el-icon>{{ t('common.profile') }}
+                </el-dropdown-item>
                 <el-dropdown-item @click="handleChangePassword">
                   <el-icon><Key /></el-icon>{{ t('common.changePassword') }}
+                </el-dropdown-item>
+                <el-dropdown-item v-if="auth.isAdmin" divided @click="openSwagger">
+                  <el-icon><Document /></el-icon>API 文档
                 </el-dropdown-item>
                 <el-dropdown-item divided @click="handleLogout">
                   <el-icon><SwitchButton /></el-icon>{{ t('common.logout') }}
@@ -165,10 +183,10 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
       </main>
     </div>
 
-    <!-- 移动端底部导航 -->
+    <!-- 移动端底部导航（全部条目，横向可滚动） -->
     <nav class="mobile-nav">
       <router-link
-        v-for="item in visibleNav.slice(0, 5)"
+        v-for="item in visibleNav"
         :key="item.path"
         :to="item.path"
         class="mobile-nav-item"
@@ -178,6 +196,20 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
         <span>{{ t(item.titleKey) }}</span>
       </router-link>
     </nav>
+    <!-- 个人信息 -->
+    <el-dialog v-model="profileVisible" :title="t('common.profile')" width="min(440px, 92vw)" append-to-body>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="用户名">
+          <span class="mono">{{ auth.user?.username }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="姓名">{{ auth.user?.name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ auth.user?.email || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="角色">
+          <el-tag size="small" :type="auth.isAdmin ? 'danger' : 'info'" effect="plain">{{ auth.user?.role }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="认证来源">{{ auth.user?.auth_source || 'local' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
     <!-- 修改密码（顶栏用户菜单触发） -->
     <ChangePasswordDialog />
   </div>
@@ -402,9 +434,11 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
     -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     z-index: 30;
+    overflow-x: auto;
   }
   .mobile-nav-item {
-    flex: 1;
+    flex: 1 0 64px;
+    min-width: 64px;
     display: flex;
     flex-direction: column;
     align-items: center;

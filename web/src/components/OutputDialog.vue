@@ -10,11 +10,14 @@ withDefaults(
     title?: string
     output?: string | string[]
     status?: 'success' | 'failed'
+    /** 元信息条：操作/对象/配置文件/时间（对齐 v1 输出元信息） */
+    meta?: string
   }>(),
   {
     title: '',
     output: '',
     status: 'success',
+    meta: '',
   },
 )
 </script>
@@ -27,6 +30,7 @@ withDefaults(
       :closable="false"
       class="result-alert"
     />
+    <div v-if="meta" class="meta-line mono">{{ meta }}</div>
     <pre class="output-pre mono">{{ Array.isArray(output) ? output.join('\n') : output }}</pre>
   </el-dialog>
 </template>
@@ -34,6 +38,14 @@ withDefaults(
 <style scoped>
 .result-alert {
   margin-bottom: var(--space-4);
+}
+
+.meta-line {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--border);
 }
 
 .output-pre {
