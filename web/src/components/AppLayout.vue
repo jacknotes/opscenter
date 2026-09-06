@@ -20,6 +20,7 @@ import {
   SwitchButton,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useExecStreamStore } from '@/stores/execStream'
 import { useTheme } from '@/composables/useTheme'
 import { STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
@@ -30,7 +31,22 @@ const t = i18n.global.t
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const exec = useExecStreamStore()
 const { theme, toggle: toggleTheme } = useTheme()
+
+// 底部执行状态栏文案（对齐 v1 全局执行状态栏）
+const execStatusLabel = computed(() => {
+  const map: Record<string, string> = {
+    running: '命令执行中...',
+    done: '执行完成',
+    failed: '执行异常',
+  }
+  return map[exec.state] ?? ''
+})
+
+function goExecPage(): void {
+  void router.push('/preprod')
+}
 
 // 侧边栏折叠状态持久化（刷新后恢复）
 const collapsed = ref(localStorage.getItem(STORAGE_KEYS.SIDEBAR_COLLAPSED) === '1')
@@ -173,14 +189,24 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
         </div>
       </header>
 
-      <!-- 内容区 -->
+      <!-- 内容区（keep-alive 缓存业务页：筛选/勾选/执行输出跨页保留） -->
       <main class="content">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
-            <component :is="Component" />
+            <keep-alive>
+              <component :is="Component" />
+            </keep-alive>
           </transition>
         </router-view>
       </main>
+    </div>
+
+    <!-- 全局执行状态栏（跨页可见，点击回跳预生产页） -->
+    <div v-if="exec.state !== 'idle'" class="exec-status-bar" @click="goExecPage">
+      <span class="dot-live" :class="{ 'is-offline': exec.state !== 'running' }" />
+      <span>{{ execStatusLabel }}</span>
+      <span v-if="exec.state === 'running'" class="mono exec-line-count">{{ exec.lineCount }} 行</span>
+      <span class="exec-bar-jump">{{ t('preprod.title') }} →</span>
     </div>
 
     <!-- 移动端底部导航（全部条目，横向可滚动） -->
@@ -412,6 +438,46 @@ onUnmounted(() => document.removeEventListener('keydown', handleKeydown))
 /* ---- 移动端 ---- */
 .mobile-nav {
   display: none;
+}
+
+/* ---- 全局执行状态栏 ---- */
+.exec-status-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5);
+  background: var(--bg-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  user-select: none;
+}
+
+.exec-status-bar .dot-live {
+  flex-shrink: 0;
+}
+
+.exec-line-count {
+  color: var(--text-muted);
+}
+
+.exec-bar-jump {
+  margin-left: auto;
+  color: var(--indigo-400);
+}
+
+@media (max-width: 768px) {
+  .exec-status-bar {
+    bottom: calc(var(--mobile-nav-h) + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (max-width: 768px) {

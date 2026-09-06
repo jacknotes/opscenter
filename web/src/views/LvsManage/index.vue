@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onActivated, onDeactivated, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { lvsApi, preprodApi, extractErrorMessage } from '@/api'
 import type { CommandExecuteResult, LvsOnlineWarning, LvsPreview, VirtualServer, LvsRealServer } from '@/api/types'
@@ -173,9 +173,20 @@ async function silentRefresh(): Promise<void> {
 }
 
 onMounted(() => {
-  autoRefreshTimer = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL_MS)
   // 已有记忆的服务器时直接加载
   if (serverId.value) void loadList()
+})
+
+// keep-alive 激活/停用：仅页面可见时静默自动刷新（对齐 v1）
+onActivated(() => {
+  if (!autoRefreshTimer) autoRefreshTimer = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL_MS)
+})
+
+onDeactivated(() => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
+  }
 })
 
 onUnmounted(() => {

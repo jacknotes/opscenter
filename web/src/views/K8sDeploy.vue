@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onActivated, onDeactivated, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { k8sApi, extractErrorMessage } from '@/api'
 import type { K8sExecuteResult, K8sPreview, Rollout } from '@/api/types'
@@ -200,9 +200,11 @@ function reproview(): void {
   else void batchPreview(action as BatchAction)
 }
 
-// ---------- page-refresh 全局刷新（AppLayout 快捷键 r 触发） ----------
+// ---------- page-refresh 全局刷新（AppLayout 快捷键 r 触发，仅本页激活时响应） ----------
+const pageActive = ref(true)
+
 async function handlePageRefresh(): Promise<void> {
-  if (!serverId.value) return
+  if (!pageActive.value || !serverId.value) return
   try {
     await loadList()
     ElMessage.success('刷新成功')
@@ -211,6 +213,8 @@ async function handlePageRefresh(): Promise<void> {
   }
 }
 
+onActivated(() => (pageActive.value = true))
+onDeactivated(() => (pageActive.value = false))
 onMounted(() => window.addEventListener('page-refresh', handlePageRefresh))
 onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
 </script>

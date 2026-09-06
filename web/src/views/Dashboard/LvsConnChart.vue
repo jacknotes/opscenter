@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import type { EChartsCoreOption } from 'echarts/core'
 import type { ServerResponse } from '@/api/types'
 import { dashboardApi, lvsApi, serverApi } from '@/api'
@@ -292,7 +292,15 @@ async function init(): Promise<void> {
 
 onMounted(async () => {
   await init()
+})
+
+// keep-alive 激活/停用：仅在页面可见时轮询（对齐 v1 onActivated/onDeactivated 管理）
+onActivated(() => {
   startAutoRefresh()
+})
+
+onDeactivated(() => {
+  stopAutoRefresh()
 })
 
 onBeforeUnmount(() => {

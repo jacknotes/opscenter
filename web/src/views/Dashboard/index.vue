@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, watch, nextTick } from 'vue'
 import { extractErrorMessage } from '@/api/client'
 import { dashboardApi, serverApi } from '@/api'
 import type {
@@ -67,6 +67,7 @@ const MODULE_LABEL: Record<string, string> = {
 async function loadStats(): Promise<void> {
   try {
     stats.value = await dashboardApi.stats()
+    lastLoadAt = Date.now()
   } catch (err) {
     console.warn(extractErrorMessage(err, t('dashboard.remoteError')))
   }
@@ -191,6 +192,17 @@ onMounted(async () => {
   void loadRemote()
   // 第二优先级：图表数据（延迟一帧，让首屏先渲染）
   await nextTick()
+  void loadServerOptions()
+})
+
+// keep-alive 激活：数据超过 5 分钟才重新拉取（对齐 v1 语义）
+const STALE_TTL_MS = 5 * 60 * 1000
+let lastLoadAt = Date.now()
+
+onActivated(() => {
+  if (Date.now() - lastLoadAt < STALE_TTL_MS) return
+  lastLoadAt = Date.now()
+  refreshAll()
   void loadServerOptions()
 })
 

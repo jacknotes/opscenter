@@ -7,6 +7,7 @@ import { usePreviewExecute } from '@/composables/usePreviewExecute'
 import { useOutputCache } from '@/composables/useOutputCache'
 import { useTablePaging } from '@/composables/useTablePaging'
 import { useSelection } from '@/composables/useSelection'
+import { useExecStreamStore } from '@/stores/execStream'
 import { PAGE_SIZES, STORAGE_KEYS } from '@/utils/constants'
 import { getToken } from '@/utils/session'
 import { i18n } from '@/i18n'
@@ -249,6 +250,10 @@ async function scalePreview(action: ScaleAction): Promise<void> {
 }
 
 // ---------- WebSocket 流式执行（页级持有，支持输出缓存） ----------
+// keep-alive 下切页组件不销毁：WS 连接与输出天然跨页存活；
+// execStream store 承载状态摘要，供 AppLayout 底部状态栏跨页展示
+const exec = useExecStreamStore()
+
 interface StreamLine {
   text: string
   stream: 'stdout' | 'stderr' | 'system'
@@ -264,6 +269,7 @@ let ws: WebSocket | null = null
 
 function pushLine(line: StreamLine): void {
   streamLines.value.push(line)
+  exec.report(streamLines.value.length)
   void nextTick(() => {
     const el = terminalRef.value
     if (el) el.scrollTop = el.scrollHeight
@@ -284,6 +290,7 @@ function disconnectStream(): void {
 
 function streamFail(message: string): void {
   streamState.value = 'failed'
+  exec.finish('failed')
   if (message) ElMessage.error(message)
   // 契约：执行失败时预览已删除（WS 语义），需要重新预览
   pe.reset()
@@ -293,6 +300,7 @@ function connectStream(previewId: string): void {
   disconnectStream()
   streamLines.value = []
   streamState.value = 'running'
+  if (serverId.value) exec.begin(serverId.value)
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const url = `${proto}://${location.host}/api/ws/exec?token=${encodeURIComponent(getToken())}`
@@ -316,6 +324,7 @@ function connectStream(previewId: string): void {
         break
       case 'done':
         streamState.value = 'done'
+        exec.finish('done')
         pushLine({ text: `✔ ${t('common.execSuccess')}`, stream: 'system' })
         ElMessage.success(t('common.execSuccess'))
         pe.reset()
@@ -351,7 +360,10 @@ function connectStream(previewId: string): void {
   }
 }
 
-onBeforeUnmount(disconnectStream)
+onBeforeUnmount(() => {
+  disconnectStream()
+  exec.clear()
+})
 
 /** 确认后启动 WebSocket 流式执行 */
 function startStream(): void {
