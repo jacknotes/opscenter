@@ -41,7 +41,26 @@ async function load(): Promise<void> {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  // LDAP 可用性探测（对齐 v1）：不可用时隐藏 LDAP 导入入口
+  void userApi
+    .listLdap()
+    .then(() => (ldapAvailable.value = true))
+    .catch(() => (ldapAvailable.value = false))
+})
+
+/** 创建时间格式化（YYYY-MM-DD HH:mm） */
+function formatDateTime(v: string): string {
+  if (!v) return '-'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return v
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** LDAP 服务是否可用（探测 /users/ldap 接口） */
+const ldapAvailable = ref(false)
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
@@ -448,7 +467,7 @@ async function doImport(): Promise<void> {
         <p class="page-subtitle">{{ t('users.subtitle') }}</p>
       </div>
       <div class="page-actions">
-        <el-button @click="openLdap">{{ t('users.ldapImport') }}</el-button>
+        <el-button v-if="ldapAvailable" @click="openLdap">{{ t('users.ldapImport') }}</el-button>
         <el-button type="primary" @click="openCreate">{{ t('common.add') }}</el-button>
       </div>
     </div>
@@ -514,6 +533,11 @@ async function doImport(): Promise<void> {
               :class="row.online ? 'online' : 'offline'"
               :title="row.online ? t('common.online') : t('common.offline')"
             />
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" width="170" sortable="custom">
+          <template #default="{ row }">
+            <span class="mono">{{ formatDateTime((row as UserRow).created_at) }}</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('common.operation')" width="380" fixed="right">

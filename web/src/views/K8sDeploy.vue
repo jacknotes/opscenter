@@ -5,7 +5,8 @@ import { k8sApi, extractErrorMessage } from '@/api'
 import type { K8sExecuteResult, K8sPreview, Rollout } from '@/api/types'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
 import { useOutputCache } from '@/composables/useOutputCache'
-import { STORAGE_KEYS } from '@/utils/constants'
+import { useSelection } from '@/composables/useSelection'
+import { PAGE_SIZES, STORAGE_KEYS } from '@/utils/constants'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
@@ -24,7 +25,8 @@ watch(serverId, (v) => {
 const rollouts = ref<Rollout[]>([])
 const listLoading = ref(false)
 const keyword = ref('')
-const selected = ref<Rollout[]>([])
+// 状态筛选：全部/待发布（step 1/x）/已上线（对齐 v1）
+const statusFilter = ref<'all' | 'pending' | 'online'>('all')
 
 async function loadList(): Promise<void> {
   if (!serverId.value) {
@@ -48,13 +50,51 @@ onMounted(() => {
   if (serverId.value) void loadList()
 })
 
+// 仅展示 Paused 状态的 Rollout（对齐 v1：该页面用于发布 Paused 的灰度项目）
 const filtered = computed(() => {
+  let list = rollouts.value.filter((r) => r.status === 'Paused')
+  if (statusFilter.value === 'pending') list = list.filter((r) => r.step.startsWith('1/'))
+  else if (statusFilter.value === 'online') list = list.filter((r) => !r.step.startsWith('1/'))
   const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return rollouts.value
-  return rollouts.value.filter(
-    (r) => r.name.toLowerCase().includes(kw) || r.namespace.toLowerCase().includes(kw),
-  )
+  if (kw) {
+    list = list.filter(
+      (r) =>
+        r.namespace.toLowerCase().includes(kw) ||
+        r.name.toLowerCase().includes(kw) ||
+        r.strategy.toLowerCase().includes(kw) ||
+        r.step.toLowerCase().includes(kw),
+    )
+  }
+  return list
 })
+
+// ---------- 分页 + 跨页勾选 ----------
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = computed(() => filtered.value.length)
+const paged = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filtered.value.slice(start, start + pageSize.value)
+})
+
+const { selectedIds, tableRef, handleSelectionChange, handleSizeChange, handleCurrentChange } = useSelection<Rollout>(
+  'name',
+  paged,
+  { search: keyword, currentPage },
+)
+
+const selected = computed(() => filtered.value.filter((r) => selectedIds.value.has(r.name)))
+
+// step/ready 数值化排序（'2/3' 按分子排序）
+function parseNum(s: string | number): number {
+  const m = String(s ?? '').match(/^(\d+)/)
+  return m ? parseInt(m[1], 10) : 0
+}
+
+const sortByNum =
+  (field: 'step' | 'ready') =>
+  (a: Rollout, b: Rollout): number =>
+    parseNum(a[field]) - parseNum(b[field])
 
 const statusType = (status: string): 'success' | 'warning' | 'danger' | 'info' => {
   const s = status.toLowerCase()
@@ -184,6 +224,11 @@ onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
       </div>
       <div class="page-actions head-actions">
         <ServerSelect v-model:server-id="serverId" type="kubernetes" />
+        <el-select v-model="statusFilter" style="width: 110px">
+          <el-option value="all" label="全部" />
+          <el-option value="pending" label="待发布" />
+          <el-option value="online" label="已上线" />
+        </el-select>
         <el-input v-model="keyword" :placeholder="t('logs.keyword')" clearable style="width: 180px" />
         <el-button :disabled="!serverId" :loading="listLoading" @click="loadList">
           {{ t('common.refresh') }}
@@ -213,33 +258,49 @@ onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
 
     <div v-loading="listLoading" class="card table-card reveal d-1">
       <el-empty v-if="!serverId" :description="t('common.serverPlaceholder')" />
-      <el-empty v-else-if="filtered.length === 0 && !listLoading" :description="t('common.empty')" />
-      <el-table
-        v-else
-        :data="filtered"
-        row-key="name"
-        @selection-change="(rows: Rollout[]) => (selected = rows)"
-      >
-        <el-table-column type="selection" width="42" />
-        <el-table-column prop="namespace" :label="t('k8s.namespace')" min-width="120" />
-        <el-table-column prop="name" :label="t('k8s.name')" min-width="180">
-          <template #default="{ row }">
-            <span class="mono proj-name">{{ row.name }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="strategy" :label="t('k8s.strategy')" width="100" />
-        <el-table-column :label="t('k8s.status')" min-width="140">
-          <template #default="{ row }">
-            <el-tag size="small" :type="statusType(row.status)" effect="plain">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="step" :label="t('k8s.step')" width="80" />
-        <el-table-column prop="set_weight" :label="t('k8s.setWeight')" width="90" />
-        <el-table-column prop="ready" :label="t('k8s.ready')" width="90" />
-        <el-table-column prop="desired" :label="t('k8s.desired')" width="80" sortable />
-        <el-table-column prop="up_to_date" :label="t('k8s.upToDate')" width="90" sortable />
-        <el-table-column prop="available" :label="t('k8s.available')" width="90" sortable />
-      </el-table>
+      <el-empty
+        v-else-if="filtered.length === 0 && !listLoading"
+        :description="keyword || statusFilter !== 'all' ? t('common.empty') : '暂无 Paused 状态的 Rollout'"
+      />
+      <template v-else>
+        <el-table
+          ref="tableRef"
+          :data="paged"
+          row-key="name"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column type="selection" width="42" />
+          <el-table-column prop="namespace" :label="t('k8s.namespace')" min-width="120" sortable />
+          <el-table-column prop="name" :label="t('k8s.name')" min-width="180" sortable>
+            <template #default="{ row }">
+              <span class="mono proj-name">{{ row.name }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="strategy" :label="t('k8s.strategy')" width="100" sortable />
+          <el-table-column :label="t('k8s.status')" min-width="140">
+            <template #default="{ row }">
+              <el-tag size="small" :type="statusType(row.status)" effect="plain">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="step" :label="t('k8s.step')" width="80" sortable :sort-method="sortByNum('step')" />
+          <el-table-column prop="set_weight" :label="t('k8s.setWeight')" width="90" />
+          <el-table-column prop="ready" :label="t('k8s.ready')" width="90" sortable :sort-method="sortByNum('ready')" />
+          <el-table-column prop="desired" :label="t('k8s.desired')" width="80" sortable />
+          <el-table-column prop="up_to_date" :label="t('k8s.upToDate')" width="90" sortable />
+          <el-table-column prop="available" :label="t('k8s.available')" width="90" sortable />
+        </el-table>
+        <div class="pagination-bar">
+          <el-pagination
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="total"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            :page-sizes="[...PAGE_SIZES]"
+            @current-change="(p: number) => { currentPage = p; handleCurrentChange() }"
+            @size-change="(s: number) => { pageSize = s; handleSizeChange(s) }"
+          />
+        </div>
+      </template>
     </div>
 
     <!-- 预览执行 -->
@@ -276,5 +337,11 @@ onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
 .selected-info {
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-3);
 }
 </style>

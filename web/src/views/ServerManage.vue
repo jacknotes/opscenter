@@ -169,6 +169,38 @@ async function openEdit(row: ServerResponse): Promise<void> {
   }
 }
 
+/** 复制服务器（对齐 v1：以该服务器为模板新建 "(副本)"，密码/密钥不复制需重新填写） */
+async function openDuplicate(row: ServerResponse): Promise<void> {
+  editingId.value = null
+  try {
+    const detail: ServerEdit = await serverApi.getForEdit(row.id)
+    Object.assign(form, {
+      name: `${detail.name} (副本)`,
+      host: detail.host,
+      port: detail.port,
+      username: detail.username,
+      auth_type: detail.auth_type,
+      password: '',
+      private_key: '',
+      server_type: detail.server_type,
+      env: detail.env,
+      script_path: detail.script_path,
+      script_password: '',
+      config_path: detail.config_path,
+      config_pattern: detail.config_pattern,
+      backup_path: detail.backup_path,
+      description: detail.description,
+      enabled: detail.enabled,
+      has_password: detail.has_password,
+      has_private_key: detail.has_private_key,
+      has_script_password: detail.has_script_password,
+    })
+    editVisible.value = true
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err))
+  }
+}
+
 async function save(): Promise<void> {
   if (!form.name.trim() || !form.host.trim() || !form.username.trim()) {
     ElMessage.warning(t('common.save'))
@@ -383,6 +415,7 @@ function batchTest(): void {
               {{ t('servers.test') }}
             </el-button>
             <el-button link size="small" @click="openEdit(row as ServerResponse)">{{ t('common.edit') }}</el-button>
+            <el-button link size="small" @click="openDuplicate(row as ServerResponse)">复制</el-button>
             <el-button link :type="row.enabled ? 'warning' : 'success'" size="small" @click="toggle(row as ServerResponse)">
               {{ row.enabled ? t('common.disabled') : t('common.enabled') }}
             </el-button>
