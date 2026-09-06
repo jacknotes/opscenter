@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { lvsApi, preprodApi, extractErrorMessage } from '@/api'
-import type { CommandExecuteResult, LvsPreview, VirtualServer, LvsRealServer } from '@/api/types'
+import type { CommandExecuteResult, LvsOnlineWarning, LvsPreview, VirtualServer, LvsRealServer } from '@/api/types'
 import { useAuthStore } from '@/stores/auth'
 import { usePreviewExecute } from '@/composables/usePreviewExecute'
 import { AUTO_REFRESH_INTERVAL_MS, STORAGE_KEYS } from '@/utils/constants'
@@ -111,6 +111,14 @@ const validRsKeys = computed(() => {
 })
 
 const selectedCount = computed(() => batchSelected.value.size)
+
+// 过滤后列表的全表在线/离线 RS 统计 chips（对齐 v1）
+const totalUpCount = computed(() =>
+  filteredVs.value.reduce((sum, vs) => sum + vs.real_servers.filter((r) => r.status === 'up').length, 0),
+)
+const totalDownCount = computed(() =>
+  filteredVs.value.reduce((sum, vs) => sum + vs.real_servers.filter((r) => r.status !== 'up').length, 0),
+)
 const isAllFilteredSelected = computed(
   () => validRsKeys.value.length > 0 && validRsKeys.value.every((k) => batchSelected.value.has(k)),
 )
@@ -208,6 +216,39 @@ function openOutput(res: CommandExecuteResult, ok: boolean): void {
   outputVisible.value = true
 }
 
+// ---------- 上线前预生产检查（对齐 v1：警告表格 + 输入"确认执行"强确认） ----------
+const onlineCheckVisible = ref(false)
+const onlineCheckVsTag = ref('')
+const onlineCheckRsTag = ref('')
+const onlineCheckWarnings = ref<LvsOnlineWarning[]>([])
+const onlineCheckConfirmText = ref('')
+let onlineCheckResolve: ((ok: boolean) => void) | null = null
+
+function settleOnlineCheck(ok: boolean): void {
+  onlineCheckVisible.value = false
+  onlineCheckResolve?.(ok)
+  onlineCheckResolve = null
+}
+
+/** 上线前检查预生产资源副本；need_warning 时弹警告表格 + 强确认，检查失败或取消返回 false */
+async function preprodOnlineGate(vsIp: string, rsIp: string): Promise<boolean> {
+  try {
+    const check = await preprodApi.checkLvsOnline({ vs_ip: vsIp, rs_ip: rsIp })
+    if (!check.need_warning || !check.warnings?.length) return true
+    onlineCheckVsTag.value = check.vs_tag ?? vsIp
+    onlineCheckRsTag.value = check.rs_env_tag ?? ''
+    onlineCheckWarnings.value = check.warnings
+    onlineCheckConfirmText.value = ''
+    onlineCheckVisible.value = true
+    return new Promise<boolean>((resolve) => {
+      onlineCheckResolve = resolve
+    })
+  } catch (err) {
+    ElMessage.error(`预生产安全检查失败: ${extractErrorMessage(err)}，操作中止`)
+    return false
+  }
+}
+
 async function requestOp(vs: VirtualServer, rs: LvsRealServer, state: 'on' | 'off'): Promise<void> {
   if (rs.disabled) {
     ElMessage.warning(`${t('lvs.disabledWarn')}${rs.disabled_reason ? `: ${rs.disabled_reason}` : ''}`)
@@ -215,20 +256,8 @@ async function requestOp(vs: VirtualServer, rs: LvsRealServer, state: 'on' | 'of
   }
   if (!serverId.value) return
 
-  // 上线前检查预生产资源副本（need_warning 时人工确认）
-  if (state === 'on') {
-    try {
-      const check = await preprodApi.checkLvsOnline({ vs_ip: vs.ip, rs_ip: rs.ip })
-      if (check.need_warning && check.warnings?.length) {
-        const lines = check.warnings
-          .map((w) => `${w.name} (${w.category}): ${w.current} → ${t('lvs.targetReplicas')} ${w.target}`)
-          .join('\n')
-        await ElMessageBox.confirm(lines, t('common.confirm'), { type: 'warning' })
-      }
-    } catch {
-      return // 用户取消确认框
-    }
-  }
+  // 上线前检查预生产资源副本（警告表格 + 强确认，对齐 v1）
+  if (state === 'on' && !(await preprodOnlineGate(vs.ip, rs.ip))) return
 
   pending.value = { kind: 'op', vs, rs, state }
   const sid = serverId.value
@@ -236,17 +265,17 @@ async function requestOp(vs: VirtualServer, rs: LvsRealServer, state: 'on' | 'of
   if (ok) previewVisible.value = true
 }
 
-function requestSwap(vs: VirtualServer, payload: { rs_ip1: string; rs_ip2: string }): void {
+async function requestSwap(vs: VirtualServer, payload: { rs_ip1: string; rs_ip2: string }): Promise<void> {
   if (!serverId.value) return
+  // 切换前对将要上线的 RS 做预生产资源副本检查（对齐 v1）
+  if (!(await preprodOnlineGate(vs.ip, payload.rs_ip2))) return
   pending.value = { kind: 'swap', vs, swap: payload }
   const sid = serverId.value
-  void pe
+  const ok = await pe
     .preview(() =>
       lvsApi.swapPreview({ server_id: sid, vs_ip: vs.ip, rs_ip1: payload.rs_ip1, rs_ip2: payload.rs_ip2 }),
     )
-    .then((ok) => {
-      if (ok) previewVisible.value = true
-    })
+  if (ok) previewVisible.value = true
 }
 
 async function executePreview(): Promise<void> {
@@ -351,27 +380,9 @@ async function requestBatchOnline(): Promise<void> {
   const skipped = all.length - targets.length
   if (skipped > 0) ElMessage.warning(`${skipped} 台已在线将跳过，将上线 ${targets.length} 台离线 RS`)
 
-  // 上线前逐台检查预生产资源副本（need_warning 时统一确认一次）
-  const warnings: string[] = []
+  // 上线前逐台检查预生产资源副本（警告表格 + 强确认，对齐 v1：检查失败或取消即中止）
   for (const { vs, rs } of targets) {
-    try {
-      const check = await preprodApi.checkLvsOnline({ vs_ip: vs.ip, rs_ip: rs.ip })
-      if (check.need_warning && check.warnings?.length) {
-        warnings.push(
-          ...check.warnings.map((w) => `${w.name} (${w.category}): ${w.current} → ${t('lvs.targetReplicas')} ${w.target}`),
-        )
-      }
-    } catch (err) {
-      ElMessage.error(`预生产安全检查失败: ${extractErrorMessage(err)}，操作中止`)
-      return
-    }
-  }
-  if (warnings.length > 0) {
-    try {
-      await ElMessageBox.confirm(warnings.join('\n'), t('common.confirm'), { type: 'warning' })
-    } catch {
-      return
-    }
+    if (!(await preprodOnlineGate(vs.ip, rs.ip))) return
   }
   await createBatchPreviews('on', targets)
 }
@@ -511,6 +522,8 @@ function openVsTag(vs: VirtualServer): void {
         批量下线
       </el-button>
       <span class="mono selected-info">已选 {{ selectedCount }} 项</span>
+      <span class="stat-chip stat-chip-success">在线 <b>{{ totalUpCount }}</b></span>
+      <span class="stat-chip stat-chip-danger">离线 <b>{{ totalDownCount }}</b></span>
     </div>
 
     <div v-loading="listLoading" class="card table-card reveal d-1">
@@ -550,6 +563,7 @@ function openVsTag(vs: VirtualServer): void {
                   </template>
                 </el-table-column>
                 <el-table-column prop="weight" :label="t('lvs.weight')" width="80" />
+                <el-table-column prop="forward" label="转发" width="90" align="center" />
                 <el-table-column prop="active_conn" :label="t('lvs.activeConn')" width="100" sortable />
                 <el-table-column prop="inact_conn" :label="t('lvs.inactConn')" width="110" sortable />
                 <el-table-column :label="t('lvs.tag')" min-width="140">
@@ -600,6 +614,11 @@ function openVsTag(vs: VirtualServer): void {
         </el-table-column>
         <el-table-column prop="protocol" :label="t('lvs.protocol')" width="90" />
         <el-table-column prop="scheduler" :label="t('lvs.scheduler')" width="100" />
+        <el-table-column prop="flags" label="Flags" width="110">
+          <template #default="{ row }">
+            <span class="mono">{{ row.flags }}</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('lvs.role')" width="80">
           <template #default="{ row }">
             <el-tag v-if="row.role" size="small" :type="row.role === 'master' ? 'primary' : 'info'" effect="plain">
@@ -642,6 +661,35 @@ function openVsTag(vs: VirtualServer): void {
     <!-- 状态 / 切换 / 标签 / 绑定 -->
     <StatusDialog ref="statusDialogRef" />
     <SwapDialog ref="swapDialogRef" :vs="swapVs" @confirm="requestSwap(swapVs!, $event)" />
+
+    <!-- 上线前预生产检查（警告表格 + 强确认，对齐 v1） -->
+    <el-dialog
+      v-model="onlineCheckVisible"
+      title="上线前检查"
+      width="min(600px, 92vw)"
+      align-center
+      @close="settleOnlineCheck(false)"
+    >
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
+        <template #title>
+          {{ onlineCheckVsTag }} 的 RS {{ onlineCheckRsTag }} 上线前，预生产环境以下资源副本异常：
+        </template>
+      </el-alert>
+      <el-table :data="onlineCheckWarnings" stripe size="small" border max-height="300">
+        <el-table-column prop="name" label="资源名称" min-width="150" />
+        <el-table-column prop="category" label="类型" width="100" />
+        <el-table-column prop="current" label="当前副本" width="100" align="center" />
+        <el-table-column prop="target" label="目标副本" width="100" align="center" />
+      </el-table>
+      <el-alert type="info" :closable="false" style="margin-top: 12px">请输入"确认执行"以继续上线操作</el-alert>
+      <el-input v-model="onlineCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px" />
+      <template #footer>
+        <el-button @click="settleOnlineCheck(false)">取消</el-button>
+        <el-button type="primary" :disabled="onlineCheckConfirmText !== '确认执行'" @click="settleOnlineCheck(true)">
+          确认执行
+        </el-button>
+      </template>
+    </el-dialog>
     <TagDialog ref="tagDialogRef" :mode="tagMode" @saved="loadList" />
     <BindingsDialog v-model:visible="bindingsVisible" @changed="loadList" />
   </div>
@@ -660,6 +708,42 @@ function openVsTag(vs: VirtualServer): void {
 .selected-info {
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+/* 全表在线/离线统计 chips（对齐 v1） */
+.stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  white-space: nowrap;
+}
+
+.stat-chip b {
+  color: var(--text-primary);
+}
+
+.stat-chip-success {
+  border-color: var(--el-color-success, #67c23a);
+  color: var(--el-color-success, #67c23a);
+}
+
+.stat-chip-success b {
+  color: var(--el-color-success, #67c23a);
+}
+
+.stat-chip-danger {
+  border-color: var(--el-color-danger, #f56c6c);
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.stat-chip-danger b {
+  color: var(--el-color-danger, #f56c6c);
 }
 
 .vs-table :deep(.el-table__expanded-cell) {

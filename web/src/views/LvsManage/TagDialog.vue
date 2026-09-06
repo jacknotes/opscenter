@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { lvsApi, extractErrorMessage } from '@/api'
 import type { LvsRSTag, LvsVSTag } from '@/api/types'
 import { i18n } from '@/i18n'
@@ -68,6 +68,30 @@ async function save(): Promise<void> {
   }
 }
 
+/** 删除标签配置（对齐 v1：RS 删除配置 / VS 删除标签），确认后调用并关闭弹窗 */
+async function remove(): Promise<void> {
+  const target = props.mode === 'rs' ? rsForm.rs_ip : vsForm.vs_ip
+  if (!target) return
+  const action = props.mode === 'rs' ? '删除该 RS 的标签配置' : '删除该 VS 标签'
+  try {
+    await ElMessageBox.confirm(`确定要${action}吗？（${target}）`, t('common.confirm'), { type: 'warning' })
+  } catch {
+    return
+  }
+  saving.value = true
+  try {
+    if (props.mode === 'rs') await lvsApi.deleteRSTag(rsForm.vs_ip, rsForm.rs_ip)
+    else await lvsApi.deleteVSTag(vsForm.vs_ip)
+    ElMessage.success(t('common.execSuccess'))
+    visible.value = false
+    emit('saved')
+  } catch (err) {
+    ElMessage.error(extractErrorMessage(err))
+  } finally {
+    saving.value = false
+  }
+}
+
 defineExpose({ open })
 
 watch(visible, (v) => {
@@ -100,6 +124,9 @@ watch(visible, (v) => {
       </template>
     </el-form>
     <template #footer>
+      <el-button type="danger" plain :loading="saving" @click="remove">
+        {{ mode === 'rs' ? '删除配置' : '删除标签' }}
+      </el-button>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="saving" @click="save">{{ t('common.save') }}</el-button>
     </template>
