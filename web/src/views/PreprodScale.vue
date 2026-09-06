@@ -8,13 +8,16 @@ import { useOutputCache } from '@/composables/useOutputCache'
 import { useTablePaging } from '@/composables/useTablePaging'
 import { useSelection } from '@/composables/useSelection'
 import { useExecStreamStore } from '@/stores/execStream'
+import { useAuthStore } from '@/stores/auth'
 import { PAGE_SIZES, STORAGE_KEYS } from '@/utils/constants'
 import { getToken } from '@/utils/session'
 import { i18n } from '@/i18n'
 import ServerSelect from '@/components/ServerSelect.vue'
 import PreviewDialog from '@/components/PreviewDialog.vue'
+import BindingsDialog from '@/views/LvsManage/BindingsDialog.vue'
 
 const t = i18n.global.t
+const auth = useAuthStore()
 
 // ---------- 资源列表 ----------
 const serverId = ref<number>()
@@ -177,6 +180,7 @@ function onBatchConfirm(): void {
 
 // ---------- 缩扩容（预览） ----------
 const previewVisible = ref(false)
+const bindingsVisible = ref(false)
 
 const pe = usePreviewExecute<PreprodPreview>()
 
@@ -422,6 +426,10 @@ useOutputCache([() => serverId.value ?? ''], streamLines, {
       <el-button type="success" size="small" @click="scalePreview('scaleup')">
         {{ t('preprod.scaleup') }}
       </el-button>
+      <!-- LVS-Preprod 依赖配置入口（对齐 v1，admin） -->
+      <el-button v-if="auth.isAdmin" type="info" size="small" :disabled="!serverId" @click="bindingsVisible = true">
+        依赖配置
+      </el-button>
     </div>
 
     <div v-loading="listLoading" class="card table-card reveal d-1">
@@ -429,6 +437,7 @@ useOutputCache([() => serverId.value ?? ''], streamLines, {
       <el-empty v-else-if="filtered.length === 0 && !listLoading" :description="t('common.empty')" />
       <template v-else>
         <el-table
+          v-force-reflow
           ref="tableRef"
           :data="paged"
           row-key="name"
@@ -511,6 +520,9 @@ useOutputCache([() => serverId.value ?? ''], streamLines, {
       @execute="startStream"
       @repreview="reproview"
     />
+
+    <!-- 在线用户列表对话框等页面级弹窗之外的全局组件 -->
+    <BindingsDialog v-model:visible="bindingsVisible" @changed="loadList" />
 
     <!-- 缩容前 LVS 检查（全量警告表格 + 强确认） -->
     <el-dialog v-model="lvsCheckVisible" title="缩容前检查" width="min(640px, 92vw)" align-center @close="settleLvsCheck(false)">

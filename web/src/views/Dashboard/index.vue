@@ -76,10 +76,18 @@ async function loadStats(): Promise<void> {
 async function loadRemote(): Promise<void> {
   try {
     remote.value = await dashboardApi.remoteStats()
+    remoteUpdatedAt.value = new Date()
   } catch (err) {
     remote.value = null
     console.warn(extractErrorMessage(err, t('dashboard.remoteError')))
   }
+}
+
+/** 远程状态最近一次更新时间（后端 LvsCollector 每 30 分钟自动刷新提示见页头） */
+const remoteUpdatedAt = ref<Date | null>(null)
+
+function formatTimeShort(d: Date): string {
+  return d.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
 async function loadActivity(): Promise<void> {
@@ -578,7 +586,7 @@ const userRolePie = computed<EChartsCoreOption>(() => {
     <div class="page-head">
       <div>
         <h1 class="page-title grad-text">{{ t('dashboard.title') }}</h1>
-        <p class="page-subtitle">{{ t('dashboard.subtitle') }}</p>
+        <p class="page-subtitle">{{ t('dashboard.subtitle') }}<span class="remote-hint">远程状态每 30 分钟自动刷新</span><span v-if="remoteUpdatedAt" class="remote-hint mono">更新于 {{ formatTimeShort(remoteUpdatedAt) }}</span></p>
       </div>
       <div class="page-actions">
         <DateRangeSelector v-model="dateRange" />
@@ -802,6 +810,12 @@ const userRolePie = computed<EChartsCoreOption>(() => {
 <style scoped>
 .remote-alert {
   margin-bottom: var(--space-5);
+}
+
+.remote-hint {
+  margin-left: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .stat-grid {

@@ -22,6 +22,7 @@ import OutputDialog from '@/components/OutputDialog.vue'
 import OperateDialog from './OperateDialog.vue'
 import BatchDialog from './BatchDialog.vue'
 import RollbackDialog from './RollbackDialog.vue'
+import SwapScopeDialog, { type SwapScopeItem } from './SwapScopeDialog.vue'
 import ConfigViewer from './ConfigViewer.vue'
 
 const t = i18n.global.t
@@ -249,7 +250,48 @@ function openOperate(
 }
 
 function onOperateConfirm(payload: NginxUpstreamPayload | NginxSwapPayload): void {
+  // 切换：跨全部 upstream 计算同时包含这两台服务器的组，勾选后一次切换（对齐 v1）
+  if (operateAction.value === 'swap') {
+    const p = payload as NginxSwapPayload
+    const affected = computeAffectedSwap(p)
+    if (affected.length > 0) {
+      swapScopeIp.value = { offline: p.offline_ip, online: p.online_ip }
+      swapScopeList.value = affected
+      swapScopePending.value = p
+      swapScopeVisible.value = true
+      return
+    }
+  }
   void previewAction(operateAction.value, payload)
+}
+
+/** 计算受切换影响的 upstream 组（包含将下线的 up 服务器 + 将上线的 down 服务器） */
+function computeAffectedSwap(p: NginxSwapPayload): SwapScopeItem[] {
+  const items: SwapScopeItem[] = []
+  for (const u of upstreams.value) {
+    let hasOffline = false
+    let hasOnline = false
+    for (const s of u.servers) {
+      if (s.ip === p.offline_ip && s.status === 'up') hasOffline = true
+      if (s.ip === p.online_ip && s.status === 'down') hasOnline = true
+    }
+    if (hasOffline && hasOnline) {
+      items.push({ name: u.name, total: u.servers.length, up: upCount(u), down: downCount(u), checked: true })
+    }
+  }
+  return items
+}
+
+const swapScopeVisible = ref(false)
+const swapScopeList = ref<SwapScopeItem[]>([])
+const swapScopeIp = ref({ offline: '', online: '' })
+const swapScopePending = ref<NginxSwapPayload | null>(null)
+
+function onSwapScopeConfirm(names: string[]): void {
+  swapScopeVisible.value = false
+  const p = swapScopePending.value
+  if (!p || names.length === 0) return
+  void previewAction('swap', { ...p, upstream_names: names })
 }
 
 function onBatchConfirm(items: NginxBatchItem[]): void {
@@ -312,7 +354,7 @@ function onRollbackConfirm(backupFile: string): void {
 
       <div v-loading="listLoading" class="card table-card reveal d-1">
         <el-empty v-if="filteredUpstreams.length === 0 && !listLoading" :description="t('common.empty')" />
-        <el-table v-else :data="filteredUpstreams" row-key="name" :row-class-name="healthRowClass">
+        <el-table v-else v-force-reflow :data="filteredUpstreams" row-key="name" :row-class-name="healthRowClass">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="srv-wrap">
@@ -387,6 +429,15 @@ function onRollbackConfirm(backupFile: string): void {
     />
 
     <OutputDialog v-model:visible="outputVisible" :output="outputResult" :status="outputStatus" :meta="outputMeta" />
+
+    <!-- 切换范围确认：跨 upstream 一次切多组（对齐 v1 SwapDialog） -->
+    <SwapScopeDialog
+      v-model:visible="swapScopeVisible"
+      :offline-ip="swapScopeIp.offline"
+      :online-ip="swapScopeIp.online"
+      :affected="swapScopeList"
+      @confirm="onSwapScopeConfirm"
+    />
 
     <!-- 操作 / 批量 / 回滚 -->
     <OperateDialog

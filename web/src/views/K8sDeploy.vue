@@ -135,10 +135,22 @@ const ACTION_LABEL_KEY: Record<K8sAction, string> = {
   full_rollback: 'k8s.fullRollback',
 }
 
+// 动作前置校验（对齐 v1）：上线需有待发布（step 1/x）项目，同步/回滚需已上线
+const isPending = (r: Rollout): boolean => r.step.startsWith('1/')
+
 async function batchPreview(action: BatchAction): Promise<void> {
   if (!serverId.value) return
   if (selected.value.length === 0) {
     ElMessage.warning(t('k8s.selectedProjects', { count: 0 }))
+    return
+  }
+  if (action === 'online') {
+    if (!selected.value.some(isPending)) {
+      ElMessage.warning('所选项目中没有待发布的项目')
+      return
+    }
+  } else if (!selected.value.some((r) => !isPending(r))) {
+    ElMessage.warning('所选项目尚未上线，请先执行上线操作')
     return
   }
   pendingAction.value = action
@@ -150,6 +162,15 @@ async function batchPreview(action: BatchAction): Promise<void> {
 
 async function fullPreview(action: FullAction): Promise<void> {
   if (!serverId.value) return
+  if (action === 'full_online') {
+    if (!filtered.value.some(isPending)) {
+      ElMessage.warning('当前没有待发布的项目')
+      return
+    }
+  } else if (!filtered.value.some((r) => !isPending(r))) {
+    ElMessage.warning('当前没有已上线的项目，请先执行上线操作')
+    return
+  }
   pendingAction.value = action
   const sid = serverId.value
   // 全量操作先二次确认
@@ -268,6 +289,7 @@ onUnmounted(() => window.removeEventListener('page-refresh', handlePageRefresh))
       />
       <template v-else>
         <el-table
+          v-force-reflow
           ref="tableRef"
           :data="paged"
           row-key="name"
