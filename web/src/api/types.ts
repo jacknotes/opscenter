@@ -229,7 +229,7 @@ export interface K8sExecuteResult {
 
 // ---------- Preprod ----------
 export interface PreprodResource {
-  category: 'rollout' | 'deployment' | 'statefulset'
+  category: string
   name: string
   desired: number
   current: number
@@ -237,6 +237,9 @@ export interface PreprodResource {
   available: number
   age: string
   target_replicas: number
+  /** READY 列的就绪/目标副本数，反映 Pod 真实就绪状态（区别于控制器的 current/desired） */
+  ready: number
+  ready_desired: number
 }
 
 export interface PreprodPreview {
