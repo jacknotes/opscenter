@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { EChartsCoreOption } from 'echarts/core'
 import type { ActionStat, ProjectStat, ProjectSummary, ProjectTrendPoint, ServerResponse } from '@/api/types'
 import BaseChart from '@/components/BaseChart.vue'
+import DateRangeSelector from '@/components/DateRangeSelector.vue'
 import { useTheme } from '@/composables/useTheme'
 
 const props = defineProps<{
@@ -13,6 +14,8 @@ const props = defineProps<{
     countLabel: string
     servers: ServerResponse[]
     serverName: string
+    /** 卡片级日期范围（对齐 v1：每张统计卡独立选择时间段） */
+    dateRange: string[] | null
     loading: boolean
     summary: ProjectSummary
     trend: ProjectTrendPoint[]
@@ -23,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:serverName': [value: string]
+  'update:dateRange': [value: string[] | null]
   refresh: []
   toggleFullscreen: []
 }>()
@@ -115,7 +119,23 @@ const trendOption = computed<EChartsCoreOption>(() => {
   })
   return {
     tooltip: tooltipConf({ trigger: 'axis', formatter: filterZeroAxisTooltip }),
-    grid: { top: 10, right: 16, bottom: 20, left: 50 },
+    grid: { top: 10, right: 16, bottom: periods.length > 15 ? 40 : 20, left: 50 },
+    // 数据窗口缩放：周期较多时可拖动滑块查看区间（对齐 v1 dataZoom）
+    ...(periods.length > 15
+      ? {
+          dataZoom: [
+            {
+              type: 'slider',
+              height: 14,
+              bottom: 6,
+              startValue: periods[Math.max(0, periods.length - 15)],
+              end: 100,
+              borderColor: palette.value.border,
+              textStyle: { color: palette.value.muted, fontSize: 10 },
+            },
+          ],
+        }
+      : {}),
     xAxis: {
       type: 'category',
       data: periods,
@@ -179,6 +199,10 @@ function onServerChange(val: string | undefined): void {
   emit('update:serverName', val ?? '')
   emit('refresh')
 }
+
+function onDateRangeChange(val: string[] | null): void {
+  emit('update:dateRange', val)
+}
 </script>
 
 <template>
@@ -191,6 +215,10 @@ function onServerChange(val: string | undefined): void {
     <div class="chart-head">
       <h3 class="chart-title">{{ props.title }}</h3>
       <div class="head-controls">
+        <DateRangeSelector
+          :model-value="props.dateRange"
+          @update:model-value="onDateRangeChange"
+        />
         <el-select
           :model-value="props.serverName"
           placeholder="全部服务器"

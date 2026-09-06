@@ -37,8 +37,12 @@ const activity = ref<ActivityStats | null>(null)
 const k8sProjects = ref<ProjectStatsResponse | null>(null)
 const preprodProjects = ref<ProjectStatsResponse | null>(null)
 
-// ---- 共享日期范围：驱动全部统计图表（activity / k8s / preprod） ----
+// ---- 共享日期范围：驱动活动统计图表（activity） ----
 const dateRange = ref<string[] | null>(null)
+
+// ---- 卡片级日期范围：K8S/预生产统计卡各自独立选择（对齐 v1） ----
+const k8sDateRange = ref<string[] | null>(null)
+const preprodDateRange = ref<string[] | null>(null)
 
 const k8sServerName = ref('')
 const preprodServerName = ref('')
@@ -85,21 +89,38 @@ async function loadActivity(): Promise<void> {
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
     })
+    // 今日登录成功/失败（login_stats 为 admin 数据，非 admin 拿不到则保持 0）
+    const today = localToday()
+    const todayLogins = (activity.value?.login_stats ?? []).filter((d) => d.period === today)
+    todayLoginSuccess.value = todayLogins.find((d) => d.status === 'success')?.count ?? 0
+    todayLoginFailed.value = todayLogins.find((d) => d.status === 'failed')?.count ?? 0
   } catch (err) {
     activity.value = null
+    todayLoginSuccess.value = 0
+    todayLoginFailed.value = 0
     console.warn(extractErrorMessage(err, t('dashboard.remoteError')))
   } finally {
     loading.value = false
   }
 }
 
+/** 本地日期（YYYY-MM-DD）——login_stats 的 period 以本地时区生成 */
+function localToday(): string {
+  const d = new Date()
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+const todayLoginSuccess = ref(0)
+const todayLoginFailed = ref(0)
+
 async function loadK8sProjects(): Promise<void> {
-  if (!dateRange.value || dateRange.value.length !== 2) return
+  if (!k8sDateRange.value || k8sDateRange.value.length !== 2) return
   k8sLoading.value = true
   try {
     k8sProjects.value = await dashboardApi.k8sProjectStats({
-      start_date: dateRange.value[0],
-      end_date: dateRange.value[1],
+      start_date: k8sDateRange.value[0],
+      end_date: k8sDateRange.value[1],
       ...(k8sServerName.value ? { server_name: k8sServerName.value } : {}),
     })
   } catch (err) {
@@ -111,12 +132,12 @@ async function loadK8sProjects(): Promise<void> {
 }
 
 async function loadPreprodProjects(): Promise<void> {
-  if (!dateRange.value || dateRange.value.length !== 2) return
+  if (!preprodDateRange.value || preprodDateRange.value.length !== 2) return
   preprodLoading.value = true
   try {
     preprodProjects.value = await dashboardApi.preprodProjectStats({
-      start_date: dateRange.value[0],
-      end_date: dateRange.value[1],
+      start_date: preprodDateRange.value[0],
+      end_date: preprodDateRange.value[1],
       ...(preprodServerName.value ? { server_name: preprodServerName.value } : {}),
     })
   } catch (err) {
@@ -151,7 +172,13 @@ function refreshAll(): void {
 // DateRangeSelector onMounted 会 emit 初始范围，触发本 watch 完成首次加载
 watch(dateRange, () => {
   void loadActivity()
+})
+
+watch(k8sDateRange, () => {
   void loadK8sProjects()
+})
+
+watch(preprodDateRange, () => {
   void loadPreprodProjects()
 })
 
@@ -278,6 +305,22 @@ const deployTrendOption = computed<EChartsCoreOption>(() => {
     },
     color: modules.map((m) => MODULE_COLORS[m]),
     grid: { left: 60, right: 80, top: 20, bottom: 40 },
+    // 数据窗口缩放：周期较多时可拖动滑块查看区间（对齐 v1 dataZoom）
+    ...(periods.length > 15
+      ? {
+          dataZoom: [
+            {
+              type: 'slider',
+              height: 14,
+              bottom: 6,
+              startValue: periods[Math.max(0, periods.length - 15)],
+              end: 100,
+              borderColor: chartPalette.value.border,
+              textStyle: { color: chartPalette.value.muted, fontSize: 10 },
+            },
+          ],
+        }
+      : {}),
     xAxis: {
       type: 'category',
       data: periods,
@@ -316,6 +359,22 @@ const loginBarOption = computed<EChartsCoreOption>(() => {
     },
     color: ['#34d399', '#f87171'],
     grid: { left: 60, right: 80, top: 20, bottom: 40 },
+    // 数据窗口缩放（对齐 v1 dataZoom）
+    ...(periods.length > 15
+      ? {
+          dataZoom: [
+            {
+              type: 'slider',
+              height: 14,
+              bottom: 6,
+              startValue: periods[Math.max(0, periods.length - 15)],
+              end: 100,
+              borderColor: p.border,
+              textStyle: { color: p.muted, fontSize: 10 },
+            },
+          ],
+        }
+      : {}),
     xAxis: {
       type: 'category',
       data: periods,
@@ -449,6 +508,57 @@ const actionModules = computed(() => [
 
 // ---------- 项目统计默认值 ----------
 const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
+
+// ---------- 分布饼图：服务器类型 / 用户角色（admin，对齐 v1） ----------
+const serverTypePie = computed<EChartsCoreOption>(() => {
+  const byType = srv.value?.by_type
+  if (!byType || Object.keys(byType).length === 0) return {}
+  const data = Object.entries(byType).map(([k, v]) => ({
+    name: k === 'kubernetes' ? 'K8S' : k.toUpperCase(),
+    value: v,
+  }))
+  return {
+    tooltip: tooltipConf({ trigger: 'item', formatter: '{b}: {c} 台 ({d}%)' }),
+    legend: { bottom: 0, textStyle: { color: chartPalette.value.muted, fontSize: 12 } },
+    color: ['#818cf8', '#a78bfa', '#38bdf8', '#34d399', '#fbbf24'],
+    series: [
+      {
+        type: 'pie',
+        radius: '58%',
+        center: ['50%', '44%'],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 8, borderColor: chartPalette.value.tooltipBg, borderWidth: 3 },
+        label: { show: true, formatter: '{b}\n{c} 台', color: chartPalette.value.muted, fontSize: 12 },
+        data,
+      },
+    ],
+  }
+})
+
+const userRolePie = computed<EChartsCoreOption>(() => {
+  const byRole = usr.value?.by_role
+  if (!byRole || Object.keys(byRole).length === 0) return {}
+  const data = Object.entries(byRole).map(([k, v]) => ({
+    name: k === 'admin' ? '管理员' : '普通用户',
+    value: v,
+  }))
+  return {
+    tooltip: tooltipConf({ trigger: 'item', formatter: '{b}: {c} 人 ({d}%)' }),
+    legend: { bottom: 0, textStyle: { color: chartPalette.value.muted, fontSize: 12 } },
+    color: ['#f87171', '#94a3b8'],
+    series: [
+      {
+        type: 'pie',
+        radius: '58%',
+        center: ['50%', '44%'],
+        avoidLabelOverlap: true,
+        itemStyle: { borderRadius: 8, borderColor: chartPalette.value.tooltipBg, borderWidth: 3 },
+        label: { show: true, formatter: '{b}\n{c} 人', color: chartPalette.value.muted, fontSize: 12 },
+        data,
+      },
+    ],
+  }
+})
 </script>
 
 <template>
@@ -481,6 +591,8 @@ const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
       <div v-if="auth.isAdmin" class="online-card" title="点击查看在线用户列表" @click="showOnlineUsers">
         <StatCard :label="t('dashboard.onlineUsers')" :value="fmt(stats?.online_users)" :delay="2" color="var(--emerald-400)" live />
       </div>
+      <StatCard v-if="auth.isAdmin" label="今日登录成功" :value="fmt(todayLoginSuccess)" :delay="7" color="var(--emerald-400)" />
+      <StatCard v-if="auth.isAdmin" label="今日登录失败" :value="fmt(todayLoginFailed)" :delay="8" color="var(--rose-400)" />
       <StatCard :label="t('dashboard.lvsVs')" :value="fmt(lvsR?.vs_count)" :hint="`${t('dashboard.lvsRsOnline')} ${fmt(lvsR?.rs_online)} / ${t('dashboard.lvsRsOffline')} ${fmt(lvsR?.rs_offline)}`" :delay="3" color="var(--sky-400)" />
       <StatCard :label="t('dashboard.nginxUpstreams')" :value="fmt(ngxR?.upstream_count)" :hint="`${t('dashboard.nginxOnline')} ${fmt(ngxR?.server_online)} / ${t('dashboard.nginxOffline')} ${fmt(ngxR?.server_offline)}`" :delay="4" color="var(--amber-400)" />
       <StatCard :label="t('dashboard.k8sRollouts')" :value="fmt(k8sR?.total_rollouts)" :hint="`${t('dashboard.k8sPending')} ${fmt(k8sR?.pending)} / ${t('dashboard.k8sOnline')} ${fmt(k8sR?.online)}`" :delay="5" color="var(--indigo-600)" />
@@ -498,6 +610,34 @@ const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
       :preprod="preR ?? null"
       @retry="loadRemote"
     />
+
+    <!-- 服务器类型 / 用户角色分布（admin，对齐 v1） -->
+    <div v-if="auth.isAdmin" class="charts-row-2">
+      <div class="card chart-card reveal d-1">
+        <div class="chart-head">
+          <h3 class="chart-title">服务器类型分布</h3>
+          <el-tag size="small" type="info" effect="plain">共 {{ fmt(srv?.total) }} 台</el-tag>
+        </div>
+        <BaseChart
+          v-if="Object.keys(serverTypePie).length > 0"
+          :option="serverTypePie"
+          height="260px"
+        />
+        <div v-else class="chart-empty">暂无数据</div>
+      </div>
+      <div class="card chart-card reveal d-2">
+        <div class="chart-head">
+          <h3 class="chart-title">用户角色分布</h3>
+          <el-tag size="small" type="info" effect="plain">共 {{ fmt(usr?.total) }} 人</el-tag>
+        </div>
+        <BaseChart
+          v-if="Object.keys(userRolePie).length > 0"
+          :option="userRolePie"
+          height="260px"
+        />
+        <div v-else class="chart-empty">暂无数据</div>
+      </div>
+    </div>
 
     <!-- 发布趋势 + 登录统计 + 操作动作明细 -->
     <div class="charts-row-3">
@@ -610,6 +750,7 @@ const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
         count-label="发布次数"
         :servers="k8sServers"
         v-model:server-name="k8sServerName"
+        v-model:date-range="k8sDateRange"
         :loading="k8sLoading"
         :summary="k8sProjects?.summary ?? EMPTY_SUMMARY"
         :trend="k8sProjects?.trend ?? []"
@@ -629,6 +770,7 @@ const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
         count-label="操作次数"
         :servers="preprodServers"
         v-model:server-name="preprodServerName"
+        v-model:date-range="preprodDateRange"
         :loading="preprodLoading"
         :summary="preprodProjects?.summary ?? EMPTY_SUMMARY"
         :trend="preprodProjects?.trend ?? []"
@@ -686,8 +828,21 @@ const EMPTY_SUMMARY = { total: 0, success: 0, failed: 0, full_ops: 0 }
   margin-bottom: var(--space-4);
 }
 
-@media (max-width: 1200px) {
+.charts-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 900px) {
   .charts-row-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .charts-row-2 {
     grid-template-columns: 1fr;
   }
 }
