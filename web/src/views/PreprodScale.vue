@@ -81,15 +81,13 @@
         <el-table-column prop="current" label="当前副本" width="100" align="center" sortable>
           <template #default="{ row }">
             <span>{{ row.current }}</span>
-            <el-tag v-if="row.ready_desired === 0 && row.ready === 0" type="info" size="small" style="margin-left: 4px">已缩容</el-tag>
             <el-tag
-              v-else-if="row.ready > 0 && row.ready === row.ready_desired"
-              type="success"
+              :type="resolveStatus(row).tagType"
               size="small"
               style="margin-left: 4px"
-              >正常</el-tag
+              :title="resolveStatus(row).title"
+              >{{ resolveStatus(row).label }}</el-tag
             >
-            <el-tag v-else type="warning" size="small" style="margin-left: 4px">启动中</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="target_replicas" label="目标副本" width="90" align="center" sortable>
@@ -395,6 +393,7 @@ import {
 } from '../api'
 import { useWebSocketStore } from '../stores/websocket'
 import { useUserStore } from '../stores/user'
+import { resolveStatus } from './preprodStatus'
 import { useServerSelector } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
