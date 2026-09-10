@@ -138,13 +138,7 @@
           <div class="header-title">{{ route.meta.title }}</div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px">
-          <div
-            class="theme-toggle"
-            :title="appStore.theme === 'dark' ? '切换到浅色模式' : '切换到深色模式'"
-            @click="appStore.toggleTheme()"
-          >
-            <el-icon :size="18"><Sunny v-if="appStore.theme === 'dark'" /><Moon v-else /></el-icon>
-          </div>
+          <ThemeToggle />
           <el-popover
             placement="bottom-end"
             trigger="click"
@@ -259,9 +253,8 @@ import {
   Expand,
   UserFilled,
   ArrowDown,
-  Sunny,
-  Moon,
 } from '@element-plus/icons-vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -578,25 +571,6 @@ async function submitChangePwd() {
 }
 
 /* 主题切换按钮 */
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: #94a3b8;
-  transition:
-    background 0.2s,
-    color 0.2s;
-}
-
-.theme-toggle:hover {
-  background: rgba(6, 182, 212, 0.1);
-  color: #06b6d4;
-}
-
 /* 底部状态栏 */
 .status-bar {
   display: flex;

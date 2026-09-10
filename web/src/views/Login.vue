@@ -1,5 +1,8 @@
 <template>
   <div class="login-container">
+    <div class="theme-toggle-wrapper">
+      <ThemeToggle :size="20" />
+    </div>
     <div class="login-card">
       <div class="login-brand">
         <div class="login-logo">OC</div>
@@ -38,6 +41,7 @@ import { useUserStore } from '../stores/user'
 import { login } from '../api'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -77,6 +81,13 @@ async function handleLogin() {
 }
 
 /* 背景装饰 — 缓慢呼吸动画 */
+.theme-toggle-wrapper {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 2;
+}
+
 .login-container::before {
   content: '';
   position: absolute;
