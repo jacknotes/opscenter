@@ -60,3 +60,7 @@ temp/
 
 # Generated Docs (regenerate with: swag init)
 docs/
+
+# unplugin 自动生成的类型声明（dts: false 后不再维护）
+web/src/auto-imports.d.ts
+web/src/components.d.ts

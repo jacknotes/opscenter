@@ -13,11 +13,12 @@ export default defineConfig({
     AutoImport({
       resolvers: [ElementPlusResolver()],
       imports: ['vue', 'vue-router', 'pinia'],
-      dts: 'src/auto-imports.d.ts',
+      // 项目以 JS 为主，生成 d.ts 会被 dev server 反复重写、污染 git 工作区，故关闭
+      dts: false,
     }),
     Components({
       resolvers: [ElementPlusResolver()],
-      dts: 'src/components.d.ts',
+      dts: false,
     }),
   ],
   resolve: {
