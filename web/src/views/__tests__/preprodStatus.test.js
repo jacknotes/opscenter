@@ -43,7 +43,14 @@ describe('resolveStatus', () => {
 
   it('规则5c: 非 rollout 类型就绪不满 → 启动中（不依赖 up_to_date）', () => {
     expect(
-      resolveStatus({ current: 2, ready: 1, ready_desired: 2, target_replicas: 2, category: 'deployment', up_to_date: 0 })
+      resolveStatus({
+        current: 2,
+        ready: 1,
+        ready_desired: 2,
+        target_replicas: 2,
+        category: 'deployment',
+        up_to_date: 0,
+      })
     ).toEqual({ label: '启动中', tagType: 'warning' })
   })
 
@@ -60,6 +67,13 @@ describe('resolveStatus', () => {
       label: '异常',
       tagType: 'danger',
       title: '副本数据不一致，请检查控制器状态',
+    })
+  })
+
+  it('边界: rollout 缺 up_to_date 字段且就绪不满 → 恢复中（0 >= ready_desired 不成立时视为版本已一致）', () => {
+    expect(resolveStatus({ current: 2, ready: 1, ready_desired: 2, target_replicas: 2, category: 'rollout' })).toEqual({
+      label: '恢复中',
+      tagType: 'warning',
     })
   })
 })

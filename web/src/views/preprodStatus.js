@@ -1,6 +1,8 @@
 /**
  * 预生产资源状态判定（设计文档：docs/superpowers/specs/2026-09-10-preprod-status-design.md）。
  * 规则按优先级排列，命中即返回；字段含义见 internal/service/preprod.go 的 PreprodResource。
+ *
+ * 返回 { label, tagType, title? }，title 为可选悬浮提示文案（仅"异常"状态有）。
  */
 export function resolveStatus(row) {
   const { current, ready, ready_desired, target_replicas, category, up_to_date } = row
@@ -32,5 +34,6 @@ export function resolveStatus(row) {
   if (ready === ready_desired) {
     return { label: '正常', tagType: 'success' }
   }
+  // ready > ready_desired：就绪数超过目标数，数据不一致
   return { label: '异常', tagType: 'danger', title: '副本数据不一致，请检查控制器状态' }
 }
