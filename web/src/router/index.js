@@ -88,7 +88,13 @@ router.beforeEach((to, from, next) => {
   if (!token) token = localStorage.getItem('token')
   if (!role) role = localStorage.getItem('role')
   if (to.path === '/login') {
-    next()
+    // 已登录用户访问登录页时跳转到默认页，避免同浏览器第二个用户登录
+    // 后覆盖前一个用户的会话（所有标签页共享同一 localStorage token）
+    if (token) {
+      next('/dashboard')
+    } else {
+      next()
+    }
   } else if (!token) {
     next('/login')
   } else if (to.meta.admin && role !== 'admin') {
