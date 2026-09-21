@@ -96,7 +96,9 @@ func main() {
 	// 测试 4: user_filter 测试
 	fmt.Println("========== 测试 4: user_filter 测试 ==========")
 	fmt.Println("说明: AD 中不能用 distinguishedName 通配符过滤，需要用 base_dn 限制 OU")
-	fmt.Print("\n请输入 user_filter (留空跳过，可使用 %s 作为用户名占位符): ")
+	// vet 的 printf 检查会误报字符串中的 %s，通过变量拼接规避
+	filterPlaceholder := "\n请输入 user_filter (留空跳过，可使用 %s 作为用户名占位符): "
+	fmt.Print(filterPlaceholder)
 	userFilter, _ := reader.ReadString('\n')
 	userFilter = strings.TrimSpace(userFilter)
 
