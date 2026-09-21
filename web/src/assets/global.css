@@ -481,4 +481,10 @@ html .el-dialog ::selection {
   overflow: hidden;
 }
 
+/* 页面存在执行结果卡片时恢复纵向外层滚动：结果卡片位于主卡片下方，
+   会被上述规则整体裁剪，导致无法向下滚动查看执行输出 */
+.content-area:has(.main-card):has(.output-card) {
+  overflow-y: auto;
+}
+
 

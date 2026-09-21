@@ -249,7 +249,7 @@
     </el-dialog>
 
     <!-- Output Area -->
-    <el-card v-if="output" style="margin-top: 20px">
+    <el-card v-if="output" class="output-card" style="margin-top: 20px">
       <template #header>执行结果</template>
       <pre class="terminal-pre">{{ output }}</pre>
     </el-card>
