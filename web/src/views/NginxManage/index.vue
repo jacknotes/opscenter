@@ -337,7 +337,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
 import {
   getNginxConfigs,
   getNginxUpstreams,
