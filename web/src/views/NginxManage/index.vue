@@ -337,7 +337,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
 import {
   getNginxConfigs,
   getNginxUpstreams,
@@ -388,17 +388,6 @@ const currentBatchInfo = ref(null)
 const expandedUpstreams = ref([])
 const filterKeyword = ref('')
 const statusFilter = ref('all')
-
-// 默认展开所有 upstream：数据加载后无论经由哪条路径到达页面
-// （首次进入 / keep-alive 激活 / 切换服务器或配置文件），列表都以展开状态呈现。
-// watch 而非仅在 loadUpstreams 中赋值，保证展开状态与数据始终同步，不会遗漏。
-watch(
-  upstreams,
-  (list) => {
-    expandedUpstreams.value = list.map((u) => u.name)
-  },
-  { immediate: true }
-)
 const rawConfig = ref('')
 const configDialogVisible = ref(false)
 const loadingUpstreams = ref(false)
