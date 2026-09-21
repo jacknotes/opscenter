@@ -745,11 +745,11 @@ func (h *DashboardHandler) fetchLVSStats(ctx context.Context) (gin.H, error) {
 	var mu sync.Mutex
 	var errs []string
 
-	for i, srv := range servers {
+	for i := range servers {
 		wg.Add(1)
-		go func(idx int, server model.Server) {
+		go func(idx int, server *model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSingleLVS(ctx, &server)
+			d, err := h.fetchSingleLVS(ctx, server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -757,7 +757,7 @@ func (h *DashboardHandler) fetchLVSStats(ctx context.Context) (gin.H, error) {
 				return
 			}
 			results[idx] = d
-		}(i, srv)
+		}(i, &servers[i])
 	}
 
 	wg.Wait()
@@ -831,11 +831,11 @@ func (h *DashboardHandler) fetchNginxStats(ctx context.Context) (gin.H, error) {
 	var mu sync.Mutex
 	var errs []string
 
-	for i, srv := range servers {
+	for i := range servers {
 		wg.Add(1)
-		go func(idx int, server model.Server) {
+		go func(idx int, server *model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSingleNginx(ctx, &server)
+			d, err := h.fetchSingleNginx(ctx, server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -843,7 +843,7 @@ func (h *DashboardHandler) fetchNginxStats(ctx context.Context) (gin.H, error) {
 				return
 			}
 			results[idx] = d
-		}(i, srv)
+		}(i, &servers[i])
 	}
 
 	wg.Wait()
@@ -968,11 +968,11 @@ func (h *DashboardHandler) fetchK8sStats(ctx context.Context) (gin.H, error) {
 	var wg sync.WaitGroup
 	var errs []string
 
-	for _, srv := range servers {
+	for i := range servers {
 		wg.Add(1)
-		go func(server model.Server) {
+		go func(server *model.Server) {
 			defer wg.Done()
-			output, err := h.sshManager.ExecuteWithTimeout(ctx, &server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
+			output, err := h.sshManager.ExecuteWithTimeout(ctx, server, server.ScriptPath+" list", config.Global.Timeouts.DashboardSSH)
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Sprintf("%s: %v", server.Name, err))
@@ -983,7 +983,7 @@ func (h *DashboardHandler) fetchK8sStats(ctx context.Context) (gin.H, error) {
 			mu.Lock()
 			allRollouts = append(allRollouts, rollouts...)
 			mu.Unlock()
-		}(srv)
+		}(&servers[i])
 	}
 
 	wg.Wait()
@@ -1031,11 +1031,11 @@ func (h *DashboardHandler) fetchPreprodStats(ctx context.Context) (gin.H, error)
 	var mu sync.Mutex
 	var errs []string
 
-	for i, srv := range servers {
+	for i := range servers {
 		wg.Add(1)
-		go func(idx int, server model.Server) {
+		go func(idx int, server *model.Server) {
 			defer wg.Done()
-			d, err := h.fetchSinglePreprod(ctx, &server)
+			d, err := h.fetchSinglePreprod(ctx, server)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -1043,7 +1043,7 @@ func (h *DashboardHandler) fetchPreprodStats(ctx context.Context) (gin.H, error)
 				return
 			}
 			results[idx] = prepodResult{Resources: d}
-		}(i, srv)
+		}(i, &servers[i])
 	}
 
 	wg.Wait()

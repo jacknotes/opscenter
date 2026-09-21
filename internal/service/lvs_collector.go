@@ -91,17 +91,17 @@ func (c *LvsCollector) collect(ctx context.Context) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	for _, srv := range servers {
+	for i := range servers {
 		wg.Add(1)
-		go func(server model.Server) {
+		go func(server *model.Server) {
 			defer wg.Done()
-			stats := c.collectOne(ctx, &server, now)
+			stats := c.collectOne(ctx, server, now)
 			if len(stats) > 0 {
 				mu.Lock()
 				allStats = append(allStats, stats...)
 				mu.Unlock()
 			}
-		}(srv)
+		}(&servers[i])
 	}
 
 	wg.Wait()

@@ -333,9 +333,9 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 		done     bool
 	)
 
-	for _, lvsServer := range lvsServers {
+	for i := range lvsServers {
 		wg.Add(1)
-		go func(srv model.Server) {
+		go func(srv *model.Server) {
 			defer wg.Done()
 
 			// 检查是否已有结果
@@ -347,7 +347,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			mu.Unlock()
 
 			// 获取 LVS 数据
-			output, err := h.sshManager.Execute(ctx, &srv, srv.ScriptPath+" list")
+			output, err := h.sshManager.Execute(ctx, srv, srv.ScriptPath+" list")
 			if err != nil {
 				return
 			}
@@ -357,7 +357,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			}
 
 			// 补充下线 RS
-			statusOutput, statusErr := h.sshManager.Execute(ctx, &srv, srv.ScriptPath+" status")
+			statusOutput, statusErr := h.sshManager.Execute(ctx, srv, srv.ScriptPath+" status")
 			if statusErr == nil && statusOutput != "" {
 				statusGroups := h.lvsService.ParseStatusOutput(statusOutput)
 				vsList = h.lvsService.MergeOfflineRS(vsList, statusGroups)
@@ -374,7 +374,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 			for ip := range vsIPSet {
 				vsIPs = append(vsIPs, ip)
 			}
-			roles := h.lvsService.DetectRoles(vsIPs, &srv)
+			roles := h.lvsService.DetectRoles(vsIPs, srv)
 
 			// 查询 VS 标签
 			var vsTags []model.LvsVSTag
@@ -436,7 +436,7 @@ func (h *PreprodHandler) CheckLvsForScaleDown(c *gin.Context) {
 					}
 				}
 			}
-		}(lvsServer)
+		}(&lvsServers[i])
 	}
 	wg.Wait()
 
