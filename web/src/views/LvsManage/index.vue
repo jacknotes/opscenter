@@ -328,7 +328,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { showLoadError } from '../../utils/message'
+import { showApiError, isAuthError, showLoadError } from '../../utils/message'
 import { ArrowRight, ArrowDown, Connection } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../utils/constants'
 import TagDialog from './TagDialog.vue'
@@ -569,7 +569,9 @@ async function loadData() {
     if (allExpanded.value) expandedVIPs.value = new Set(groupedData.value.map((g) => g.ip))
     if (vsFilter.value && !groupedData.value.some((g) => g.ip === vsFilter.value)) vsFilter.value = ''
   } catch (e) {
-    if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) ElMessage.error('连接超时，目标服务器可能不可达')
+    if (isAuthError(e)) {
+      // 401/403 已由拦截器统一提示，跳过重复报错
+    } else if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) ElMessage.error('连接超时，目标服务器可能不可达')
     else if (e.response?.data?.error) ElMessage.error(e.response.data.error)
     else if (!e.response) ElMessage.error('网络异常')
     else showLoadError(e, '加载数据失败：' + (e.message || '未知错误'))
@@ -632,7 +634,7 @@ async function loadStatus() {
     statusRaw.value = res.output || '无数据'
     statusVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '获取状态失败')
+    showApiError(e, '获取状态失败')
   } finally {
     statusLoading.value = false
   }
@@ -760,7 +762,7 @@ async function handleBatchOnline() {
         if (!confirmed) return
       }
     } catch (e) {
-      ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+      if (!isAuthError(e)) ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
       return
     }
   }
@@ -785,7 +787,7 @@ async function handleBatchOnline() {
     previewId.value = previews[0].preview_id
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -839,7 +841,7 @@ async function handleBatchOffline() {
     previewId.value = previews[0].preview_id
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -861,7 +863,7 @@ async function handleSwap() {
       if (!confirmed) return
     }
   } catch (e) {
-    ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+    if (!isAuthError(e)) ElMessage.error(`预生产安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
     return
   }
   try {
@@ -871,7 +873,7 @@ async function handleSwap() {
     currentAction.value = 'swap'
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -905,7 +907,7 @@ async function executePreview() {
     previewVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '执行失败')
+    showApiError(e, '执行失败')
     output.value = e.response?.data?.output || ''
   } finally {
     executing.value = false
@@ -944,7 +946,7 @@ async function handleSaveTag(formData) {
     tagDialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '保存失败')
+    showApiError(e, '保存失败')
   } finally {
     tagSaving.value = false
   }
@@ -967,7 +969,7 @@ async function handleDeleteTag(formData) {
     tagDialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '删除失败')
+    showApiError(e, '删除失败')
   } finally {
     tagSaving.value = false
   }
@@ -986,7 +988,7 @@ async function handleSaveVSTag(formData) {
     vsTagDialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '保存失败')
+    showApiError(e, '保存失败')
   } finally {
     vsTagSaving.value = false
   }
@@ -1009,7 +1011,7 @@ async function handleDeleteVSTag(formData) {
     vsTagDialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '删除失败')
+    showApiError(e, '删除失败')
   } finally {
     vsTagSaving.value = false
   }

@@ -241,6 +241,7 @@ import { getUserInfo, changePassword, logout } from '../api'
 import { clearServerCache } from '../composables/useServerSelector'
 import { useWebSocketStore } from '../stores/websocket'
 import { ElMessage } from 'element-plus'
+import { showApiError } from '../utils/message'
 import {
   Monitor,
   Connection,
@@ -352,7 +353,7 @@ async function submitChangePwd() {
     ElMessage.success('密码修改成功')
     changePwdVisible.value = false
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '修改失败')
+    showApiError(e, '修改失败')
   } finally {
     changePwdLoading.value = false
   }

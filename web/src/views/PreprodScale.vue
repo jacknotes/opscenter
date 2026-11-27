@@ -398,7 +398,7 @@ import { useServerSelector } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { showLoadError } from '../utils/message'
+import { showApiError, isAuthError, showLoadError } from '../utils/message'
 import { ZoomOut } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -649,7 +649,7 @@ async function handleAddBinding() {
     const list = await getLvsBindings({ preprod_server_id: serverId.value })
     bindings.value = list || []
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '保存失败')
+    showApiError(e, '保存失败')
   }
 }
 
@@ -668,7 +668,7 @@ async function handleDeleteBinding(id) {
     ElMessage.success('绑定已删除')
     bindings.value = bindings.value.filter((b) => b.id !== id)
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '删除失败')
+    showApiError(e, '删除失败')
   }
 }
 
@@ -708,7 +708,7 @@ async function handleBatchScaleDown() {
       if (!confirmed) return
     }
   } catch (e) {
-    ElMessage.error(`LVS 安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
+    if (!isAuthError(e)) ElMessage.error(`LVS 安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
     return
   }
 
@@ -795,7 +795,7 @@ async function doPreview(action, resourceNames) {
     currentAction.value = action
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 

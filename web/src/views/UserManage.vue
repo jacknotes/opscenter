@@ -231,7 +231,7 @@ import {
   batchUnlockUsers,
   batchKickUsers,
 } from '../api'
-import { showBatchResult, showLoadError } from '../utils/message'
+import { showBatchResult, showApiError, showLoadError } from '../utils/message'
 import { formatTime } from '../utils/format'
 import { useUserStore } from '../stores/user'
 import { useSelection } from '../composables/useSelection'
@@ -507,7 +507,7 @@ async function handleToggle(row) {
     ElMessage.success(`已${action}`)
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '操作失败')
+      showApiError(e, '操作失败')
     }
   }
 }
@@ -559,7 +559,7 @@ async function handleBatchToggle() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || `批量${action}失败`)
+      showApiError(e, `批量${action}失败`)
     }
   }
 }
@@ -587,7 +587,7 @@ async function handleBatchDelete() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '批量删除失败')
+      showApiError(e, '批量删除失败')
     }
   }
 }
@@ -610,7 +610,7 @@ async function handleBatchUnlock() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '批量解锁失败')
+      showApiError(e, '批量解锁失败')
     }
   }
 }
@@ -666,7 +666,7 @@ async function handleBatchKick() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '批量下线失败')
+      showApiError(e, '批量下线失败')
     }
   }
 }
@@ -717,7 +717,7 @@ async function handleSubmit() {
     dialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    showApiError(e, '操作失败')
   } finally {
     submitting.value = false
   }
@@ -735,7 +735,7 @@ async function handleSubmitResetPwd() {
     ElMessage.success('密码重置成功')
     resetPwdVisible.value = false
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '重置失败')
+    showApiError(e, '重置失败')
   } finally {
     submitting.value = false
   }
@@ -767,7 +767,7 @@ async function showLdapImport() {
       imported: importedUsernames.has(u.username),
     }))
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '获取 LDAP 用户失败')
+    showApiError(e, '获取 LDAP 用户失败')
     ldapImportVisible.value = false
   } finally {
     ldapLoading.value = false
@@ -802,7 +802,7 @@ async function handleImportLdapUsers() {
     ldapImportVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '导入失败')
+    showApiError(e, '导入失败')
   } finally {
     importing.value = false
   }

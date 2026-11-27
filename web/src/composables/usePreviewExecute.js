@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { showApiError } from '../utils/message'
 
 /**
  * 预览→执行流程组合式函数
@@ -46,7 +47,7 @@ export function usePreviewExecute(executeFnMap, loadDataFn, opts = {}) {
         // loadData 已经处理了错误提示
       }
     } catch (e) {
-      ElMessage.error(e.response?.data?.error || '执行失败')
+      showApiError(e, '执行失败')
       throw e
     } finally {
       executing.value = false

@@ -144,7 +144,7 @@ import { useSelection } from '../composables/useSelection'
 import { useOutputCache } from '../composables/useOutputCache'
 import { usePreviewExecute } from '../composables/usePreviewExecute'
 import { ElMessage } from 'element-plus'
-import { showLoadError } from '../utils/message'
+import { showApiError, showLoadError } from '../utils/message'
 import { Box } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
 
@@ -254,6 +254,8 @@ function handleServerChange() {
 function onStatusFilter(cmd) {
   statusFilter.value = cmd
   currentPage.value = 1
+  // 状态筛选变化后立即重新拉取列表，无需手动点击"刷新"
+  loadData().catch(() => {})
 }
 
 async function handleRefresh() {
@@ -355,7 +357,7 @@ async function handleBatch(action) {
     })
     openPreview(res, action)
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -370,7 +372,7 @@ async function handleFull(action) {
     const res = await previewFn({ server_id: serverId.value })
     openPreview(res, 'full_' + action)
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 

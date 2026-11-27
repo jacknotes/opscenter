@@ -65,6 +65,15 @@ api.interceptors.response.use(
           setTimeout(() => { loginExpiredShown = false }, 1000)
         })
       }
+      // 标记该 401 已由拦截器统一提示（"当前登录已失效"），
+      // 视图层捕获到此错误时跳过重复的错误弹窗（如"未提供认证令牌"）
+      error._authHandled = true
+    } else if (error.response?.status === 403) {
+      // 权限不足：统一在拦截器提示一次，视图层跳过重复弹窗
+      if (!error._authHandled) {
+        error._authHandled = true
+        ElMessage.error(error.response.data?.error || '没有权限执行此操作')
+      }
     }
     return Promise.reject(error)
   }

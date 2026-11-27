@@ -51,7 +51,10 @@
             @click="toggleStatusFilter('down')"
             >离线 <b>{{ totalDownCount }}</b></span
           >
-          <span class="stat-chip stat-chip-primary"
+          <span
+            class="stat-chip stat-chip-primary"
+            :class="{ 'stat-chip-active': statusFilter === 'selected' }"
+            @click="toggleStatusFilter('selected')"
             >已选 <b>{{ selectedServers.length }}</b></span
           >
         </div>
@@ -337,7 +340,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, computed, onMounted, onActivated } from 'vue'
+import { ref, shallowRef, computed, watch, onMounted, onActivated } from 'vue'
 import {
   getNginxConfigs,
   getNginxUpstreams,
@@ -358,7 +361,7 @@ import {
 import { useServerSelector } from '../../composables/useServerSelector'
 import { useOutputCache } from '../../composables/useOutputCache'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { showLoadError } from '../../utils/message'
+import { showApiError, isAuthError, showLoadError } from '../../utils/message'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../utils/constants'
 import BackupDialog from './BackupDialog.vue'
@@ -500,6 +503,12 @@ const filteredUpstreams = computed(() => {
     list = list.filter((u) => u.servers.some((s) => s.status === 'up'))
   } else if (statusFilter.value === 'down') {
     list = list.filter((u) => u.servers.some((s) => s.status === 'down'))
+  } else if (statusFilter.value === 'selected') {
+    // 已选筛选：仅显示包含已勾选后端的 upstream 分组
+    list = list.filter((u) => {
+      const set = selectedMap.value[u.name]
+      return set && set.size > 0
+    })
   }
   return list.map((u) => {
     const upCount = u.servers.filter((s) => s.status === 'up').length
@@ -550,7 +559,12 @@ function toggleExpandAll() {
 }
 
 function toggleStatusFilter(type) {
-  statusFilter.value = statusFilter.value === type ? 'all' : type
+  const next = statusFilter.value === type ? 'all' : type
+  statusFilter.value = next
+  // 切换到分组级筛选（离线/已选）时，自动展开匹配的分组，避免筛选后组收起看不到行
+  if (next === 'down' || next === 'selected') {
+    expandedUpstreams.value = filteredUpstreams.value.map((u) => u.name)
+  }
 }
 
 useOutputCache([() => serverId.value, () => configFile.value], output, {
@@ -662,6 +676,7 @@ async function handleRefresh() {
     return
   }
   statusFilter.value = 'all'
+  expandedUpstreams.value = []
   await loadUpstreams()
   ElMessage.success('刷新成功')
 }
@@ -760,7 +775,7 @@ async function confirmSwap() {
     currentBatchInfo.value = { upstreamNames: selectedUpstreams, ipCount: 2, action: 'swap' }
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -788,7 +803,7 @@ async function handleToggleAll(upstream) {
     currentBatchInfo.value = { upstreamNames: [upstream.name], ipCount: upstream.servers.length, action: 'toggle' }
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -1030,7 +1045,7 @@ async function executeBatch() {
     batchDialogVisible.value = false
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -1049,7 +1064,7 @@ async function handleBatchAction(upstreamNames, ips, action) {
     currentBatchInfo.value = { upstreamNames, ipCount: ips.length, action }
     previewVisible.value = true
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '预览失败')
+    showApiError(e, '预览失败')
   }
 }
 
@@ -1073,7 +1088,7 @@ async function handleRollbackFromDialog(backupFile) {
     previewVisible.value = true
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '预览失败')
+      showApiError(e, '预览失败')
     }
   }
 }
@@ -1122,7 +1137,7 @@ async function executePreview() {
   } catch (e) {
     const msg = e.response?.data?.error || e.message || '执行失败'
     const detail = e.response?.data?.output || ''
-    ElMessage.error(msg)
+    if (!isAuthError(e)) ElMessage.error(msg)
     output.value = detail ? `${msg}\n\n${detail}` : msg
     outputMeta.value = {
       actionType: 'danger',
@@ -1156,6 +1171,21 @@ async function executePreview() {
 }
 .stat-chip-danger.stat-chip-active b {
   color: #ef4444;
+}
+
+.stat-chip-primary {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.stat-chip-primary:hover {
+  background: rgba(6, 182, 212, 0.12);
+}
+.stat-chip-primary.stat-chip-active {
+  background: rgba(6, 182, 212, 0.18);
+  color: #06b6d4;
+}
+.stat-chip-primary.stat-chip-active b {
+  color: #06b6d4;
 }
 
 .upstream-collapse {

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import router from '../router'
 
 /**
  * 浏览器会话标记 cookie 名。
@@ -85,6 +86,19 @@ export const useUserStore = defineStore('user', () => {
         }
       } else if (e.key === 'role') {
         // role 变化不直接重建 userInfo（缺少完整用户信息），仅保持 role 持久化一致
+      }
+    })
+  }
+
+  // 跨标签页登出协同：任一标签页登出/登录失效后，其它标签页的内存 token
+  // 通过 storage 事件被清空，此处监听登录状态，自动跳转到登录页，
+  // 避免其它标签页停留在"菜单退化但页面不跳转"的中间状态。
+  // 注意：此处只跳转不弹提示——"登录已失效"提示由拦截器在真正收到 401 时
+  // 统一弹出一次，避免同一标签页双重提示、或手动退出时误报"失效"。
+  if (typeof window !== 'undefined') {
+    watch(isLoggedIn, (loggedIn, wasLoggedIn) => {
+      if (wasLoggedIn && !loggedIn && router.currentRoute.value.path !== '/login') {
+        router.push('/login').catch(() => {})
       }
     })
   }

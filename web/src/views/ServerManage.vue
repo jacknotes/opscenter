@@ -203,7 +203,7 @@ import {
 } from '../api'
 import { clearServerCache } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
-import { showBatchResult, showLoadError } from '../utils/message'
+import { showBatchResult, showApiError, isAuthError, showLoadError } from '../utils/message'
 import { DEFAULT_PAGE_SIZE } from '../utils/constants'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, Setting } from '@element-plus/icons-vue'
@@ -397,7 +397,7 @@ async function handleCopy(row) {
     form.value = { ...data, name: data.name + ' (副本)' }
     dialogVisible.value = true
   } catch (e) {
-    ElMessage.error('获取服务器信息失败')
+    if (!isAuthError(e)) ElMessage.error('获取服务器信息失败')
   }
 }
 
@@ -415,7 +415,7 @@ async function handleEdit(row) {
     form.value = data
     dialogVisible.value = true
   } catch (e) {
-    ElMessage.error('获取服务器信息失败')
+    if (!isAuthError(e)) ElMessage.error('获取服务器信息失败')
   }
 }
 
@@ -441,7 +441,7 @@ async function handleBatchToggle() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || `批量${action}失败`)
+      showApiError(e, `批量${action}失败`)
     }
   }
 }
@@ -460,7 +460,7 @@ async function handleBatchDelete() {
     await loadData()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.error || '批量删除失败')
+      showApiError(e, '批量删除失败')
     }
   }
 }
@@ -472,7 +472,7 @@ async function handleBatchTest() {
     const res = await batchTestServers(selectedRows.value.map((r) => r.id))
     showBatchResult(res)
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '批量测试失败')
+    showApiError(e, '批量测试失败')
   }
 }
 
@@ -506,7 +506,7 @@ async function handleSubmit() {
     dialogVisible.value = false
     await loadData()
   } catch (e) {
-    ElMessage.error(e.response?.data?.error || '操作失败')
+    showApiError(e, '操作失败')
   } finally {
     submitting.value = false
   }
