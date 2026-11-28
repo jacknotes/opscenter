@@ -4,7 +4,7 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择LVS服务器" style="width: 150px" @change="onServerChange">
+          <el-select v-model="serverId" v-select-fit placeholder="选择LVS服务器" @change="onServerChange">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <span class="filter-label">虚拟服务器:</span>

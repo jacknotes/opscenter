@@ -4,7 +4,7 @@
       <div class="card-header">
         <span class="chart-title">LVS 连接统计</span>
         <div class="card-header-controls">
-          <el-select v-model="serverId" placeholder="选择 LVS 服务器" clearable size="small" style="width: 160px" @change="onServerChange">
+          <el-select v-model="serverId" v-select-fit placeholder="选择 LVS 服务器" clearable size="small" @change="onServerChange">
             <el-option v-for="s in lvsServers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <el-select v-model="vsIp" placeholder="选择 VS" clearable size="small" style="width: 160px" :disabled="!serverId" @change="onVsChange">

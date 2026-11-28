@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { forceReflow } from './directives/forceReflow'
+import selectFit from './directives/selectFit'
 
 import App from './App.vue'
 import router from './router'
@@ -26,6 +27,7 @@ app.use(router)
 // 中文语言包通过 App.vue 中的 <el-config-provider> 配置
 
 app.directive('force-reflow', forceReflow)
+app.directive('select-fit', selectFit)
 
 // 校验浏览器会话：若浏览器曾被关闭（会话 cookie 丢失）但 localStorage 残留 token，
 // 清除 token 强制重新登录。需在路由守卫与 store 初始化前执行。

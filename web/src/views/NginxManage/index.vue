@@ -4,11 +4,11 @@
       <template #header>
         <div style="display: flex; align-items: center; gap: 10px">
           <span class="filter-label">服务器:</span>
-          <el-select v-model="serverId" placeholder="选择Nginx服务器" style="width: 150px" @change="loadConfigs">
+          <el-select v-model="serverId" v-select-fit placeholder="选择Nginx服务器" @change="loadConfigs">
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <span class="filter-label">文件:</span>
-          <el-select v-model="configFile" placeholder="选择配置文件" style="width: 150px" @change="onConfigChange">
+          <el-select v-model="configFile" v-select-fit placeholder="选择配置文件" @change="onConfigChange">
             <el-option v-for="f in configFiles" :key="f" :label="f" :value="f" />
           </el-select>
           <span style="margin-left: auto"></span>
@@ -676,7 +676,7 @@ async function handleRefresh() {
     return
   }
   statusFilter.value = 'all'
-  expandedUpstreams.value = []
+  // loadUpstreams 加载完成后会重新全展开，无需先清空（避免折叠闪烁）
   await loadUpstreams()
   ElMessage.success('刷新成功')
 }

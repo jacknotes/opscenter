@@ -6,8 +6,8 @@
           <span class="filter-label">服务器:</span>
           <el-select
             v-model="serverId"
+            v-select-fit
             placeholder="选择预生产服务器"
-            style="width: 150px"
             @change="handleServerChange"
           >
             <el-option v-for="s in servers" :key="s.id" :label="s.name" :value="s.id" />

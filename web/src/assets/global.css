@@ -75,6 +75,16 @@ html {
   letter-spacing: 0.5px;
 }
 
+/* 自适应宽度下拉选择框：宽度由 v-select-fit 指令按选中文本实测设定（见 directives/selectFit.js），
+   此处仅负责约束：下限 150px 保持原布局，max-width 防止溢出工具栏；移动端由下方断点接管为 100%。 */
+.el-select.select-fit {
+  min-width: 150px;
+  max-width: 100%;
+}
+.el-select.select-fit .el-select__wrapper {
+  width: 100%;
+}
+
 /* Main Card - 统一卡片样式 */
 .main-card {
   border: var(--card-border);
