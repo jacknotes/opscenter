@@ -5,10 +5,13 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { resolve } from 'path'
+import { appVersionPlugin } from './build/appVersion'
 
 // Vite 开发服务器配置：监听 0.0.0.0:3000，/api 和 /ws 请求代理到 Go 后端 :18080
 export default defineConfig({
   plugins: [
+    // 版本号以虚拟模块 `virtual:app-version` 提供（dev/build 均生效）
+    appVersionPlugin(),
     vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()],

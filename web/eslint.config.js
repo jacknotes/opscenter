@@ -44,4 +44,13 @@ export default [
       'vue/no-v-html': 'off',
     },
   },
+  // 构建脚本（Node 环境，如 build/appVersion.js）
+  {
+    files: ['build/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
 ]

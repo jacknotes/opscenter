@@ -7,6 +7,7 @@
       style="background-color: var(--sidebar-bg)"
     >
       <div
+        class="sidebar-brand"
         style="
           height: 60px;
           display: flex;
@@ -26,6 +27,7 @@
         router
         :collapse="appStore.isCollapse"
         :collapse-transition="false"
+        class="sidebar-menu"
         background-color="var(--sidebar-bg)"
         text-color="var(--sidebar-text)"
         active-text-color="var(--sidebar-active-text)"
@@ -64,20 +66,12 @@
         </el-menu-item>
       </el-menu>
 
-      <div
-        style="
-          position: absolute;
-          bottom: 0;
-          width: 100%;
-          display: flex;
-          justify-content: center;
-          padding: 10px 0;
-          cursor: pointer;
-          color: var(--sidebar-text);
-        "
-        @click="appStore.toggleCollapse()"
-      >
-        <el-icon :size="20"><Fold v-if="!appStore.isCollapse" /><Expand v-else /></el-icon>
+      <!-- 侧边栏底部版本号（折叠态宽度不足以展示，直接隐藏） -->
+      <div v-if="!appStore.isCollapse" class="sidebar-footer">
+        <div class="sidebar-version" :title="APP_SIGNATURE">
+          <span class="sidebar-version-name">{{ APP_NAME }}</span>
+          <span class="sidebar-version-number">{{ APP_VERSION }}</span>
+        </div>
       </div>
     </el-aside>
 
@@ -129,12 +123,22 @@
           <template #title>用户管理</template>
         </el-menu-item>
       </el-menu>
+
+      <div class="mobile-version">{{ APP_SIGNATURE }}</div>
     </el-drawer>
 
     <el-container>
       <el-header class="app-header">
         <div style="display: flex; align-items: center; gap: 10px">
           <el-icon class="mobile-menu-btn" :size="22" @click="drawerVisible = true"><Fold /></el-icon>
+          <el-icon
+            class="header-collapse-btn"
+            :size="20"
+            :title="appStore.isCollapse ? '展开侧边栏' : '折叠侧边栏'"
+            @click="appStore.toggleCollapse()"
+          >
+            <Expand v-if="appStore.isCollapse" /><Fold v-else />
+          </el-icon>
           <div class="header-title">{{ route.meta.title }}</div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px">
@@ -256,6 +260,7 @@ import {
   ArrowDown,
 } from '@element-plus/icons-vue'
 import ThemeToggle from './ThemeToggle.vue'
+import { APP_SIGNATURE, APP_NAME, APP_VERSION } from '../utils/version'
 
 const route = useRoute()
 const router = useRouter()
@@ -365,7 +370,78 @@ async function submitChangePwd() {
   position: relative;
   overflow: hidden;
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-default);
+}
+
+/* 侧边栏纵向布局：菜单占满剩余高度，版本号固定在底部 */
+.desktop-sidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-brand {
+  flex-shrink: 0;
+}
+
+.sidebar-menu {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* 底部版本号区域：不加分割线，与侧边栏同底色融为一体 */
+.sidebar-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 8px 10px 12px;
+}
+
+/* 版本号分两行展示：应用名一行、版本号一行。侧边栏仅 220px 宽，
+   单行塞不下 「OpsCenter · v2.0.0-283-g5d8ffa3-dirty」，故显式分行。 */
+.sidebar-version {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--sidebar-text);
+  opacity: 0.75;
+  text-align: center;
+  white-space: nowrap;
+  user-select: text;
+  cursor: default;
+  max-width: 100%;
+}
+
+.sidebar-version-name {
+  font-weight: var(--weight-medium);
+}
+
+.sidebar-version-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 折叠开关移到页头左上角（侧边栏底部不再放开关） */
+.header-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.header-collapse-btn:hover {
+  background: rgba(6, 182, 212, 0.1);
+  color: var(--color-primary);
 }
 
 /* ===== Header ===== */
@@ -416,6 +492,25 @@ async function submitChangePwd() {
   font-size: var(--font-sm);
   color: var(--text-primary);
   font-weight: var(--weight-medium);
+}
+
+/* 折叠态菜单项：
+   1) 居中修正——Element Plus 折叠时把菜单内容包进 .el-menu-tooltip__trigger 并给它 20px 左右内边距，
+      菜单项自身也带 20px，主题又给菜单项加了 8px 外边距，三者叠加会把 24px 图标在 64px 宽的侧边栏里
+      右推 8px。这里把两级内边距清零、让内层容器占满并居中，图标中心即落在侧边栏中线上。
+   2) 合成层——Chromium 在 DPR=1 时会整块丢弃「服务器管理」这类复杂齿轮路径（约 1400 字符），
+      导致图标完全不显示；加一个空 3D 变换使其成为独立合成层即可正确栅格化。 */
+:deep(.el-menu--collapse > .el-menu-item),
+:deep(.el-menu--collapse > .el-sub-menu > .el-sub-menu__title) {
+  padding: 0;
+  justify-content: center;
+  transform: translateZ(0);
+}
+
+:deep(.el-menu--collapse .el-menu-tooltip__trigger) {
+  padding: 0;
+  width: 100%;
+  justify-content: center;
 }
 
 /* Sidebar active indicator — wider with glow */
@@ -482,6 +577,10 @@ async function submitChangePwd() {
     display: block;
     cursor: pointer;
   }
+  /* 手机端无桌面侧边栏，折叠按钮不适用 */
+  .header-collapse-btn {
+    display: none;
+  }
 }
 
 :deep(.mobile-drawer .el-drawer__header) {
@@ -494,6 +593,28 @@ async function submitChangePwd() {
 :deep(.mobile-drawer .el-drawer__body) {
   padding: 0;
   background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 手机端菜单占满抽屉剩余高度，版本号压到底部 */
+:deep(.mobile-drawer .el-menu) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 手机端抽屉底部的版本号（与抽屉同底色，不加分割线） */
+.mobile-version {
+  flex-shrink: 0;
+  padding: 12px 10px 14px;
+  font-size: var(--font-xs);
+  line-height: 1.5;
+  color: var(--sidebar-text);
+  opacity: 0.75;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .user-menu {

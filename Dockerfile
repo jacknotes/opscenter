@@ -3,6 +3,11 @@ FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/web
 
+# 可选：镜像内无 .git，可在此显式注入版本号（如 v2.0.1-7-g401385d），
+# 不传则由 web/build/appVersion.js 回退到 package.json 版本
+ARG APP_VERSION
+ENV APP_VERSION=${APP_VERSION}
+
 COPY web/package*.json ./
 RUN npm config set registry https://registry.npmmirror.com && npm ci
 
