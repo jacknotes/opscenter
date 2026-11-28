@@ -53,8 +53,14 @@ export const BACKUP_FETCH_TIMEOUT_MS = 10000 // 10 秒
 /** WebSocket 连接超时（毫秒） */
 export const WS_CONNECT_TIMEOUT_MS = 10000 // 10 秒
 
-/** 批量操作确认阈值 */
-export const BATCH_CONFIRM_THRESHOLD = 10
+/**
+ * 批量操作确认阈值：涉及数量超过该值时，要求手输确认文字才允许执行。
+ * 可通过环境变量 VITE_BATCH_CONFIRM_THRESHOLD 覆盖（构建期注入），默认 10。
+ */
+export const BATCH_CONFIRM_THRESHOLD = (() => {
+  const raw = Number(import.meta.env?.VITE_BATCH_CONFIRM_THRESHOLD)
+  return Number.isInteger(raw) && raw > 0 ? raw : 10
+})()
 
 /** 批量操作确认文字 */
 export const BATCH_CONFIRM_TEXT = '确认执行'

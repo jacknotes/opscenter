@@ -12,16 +12,28 @@
     <div v-if="description" class="cp-desc">{{ description }}</div>
     <slot></slot>
 
+    <!-- 确认门槛：风险未消除或数量超过阈值时，要求手输确认文字，避免误点 -->
+    <div v-if="gateText" class="cp-gate">
+      <p class="cp-gate-hint">
+        <span class="cp-gate-reason">{{ gateReason }}</span>
+        <span>请输入 <b>{{ confirmText }}</b> 以继续：</span>
+      </p>
+      <input v-model="gateInput" class="cp-gate-input" :placeholder="confirmText" @keyup.enter="tryConfirm" />
+    </div>
+
     <template #footer>
       <slot name="footer">
         <el-button @click="$emit('update:modelValue', false)">取消</el-button>
-        <el-button type="primary" :loading="executing" @click="$emit('confirm')">确认执行</el-button>
+        <el-button type="primary" :loading="executing" :disabled="confirmDisabled" @click="tryConfirm">
+          确认执行
+        </el-button>
       </slot>
     </template>
   </el-dialog>
 </template>
 
 <script setup>
+import { computed, ref, watch } from 'vue'
 /**
  * 变更预览统一弹窗。
  *
@@ -29,19 +41,44 @@
  * 宽度从 90% 到 600/650/700/800px 不等、高度全不固定，观感割裂且长内容会把
  * 「确认执行」挤出屏幕。这里统一成固定尺寸：内容区独立滚动，头尾始终固定。
  */
-defineProps({
+const props = defineProps({
   modelValue: { type: Boolean, default: false },
   title: { type: String, default: '变更预览' },
   /** 预览描述，展示在内容区顶部的高亮块；不需要可传空串 */
   description: { type: String, default: '' },
   /** 执行中：确认按钮显示 loading */
   executing: { type: Boolean, default: false },
+  /** 是否要求手输确认文字才能执行（风险/大批量场景） */
+  requireGate: { type: Boolean, default: false },
+  /** 需要门槛的原因说明，如「本次涉及 12 项（超过 10 项阈值）」 */
+  gateReason: { type: String, default: '' },
+  /** 需输入的文字 */
+  confirmText: { type: String, default: '确认执行' },
 })
 
-defineEmits(['update:modelValue', 'confirm'])
+const emit = defineEmits(['update:modelValue', 'confirm'])
 
 // 尺寸集中在这里定义，改一处即可同步四个模块
 const dialogWidth = 'min(720px, 92vw)'
+
+const gateInput = ref('')
+
+// 门槛生效时才有输入框；输入匹配才允许确认
+const gateText = computed(() => props.requireGate)
+const confirmDisabled = computed(() => props.requireGate && gateInput.value !== props.confirmText)
+
+// 每次打开清空输入，避免上次输入残留直接放行
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) gateInput.value = ''
+  }
+)
+
+function tryConfirm() {
+  if (confirmDisabled.value) return
+  emit('confirm')
+}
 </script>
 
 <!-- 非 scoped：需要穿透 el-dialog 内部结构才能固定高度并让内容区滚动 -->
@@ -227,5 +264,82 @@ const dialogWidth = 'min(720px, 92vw)'
   box-shadow:
     inset 0 1px 3px rgba(0, 0, 0, 0.3),
     inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+/* ---------- 风险提示条 ---------- */
+.change-preview-dialog .cp-risk,
+.change-preview-dialog .cp-risk-ok {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.change-preview-dialog .cp-risk {
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.change-preview-dialog .cp-risk-ok {
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+}
+
+.change-preview-dialog .cp-risk b {
+  color: var(--color-warning);
+}
+
+/* 被跳过（已缩容/已扩容）的资源行 */
+.change-preview-dialog .cp-table tr.cp-row-skip td {
+  color: var(--text-placeholder);
+  text-decoration: line-through;
+}
+
+/* ---------- 确认门槛 ---------- */
+.change-preview-dialog .cp-gate {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-strong);
+}
+
+.change-preview-dialog .cp-gate-hint {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.change-preview-dialog .cp-gate-hint b {
+  color: var(--color-danger);
+}
+
+.change-preview-dialog .cp-gate-reason {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-warning);
+}
+
+.change-preview-dialog .cp-gate-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.change-preview-dialog .cp-gate-input:focus {
+  outline: none;
+  border-color: var(--color-primary, #06b6d4);
 }
 </style>

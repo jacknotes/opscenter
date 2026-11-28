@@ -137,142 +137,67 @@
       </div>
     </el-card>
 
-    <!-- Preview Dialog -->
+    <!-- 变更预览：风险提示 + 资源清单 + 命令 + 当前状态，是操作前的唯一出口。
+         原先「LVS 缩容前检查」「依赖 require 警告」「批量缩容确认」三个弹框都合并到这里，
+         风险和清单一次性看全，避免同一次操作连点三四个确认。 -->
     <ChangePreviewDialog
       v-model="previewVisible"
       :description="previewData?.description"
       :executing="executing"
+      :require-gate="previewGate"
+      :gate-reason="previewGateReason"
+      :confirm-text="BATCH_CONFIRM_TEXT"
       @confirm="executePreview"
     >
       <div v-if="previewData">
+        <!-- 风险摘要：有风险时列出明细，无风险时给一个明确的通过信号 -->
+        <div v-if="previewRisks.length" class="cp-risk">
+          <span>⚠</span>
+          <span>
+            <b>操作存在风险</b>
+            <span v-for="(r, i) in previewRisks" :key="i" style="display: block; margin-top: 2px">{{ r }}</span>
+          </span>
+        </div>
+        <div v-else class="cp-risk-ok">✓ 依赖检查通过（LVS RS 已下线，require 依赖无冲突）</div>
+
+        <!-- 资源清单：全量模式下展示全部资源，与脚本实际执行范围保持一致 -->
+        <template v-if="previewResourceNames.length">
+          <p class="cp-label">
+            将{{ previewAction === 'scaledown' ? '缩容' : '扩容' }}（{{ previewResourceNames.length }} 项）：
+          </p>
+          <div class="cp-table-scroll" style="max-height: 170px">
+            <table class="cp-table">
+              <thead>
+                <tr>
+                  <th style="width: 44px">#</th>
+                  <th>资源名称</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(name, index) in previewResourceNames" :key="name">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ name }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="previewSkipNames.length" class="cp-label" style="margin-top: 10px">
+            共 {{ previewResourceNames.length + previewSkipNames.length }} 项，其中
+            <b style="color: var(--color-warning)"
+              >{{ previewSkipNames.length }} 项{{ previewAction === 'scaledown' ? '已缩容' : '已扩容' }}将跳过</b
+            >
+          </p>
+        </template>
+
         <p class="cp-label">命令：</p>
-        <p><code class="cp-inline-code">{{ previewData.command }}</code></p>
+        <p>
+          <code class="cp-inline-code">{{ previewData.command }}</code>
+        </p>
         <div class="cp-divider"></div>
         <p class="cp-label">当前状态：</p>
         <pre class="cp-pre">{{ previewData.current_status }}</pre>
       </div>
     </ChangePreviewDialog>
-
-    <!-- Batch Confirm Dialog (unified for normal and large batches) -->
-    <el-dialog v-model="batchConfirmVisible" :title="batchConfirmTitle" width="min(580px, 90vw)" align-center>
-      <div style="margin-bottom: 16px">
-        <el-alert
-          v-if="batchConfirmNames.length > BATCH_THRESHOLD"
-          type="warning"
-          :closable="false"
-          show-icon
-          style="margin-bottom: 12px"
-        >
-          <template #title>
-            当前 <b>{{ batchConfirmNames.length }}</b> 个资源，请输入 <b>确认执行</b> 以继续
-          </template>
-        </el-alert>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
-          <span style="font-size: 14px; color: var(--text-primary)">{{
-            batchConfirmAction === 'scaledown' ? '以下资源将缩容至 0 副本:' : '以下资源将扩容至目标副本数:'
-          }}</span>
-          <el-tag size="small" type="info">共 {{ batchConfirmNames.length }} 项</el-tag>
-        </div>
-        <el-scrollbar max-height="320px">
-          <div
-            style="
-              background: var(--bg-elevated);
-              padding: 8px 12px;
-              border-radius: 6px;
-              border: 1px solid var(--border-default);
-            "
-          >
-            <div
-              v-for="(name, idx) in batchConfirmNames"
-              :key="name"
-              style="
-                font-size: 13px;
-                line-height: 2;
-                padding: 0 4px;
-                display: flex;
-                align-items: center;
-                border-bottom: 1px dashed var(--border-default);
-              "
-            >
-              <span style="color: #64748b; font-size: 12px; margin-right: 8px; min-width: 28px">{{ idx + 1 }}.</span>
-              <span>{{ name }}</span>
-            </div>
-          </div>
-        </el-scrollbar>
-      </div>
-      <div v-if="batchConfirmSkipCount > 0" style="margin-bottom: 12px">
-        <el-text type="info" size="small">
-          {{ batchConfirmIsFull ? '共' : '已选' }} {{ batchConfirmTotalCount }} 项，其中
-          {{ batchConfirmSkipCount }} 项{{ batchConfirmAction === 'scaledown' ? '已缩容' : '已扩容' }}将跳过
-        </el-text>
-      </div>
-      <el-input
-        v-if="batchConfirmNames.length > BATCH_THRESHOLD"
-        v-model="batchConfirmText"
-        placeholder='请输入"确认执行"'
-      />
-      <template #footer>
-        <el-button @click="batchConfirmVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :disabled="batchConfirmNames.length > BATCH_THRESHOLD && batchConfirmText !== '确认执行'"
-          @click="onBatchConfirm"
-        >
-          确认{{ batchConfirmAction === 'scaledown' ? '缩容' : '扩容' }}
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Dependency Warning Dialog -->
-    <el-dialog v-model="depWarningVisible" title="操作警告" width="min(520px, 90vw)" align-center :close-on-click-modal="false">
-      <div style="margin-bottom: 16px">
-        <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px">
-          <span style="color: #f56c6c; font-size: 20px; line-height: 1">⚠</span>
-          <div>
-            <div style="color: #f56c6c; font-weight: bold; font-size: 14px; line-height: 1.6; margin-bottom: 8px">
-              {{ depWarningText }}
-            </div>
-            <div style="color: #94a3b8; font-size: 13px; line-height: 1.6">涉及资源：</div>
-          </div>
-        </div>
-        <el-scrollbar max-height="200px">
-          <div
-            style="
-              background: rgba(245, 108, 108, 0.1);
-              padding: 8px 12px;
-              border-radius: 6px;
-              border: 1px solid rgba(245, 108, 108, 0.3);
-            "
-          >
-            <div
-              v-for="(name, idx) in depWarningAffected"
-              :key="name"
-              style="
-                font-size: 13px;
-                line-height: 2;
-                padding: 0 4px;
-                display: flex;
-                align-items: center;
-                border-bottom: 1px dashed rgba(245, 108, 108, 0.2);
-              "
-            >
-              <span style="color: #64748b; font-size: 12px; margin-right: 8px; min-width: 28px">{{ idx + 1 }}.</span>
-              <span>{{ name }}</span>
-            </div>
-          </div>
-        </el-scrollbar>
-        <div style="margin-top: 12px; color: #64748b; font-size: 12px">
-          如果确认执行，请在下方输入框中输入 <b>确认执行</b>
-        </div>
-        <el-input v-model="depWarningConfirmText" placeholder='请输入"确认执行"' style="margin-top: 8px" />
-      </div>
-      <template #footer>
-        <el-button @click="depWarningVisible = false">取消</el-button>
-        <el-button type="danger" :disabled="depWarningConfirmText !== '确认执行'" @click="onDepWarningConfirm"
-          >确认执行</el-button
-        >
-      </template>
-    </el-dialog>
 
     <!-- Binding Config Dialog -->
     <el-dialog v-model="bindingDialogVisible" title="LVS-Preprod 依赖配置" width="min(650px, 90vw)" align-center>
@@ -339,40 +264,6 @@
         </div>
       </div>
     </el-dialog>
-
-    <!-- LVS Scale Down Check Warning Dialog -->
-    <el-dialog
-      v-model="lvsCheckVisible"
-      title="缩容前检查"
-      width="min(600px, 90vw)"
-      align-center
-      @close="handleLvsCheckCancel"
-    >
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 16px">
-        <template #title> 以下 LVS RS 仍处于上线状态，缩容前请确认已下线： </template>
-      </el-alert>
-      <div v-if="lvsCheckWarnings">
-        <el-table :data="lvsCheckWarnings" stripe size="small" border max-height="300">
-          <el-table-column prop="status" label="状态" width="80" align="center">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'Up' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="lvs_server" label="LVS服务器" min-width="100" />
-          <el-table-column prop="vs_tag" label="VS标签" min-width="100" />
-          <el-table-column prop="rs_env_tag" label="RS标签" min-width="100" />
-          <el-table-column prop="rs_ip" label="RS IP" min-width="120" />
-        </el-table>
-      </div>
-      <el-alert type="info" :closable="false" style="margin-top: 12px"> 请输入"确认执行"以继续缩容操作 </el-alert>
-      <el-input v-model="lvsCheckConfirmText" placeholder="请输入 确认执行" style="margin-top: 8px" />
-      <template #footer>
-        <el-button @click="lvsCheckVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="lvsCheckConfirmText !== '确认执行'" @click="handleLvsCheckConfirm"
-          >确认执行</el-button
-        >
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -400,9 +291,7 @@ import ChangePreviewDialog from '../components/common/ChangePreviewDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { showApiError, isAuthError, showLoadError } from '../utils/message'
 import { ZoomOut } from '@element-plus/icons-vue'
-import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
-
-const BATCH_THRESHOLD = 10
+import { STORAGE_KEYS, DEFAULT_PAGE_SIZE, BATCH_CONFIRM_THRESHOLD, BATCH_CONFIRM_TEXT } from '../utils/constants'
 
 const resources = shallowRef([])
 const search = ref('')
@@ -491,27 +380,26 @@ watch(serverId, (newVal, oldVal) => {
   }
 })
 
-// Batch confirm
-const batchConfirmVisible = ref(false)
-const batchConfirmText = ref('')
-const batchConfirmNames = ref([])
-const batchConfirmAction = ref('')
-const batchConfirmSkipCount = ref(0)
-const batchConfirmTotalCount = ref(0)
-const batchConfirmIsFull = ref(false)
+// 变更预览的附加信息：资源清单、跳过项、风险摘要
+const previewAction = ref('')
+const previewResourceNames = ref([])
+const previewSkipNames = ref([])
+const previewRisks = ref([])
 
-const batchConfirmTitle = computed(() => {
-  const action = batchConfirmAction.value === 'scaledown' ? '缩容' : '扩容'
-  const mode = batchConfirmIsFull.value ? '全量' : '批量'
-  return `${mode}${action}确认`
+// 需要手输确认门槛的情形：存在未消除的风险，或涉及数量超过阈值
+const previewGate = computed(
+  () => previewRisks.value.length > 0 || previewResourceNames.value.length > BATCH_CONFIRM_THRESHOLD
+)
+
+const previewGateReason = computed(() => {
+  if (!previewGate.value) return ''
+  const reasons = []
+  if (previewRisks.value.length) reasons.push('本次操作存在风险')
+  if (previewResourceNames.value.length > BATCH_CONFIRM_THRESHOLD) {
+    reasons.push(`本次涉及 ${previewResourceNames.value.length} 项（超过 ${BATCH_CONFIRM_THRESHOLD} 项阈值）`)
+  }
+  return reasons.join('，')
 })
-
-// Dependency warning
-const depWarningVisible = ref(false)
-const depWarningText = ref('')
-const depWarningAffected = ref([])
-const depWarningConfirmText = ref('')
-const depWarningCallback = ref(null)
 
 // Binding config
 const bindingDialogVisible = ref(false)
@@ -520,12 +408,6 @@ const addBindingVisible = ref(false)
 const newBinding = ref({ vs_tag: '', rs_env_tag: '' })
 const vsTagOptions = ref([])
 const rsTagOptions = ref([])
-
-// LVS scale down check
-const lvsCheckVisible = ref(false)
-const lvsCheckWarnings = ref(null)
-const lvsCheckConfirmText = ref('')
-const lvsCheckCallback = ref(null)
 
 const requireSet = computed(() => new Set(resources.value.filter((r) => r.category === 'require').map((r) => r.name)))
 
@@ -598,19 +480,6 @@ async function loadData() {
   }
 }
 
-function showDepWarning(text, affected, callback) {
-  depWarningText.value = text
-  depWarningAffected.value = affected
-  depWarningConfirmText.value = ''
-  depWarningCallback.value = callback
-  depWarningVisible.value = true
-}
-
-function onDepWarningConfirm() {
-  depWarningVisible.value = false
-  depWarningCallback.value?.()
-}
-
 async function openBindingDialog() {
   if (!serverId.value) {
     ElMessage.warning('请先选择服务器')
@@ -672,127 +541,98 @@ async function handleDeleteBinding(id) {
   }
 }
 
-function handleLvsCheckConfirm() {
-  lvsCheckVisible.value = false
-  if (lvsCheckCallback.value) {
-    lvsCheckCallback.value(true)
-    lvsCheckCallback.value = null
-  }
-}
-
-function handleLvsCheckCancel() {
-  if (lvsCheckCallback.value) {
-    lvsCheckCallback.value(false)
-    lvsCheckCallback.value = null
-  }
-}
-
 async function handleBatchScaleDown() {
   const isFull = selectedIds.value.size === 0
-  const pool = isFull ? filteredResources.value : selectedResources.value
+  // 全量 = 服务器上的全部资源，与搜索/状态筛选无关。
+  // 之前用 filteredResources 会导致「清单显示筛选后的子集，实际却缩容全部」，是个隐患。
+  const pool = isFull ? resources.value : selectedResources.value
   const targets = pool.filter((r) => r.current > 0)
-  const skipCount = pool.filter((r) => r.current === 0).length
+  const skipNames = pool.filter((r) => r.current === 0).map((r) => r.name)
   const names = targets.map((r) => r.name)
-  if (names.length === 0) return
+  if (names.length === 0) {
+    ElMessage.warning('所选范围内没有需要缩容的资源')
+    return
+  }
 
-  // 检查 LVS RS 状态依赖
+  // 风险收集：LVS RS 未下线 + require 依赖仍在运行，统一汇总后在预览里一次性展示
+  const risks = []
+
   try {
     const checkRes = await checkLvsForScaleDown({ preprod_server_id: serverId.value })
-    if (checkRes.need_warning) {
-      lvsCheckWarnings.value = checkRes.warnings
-      lvsCheckVisible.value = true
-      lvsCheckConfirmText.value = ''
-      const confirmed = await new Promise((resolve) => {
-        lvsCheckCallback.value = resolve
-      })
-      if (!confirmed) return
+    if (checkRes.need_warning && checkRes.warnings?.length) {
+      for (const w of checkRes.warnings) {
+        risks.push(
+          `LVS 风险：${w.lvs_server} 上 VIP ${w.vs_tag} 的 RS ${w.rs_ip}（${w.rs_env_tag}）仍处于 ${w.status} 状态，建议先下线该 RS`
+        )
+      }
     }
   } catch (e) {
     if (!isAuthError(e)) ElMessage.error(`LVS 安全检查失败: ${e.response?.data?.error || e.message || '未知错误'}，操作中止`)
     return
   }
 
-  // 全量操作时脚本自动处理依赖，跳过警告
   if (!isFull) {
     const requireTargets = names.filter((n) => requireSet.value.has(n))
     if (requireTargets.length > 0) {
-      const nonRequireStillRunning = resources.value
+      const stillRunning = resources.value
         .filter((r) => !requireSet.value.has(r.name) && r.current > 0)
         .map((r) => r.name)
-      const stillRunning = nonRequireStillRunning.filter((n) => !names.includes(n))
+        .filter((n) => !names.includes(n))
       if (stillRunning.length > 0) {
-        showDepWarning('依赖(require)服务停止可能会影响其它服务运行！', stillRunning, () =>
-          doBatchScaleDown(names, skipCount, pool.length, isFull)
+        risks.push(
+          `依赖风险：缩容 require 服务（${requireTargets.join('、')}）时，以下服务仍在运行，可能受影响：${stillRunning.join('、')}`
         )
-        return
       }
     }
   }
 
-  doBatchScaleDown(names, skipCount, pool.length, isFull)
-}
-
-function doBatchScaleDown(names, skipCount, total, isFull) {
-  batchConfirmNames.value = names
-  batchConfirmAction.value = 'scaledown'
-  batchConfirmText.value = ''
-  batchConfirmSkipCount.value = skipCount
-  batchConfirmTotalCount.value = total
-  batchConfirmIsFull.value = isFull
-  batchConfirmVisible.value = true
+  openScalePreview('scaledown', names, skipNames, risks)
 }
 
 async function handleBatchScaleUp() {
   const isFull = selectedIds.value.size === 0
-  const pool = isFull ? filteredResources.value : selectedResources.value
+  const pool = isFull ? resources.value : selectedResources.value
   const targets = pool.filter((r) => r.current < r.target_replicas)
-  const skipCount = pool.filter((r) => r.current >= r.target_replicas).length
+  const skipNames = pool.filter((r) => r.current >= r.target_replicas).map((r) => r.name)
   const names = targets.map((r) => r.name)
-  if (names.length === 0) return
+  if (names.length === 0) {
+    ElMessage.warning('所选范围内没有需要扩容的资源')
+    return
+  }
 
+  const risks = []
   if (!isFull) {
     const nonRequireTargets = names.filter((n) => !requireSet.value.has(n))
     if (nonRequireTargets.length > 0) {
-      const requireNotRunning = resources.value
+      const stillMissing = resources.value
         .filter((r) => requireSet.value.has(r.name) && r.current === 0)
         .map((r) => r.name)
-      const stillMissing = requireNotRunning.filter((n) => !names.includes(n))
+        .filter((n) => !names.includes(n))
       if (stillMissing.length > 0) {
-        showDepWarning('依赖(require)服务未运行，运行所选服务可能会发生异常！', stillMissing, () =>
-          doBatchScaleUp(names, skipCount, pool.length, isFull)
-        )
-        return
+        risks.push(`依赖风险：以下 require 服务未运行，所选服务可能需要它们：${stillMissing.join('、')}`)
       }
     }
   }
 
-  doBatchScaleUp(names, skipCount, pool.length, isFull)
+  openScalePreview('scaleup', names, skipNames, risks)
 }
 
-function doBatchScaleUp(names, skipCount, total, isFull) {
-  batchConfirmNames.value = names
-  batchConfirmAction.value = 'scaleup'
-  batchConfirmText.value = ''
-  batchConfirmSkipCount.value = skipCount
-  batchConfirmTotalCount.value = total
-  batchConfirmIsFull.value = isFull
-  batchConfirmVisible.value = true
-}
-
-async function onBatchConfirm() {
-  const action = batchConfirmAction.value
-  const names = batchConfirmIsFull.value ? [] : batchConfirmNames.value
-  batchConfirmVisible.value = false
-  await doPreview(action, names)
-}
-
-async function doPreview(action, resourceNames) {
-  const previewFn = action === 'scaledown' ? preprodScaleDownPreview : preprodScaleUpPreview
+/**
+ * 打开变更预览，并把风险、资源清单、确认门槛一并带上。
+ *
+ * 资源名单始终显式传给后端（即使是全量），保证「看到的」和「执行的」完全一致。
+ */
+async function openScalePreview(action, names, skipNames, risks) {
   try {
-    const res = await previewFn({ server_id: serverId.value, resource_names: resourceNames })
+    const previewFn = action === 'scaledown' ? preprodScaleDownPreview : preprodScaleUpPreview
+    const res = await previewFn({ server_id: serverId.value, resource_names: names })
     previewData.value = res
     previewId.value = res.preview_id
     currentAction.value = action
+    previewAction.value = action
+    previewResourceNames.value = names
+    previewSkipNames.value = skipNames
+    previewRisks.value = risks
     previewVisible.value = true
   } catch (e) {
     showApiError(e, '预览失败')
