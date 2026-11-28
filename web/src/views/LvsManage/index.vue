@@ -215,38 +215,44 @@
       </div>
     </el-card>
 
-    <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" :width="batchPreviews.length > 1 ? 'min(800px, 90vw)' : 'min(600px, 90vw)'" align-center>
+    <!-- Preview Dialog：批量时描述由表格逐行给出，顶部不再重复第一条 -->
+    <ChangePreviewDialog
+      v-model="previewVisible"
+      :description="batchPreviews.length > 1 ? '' : previewData?.description"
+      :executing="executing"
+      @confirm="executePreview"
+    >
       <div v-if="previewData">
         <div v-if="batchPreviews.length > 1">
-          <p style="color: #e6a23c; margin-bottom: 12px">共 {{ batchPreviews.length }} 个操作将依次执行</p>
-          <el-table :data="batchPreviews" stripe size="small" border max-height="300">
-            <el-table-column type="index" label="#" width="50" />
-            <el-table-column label="操作" min-width="300"
-              ><template #default="{ row }">{{ row.description }}</template></el-table-column
-            >
-            <el-table-column label="命令" min-width="250"
-              ><template #default="{ row }"
-                ><code style="font-size: 12px">{{ row.command }}</code></template
-              ></el-table-column
-            >
-          </el-table>
+          <p class="cp-label cp-warn-text">共 {{ batchPreviews.length }} 个操作将依次执行</p>
+          <div class="cp-table-scroll">
+            <table class="cp-table">
+              <thead>
+                <tr>
+                  <th style="width: 44px">#</th>
+                  <th style="min-width: 180px">操作</th>
+                  <th>命令</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, index) in batchPreviews" :key="index">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ row.description }}</td>
+                  <td><code>{{ row.command }}</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div v-else>
-          <p><strong>操作：</strong>{{ previewData.description }}</p>
-          <p>
-            <strong>命令：</strong><code>{{ previewData.command }}</code>
-          </p>
+          <p class="cp-label">命令：</p>
+          <p><code class="cp-inline-code">{{ previewData.command }}</code></p>
         </div>
-        <el-divider />
-        <p><strong>当前状态：</strong></p>
-        <pre class="preview-pre">{{ previewData.current_status }}</pre>
+        <div class="cp-divider"></div>
+        <p class="cp-label">当前状态：</p>
+        <pre class="cp-pre">{{ previewData.current_status }}</pre>
       </div>
-      <template #footer>
-        <el-button @click="previewVisible = false">取消</el-button>
-        <el-button type="primary" :loading="executing" @click="executePreview">确认执行</el-button>
-      </template>
-    </el-dialog>
+    </ChangePreviewDialog>
 
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px">
@@ -334,6 +340,7 @@ import { STORAGE_KEYS, AUTO_REFRESH_INTERVAL_MS } from '../../utils/constants'
 import TagDialog from './TagDialog.vue'
 import VSTagDialog from './VSTagDialog.vue'
 import StatusDialog from './StatusDialog.vue'
+import ChangePreviewDialog from '../../components/common/ChangePreviewDialog.vue'
 
 // --- 组合式函数 ---
 const { servers, serverId, initServers, refreshServers, saveSelection } = useServerSelector('lvs', STORAGE_KEYS.LVS_SERVER)
@@ -1023,6 +1030,10 @@ async function handleDeleteVSTag(formData) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 批量预览提示语：预警色，与统一弹窗的 cp-label 组合使用 */
+.cp-warn-text {
+  color: var(--color-warning);
 }
 :deep(.rs-disabled-row) {
   background-color: var(--bg-elevated) !important;

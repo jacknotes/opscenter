@@ -1,0 +1,231 @@
+<template>
+  <el-dialog
+    :model-value="modelValue"
+    :title="title"
+    :width="dialogWidth"
+    align-center
+    class="change-preview-dialog"
+    append-to-body
+    destroy-on-close
+    @update:model-value="$emit('update:modelValue', $event)"
+  >
+    <div v-if="description" class="cp-desc">{{ description }}</div>
+    <slot></slot>
+
+    <template #footer>
+      <slot name="footer">
+        <el-button @click="$emit('update:modelValue', false)">取消</el-button>
+        <el-button type="primary" :loading="executing" @click="$emit('confirm')">确认执行</el-button>
+      </slot>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup>
+/**
+ * 变更预览统一弹窗。
+ *
+ * 四个业务模块（Nginx / LVS / K8s / 预生产）原本各写一套 el-dialog，
+ * 宽度从 90% 到 600/650/700/800px 不等、高度全不固定，观感割裂且长内容会把
+ * 「确认执行」挤出屏幕。这里统一成固定尺寸：内容区独立滚动，头尾始终固定。
+ */
+defineProps({
+  modelValue: { type: Boolean, default: false },
+  title: { type: String, default: '变更预览' },
+  /** 预览描述，展示在内容区顶部的高亮块；不需要可传空串 */
+  description: { type: String, default: '' },
+  /** 执行中：确认按钮显示 loading */
+  executing: { type: Boolean, default: false },
+})
+
+defineEmits(['update:modelValue', 'confirm'])
+
+// 尺寸集中在这里定义，改一处即可同步四个模块
+const dialogWidth = 'min(720px, 92vw)'
+</script>
+
+<!-- 非 scoped：需要穿透 el-dialog 内部结构才能固定高度并让内容区滚动 -->
+<style>
+.change-preview-dialog.el-dialog {
+  display: flex;
+  flex-direction: column;
+  height: min(640px, 78vh);
+  padding: 0;
+  overflow: hidden;
+  /* 不写 margin: 0 —— align-center 依赖 overlay 的 flex 居中，保留自动外边距 */
+}
+
+.change-preview-dialog .el-dialog__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  padding: 16px 20px;
+}
+
+.change-preview-dialog .el-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 标题前的青色竖条，与 Demo 一致 */
+.change-preview-dialog .el-dialog__title::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--color-primary, #06b6d4);
+}
+
+.change-preview-dialog .el-dialog__headerbtn {
+  position: static;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.change-preview-dialog .el-dialog__headerbtn:hover {
+  background: var(--color-primary-bg, rgba(6, 182, 212, 0.1));
+}
+
+.change-preview-dialog .el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--color-primary, #06b6d4);
+}
+
+/* 内容区：占满剩余空间并独立滚动，长配置不会撑高弹窗 */
+.change-preview-dialog .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.change-preview-dialog .el-dialog__footer {
+  flex-shrink: 0;
+  padding: 12px 20px;
+}
+
+/* ---------- 内容块统一样式（供四个模块的插槽内容使用） ---------- */
+
+.change-preview-dialog .cp-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  border-left: 3px solid var(--color-primary, #06b6d4);
+}
+
+.change-preview-dialog .cp-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.change-preview-dialog .cp-label:not(:first-child) {
+  margin-top: 16px;
+}
+
+.change-preview-dialog .cp-divider {
+  height: 1px;
+  background: var(--border-default);
+  margin: 14px 0;
+}
+
+.change-preview-dialog .cp-cmds {
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: var(--text-regular);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.change-preview-dialog .cp-cmds code,
+.change-preview-dialog .cp-inline-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12.5px;
+  color: var(--color-primary, #06b6d4);
+  background: var(--color-primary-bg, rgba(6, 182, 212, 0.1));
+  padding: 1px 5px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+/* 表格（LVS 批量预览） */
+.change-preview-dialog .cp-table-scroll {
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+}
+
+.change-preview-dialog .cp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.change-preview-dialog .cp-table th {
+  position: sticky;
+  top: 0;
+  text-align: left;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.change-preview-dialog .cp-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-regular);
+  vertical-align: top;
+}
+
+.change-preview-dialog .cp-table tr:last-child td {
+  border-bottom: none;
+}
+
+.change-preview-dialog .cp-table tbody tr:hover td {
+  background: var(--color-primary-bg, rgba(6, 182, 212, 0.05));
+}
+
+.change-preview-dialog .cp-table code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--color-primary, #06b6d4);
+  word-break: break-all;
+}
+
+/* 预览内的 pre 限高，避免与外层滚动条叠加 */
+.change-preview-dialog .cp-pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--terminal-bg);
+  color: var(--terminal-text);
+  padding: 10px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+</style>

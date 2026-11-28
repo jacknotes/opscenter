@@ -138,21 +138,20 @@
     </el-card>
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="min(650px, 90vw)" align-center>
+    <ChangePreviewDialog
+      v-model="previewVisible"
+      :description="previewData?.description"
+      :executing="executing"
+      @confirm="executePreview"
+    >
       <div v-if="previewData">
-        <p><strong>操作：</strong>{{ previewData.description }}</p>
-        <p>
-          <strong>命令：</strong><code>{{ previewData.command }}</code>
-        </p>
-        <el-divider />
-        <p><strong>当前状态：</strong></p>
-        <pre class="preview-pre">{{ previewData.current_status }}</pre>
+        <p class="cp-label">命令：</p>
+        <p><code class="cp-inline-code">{{ previewData.command }}</code></p>
+        <div class="cp-divider"></div>
+        <p class="cp-label">当前状态：</p>
+        <pre class="cp-pre">{{ previewData.current_status }}</pre>
       </div>
-      <template #footer>
-        <el-button @click="previewVisible = false">取消</el-button>
-        <el-button type="primary" :loading="executing" @click="executePreview">确认执行</el-button>
-      </template>
-    </el-dialog>
+    </ChangePreviewDialog>
 
     <!-- Batch Confirm Dialog (unified for normal and large batches) -->
     <el-dialog v-model="batchConfirmVisible" :title="batchConfirmTitle" width="min(580px, 90vw)" align-center>
@@ -397,6 +396,7 @@ import { resolveStatus } from './preprodStatus'
 import { useServerSelector } from '../composables/useServerSelector'
 import { useSelection } from '../composables/useSelection'
 import StreamOutput from '../components/StreamOutput.vue'
+import ChangePreviewDialog from '../components/common/ChangePreviewDialog.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { showApiError, isAuthError, showLoadError } from '../utils/message'
 import { ZoomOut } from '@element-plus/icons-vue'

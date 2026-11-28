@@ -23,8 +23,8 @@
           <el-button type="info" class="el-button--cyan" @click="toggleSelectAll">{{
             isAllSelected ? '取消' : '全选'
           }}</el-button>
-          <el-button type="primary" :disabled="selectedServers.length === 0" @click="handleBatchOnline">上线</el-button>
-          <el-button type="danger" :disabled="selectedServers.length === 0" @click="handleBatchOffline">下线</el-button>
+          <el-button type="primary" :disabled="onlineDisabled" @click="handleBatchOnline">上线</el-button>
+          <el-button type="danger" :disabled="offlineDisabled" @click="handleBatchOffline">下线</el-button>
           <el-button type="primary" @click="openBatchDialog">批量</el-button>
           <el-dropdown trigger="click" style="margin-left: 12px">
             <el-button type="info" class="el-button--cyan"
@@ -366,6 +366,7 @@ import { ArrowDown } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, BACKUP_FETCH_TIMEOUT_MS } from '../../utils/constants'
 import BackupDialog from './BackupDialog.vue'
 import PreviewDialog from './PreviewDialog.vue'
+import { resolveOpButtons } from './opButtonState'
 import ConfigViewer from './ConfigViewer.vue'
 import SwapDialog from './SwapDialog.vue'
 
@@ -490,6 +491,13 @@ const selectedServers = computed(() => {
   }
   return result
 })
+
+// 上线 / 下线按钮的禁用状态取决于选中主机的实际状态，而不只是「有没有选中」：
+// 全部已 up 时上线无意义、全部已 down 时下线无意义；混合选中则两者都可用
+// （执行时会各自过滤出目标状态的子集）。判定逻辑见 opButtonState.js。
+const opButtons = computed(() => resolveOpButtons(selectedServers.value))
+const onlineDisabled = computed(() => opButtons.value.onlineDisabled)
+const offlineDisabled = computed(() => opButtons.value.offlineDisabled)
 
 const filteredUpstreams = computed(() => {
   const kw = filterKeyword.value.trim().toLowerCase()

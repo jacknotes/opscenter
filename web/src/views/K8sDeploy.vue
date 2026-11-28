@@ -93,24 +93,24 @@
     </el-card>
 
     <!-- Preview Dialog -->
-    <el-dialog v-model="previewVisible" title="变更预览" width="min(700px, 90vw)" top="5vh" align-center>
+    <ChangePreviewDialog
+      v-model="previewVisible"
+      :description="previewData?.description"
+      :executing="executing"
+      @confirm="executePreview"
+    >
       <div v-if="previewData">
-        <div class="preview-desc">{{ previewData.description }}</div>
-        <p style="color: var(--text-secondary); margin-bottom: 8px"><strong>命令：</strong></p>
-        <ul style="margin: 0 0 16px 20px; color: var(--text-regular)">
+        <p class="cp-label">命令：</p>
+        <ul class="cp-cmds">
           <li v-for="cmd in previewData.commands" :key="cmd">
-            <code style="color: var(--color-primary)">{{ cmd }}</code>
+            <code>{{ cmd }}</code>
           </li>
         </ul>
-        <el-divider />
-        <p style="color: var(--text-secondary); margin-bottom: 8px"><strong>当前状态：</strong></p>
-        <pre class="preview-pre">{{ previewData.current_status }}</pre>
+        <div class="cp-divider"></div>
+        <p class="cp-label">当前状态：</p>
+        <pre class="cp-pre">{{ previewData.current_status }}</pre>
       </div>
-      <template #footer>
-        <el-button @click="previewVisible = false">取消</el-button>
-        <el-button type="primary" :loading="executing" @click="executePreview">确认执行</el-button>
-      </template>
-    </el-dialog>
+    </ChangePreviewDialog>
 
     <!-- Output Area -->
     <el-card v-if="output" style="margin-top: 20px">
@@ -147,6 +147,7 @@ import { ElMessage } from 'element-plus'
 import { showApiError, showLoadError } from '../utils/message'
 import { Box } from '@element-plus/icons-vue'
 import { STORAGE_KEYS, DEFAULT_PAGE_SIZE } from '../utils/constants'
+import ChangePreviewDialog from '../components/common/ChangePreviewDialog.vue'
 
 const rollouts = ref([])
 const search = ref('')
@@ -384,15 +385,3 @@ async function executePreview() {
   }
 }
 </script>
-
-<style scoped>
-.preview-desc {
-  font-size: 14px;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  background: var(--bg-elevated);
-  border-radius: 8px;
-  border-left: 3px solid #06b6d4;
-}
-</style>
